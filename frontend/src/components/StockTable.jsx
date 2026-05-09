@@ -92,7 +92,11 @@ export default function StockTable({ watchlist, quotes, priceFlash, onRemove, on
                   <td className="py-3 px-3">
                     <div className="font-bold text-white flex items-center gap-2">
                       {sym}
-                      <span className="text-gray-700 text-xs">↗</span>
+                      <svg className="w-3.5 h-3.5 text-gray-600" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="1,12 5,7 8,9 12,4 15,6" />
+                        <line x1="3" y1="2" x2="3" y2="12" />
+                        <line x1="3" y1="12" x2="15" y2="12" />
+                      </svg>
                     </div>
                     {q?.name && (
                       <div className="text-xs text-gray-500 truncate max-w-[140px]">{q.name}</div>
