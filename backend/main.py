@@ -120,6 +120,77 @@ def get_quotes(symbols: str):
     return [results.get(sym, {"symbol": sym, "error": "Not found"}) for sym in tickers]
 
 
+_CHART_CONFIG: dict[str, tuple[str, str]] = {
+    "1d":  ("1d",  "5m"),
+    "5d":  ("5d",  "30m"),
+    "1mo": ("1mo", "1d"),
+    "3mo": ("3mo", "1d"),
+    "6mo": ("6mo", "1d"),
+    "1y":  ("1y",  "1wk"),
+    "2y":  ("2y",  "1wk"),
+    "5y":  ("5y",  "1mo"),
+}
+_CHART_TTL: dict[str, timedelta] = {
+    "1d":  timedelta(minutes=1),
+    "5d":  timedelta(minutes=5),
+    "1mo": timedelta(minutes=30),
+    "3mo": timedelta(minutes=30),
+    "6mo": timedelta(hours=1),
+    "1y":  timedelta(hours=4),
+    "2y":  timedelta(hours=4),
+    "5y":  timedelta(hours=24),
+}
+_chart_cache: dict[str, tuple[dict, datetime]] = {}
+
+
+@app.get("/api/chart/{symbol}")
+def get_chart(symbol: str, period: str = "1d"):
+    from fastapi import HTTPException
+    symbol = symbol.upper()
+    if period not in _CHART_CONFIG:
+        raise HTTPException(400, f"Invalid period '{period}'")
+
+    cache_key = f"{symbol}:{period}"
+    now = datetime.utcnow()
+    cached = _chart_cache.get(cache_key)
+    if cached and (now - cached[1]) < _CHART_TTL[period]:
+        return cached[0]
+
+    yf_period, yf_interval = _CHART_CONFIG[period]
+    try:
+        hist = yf.Ticker(symbol, session=_session).history(
+            period=yf_period, interval=yf_interval
+        )
+    except Exception as exc:
+        logger.warning("Chart fetch failed %s %s: %s", symbol, period, exc)
+        raise HTTPException(500, str(exc))
+
+    if hist.empty:
+        result = {"symbol": symbol, "period": period, "data": []}
+        _chart_cache[cache_key] = (result, now)
+        return result
+
+    data = []
+    seen: set[int] = set()
+    for ts, row in hist.iterrows():
+        unix_ts = int(ts.timestamp())
+        if unix_ts in seen:
+            continue
+        seen.add(unix_ts)
+        data.append({
+            "time":   unix_ts,
+            "open":   round(float(row["Open"]),  4),
+            "high":   round(float(row["High"]),  4),
+            "low":    round(float(row["Low"]),   4),
+            "close":  round(float(row["Close"]), 4),
+            "volume": int(row["Volume"]),
+        })
+
+    result = {"symbol": symbol, "period": period, "data": data}
+    _chart_cache[cache_key] = (result, now)
+    return result
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}

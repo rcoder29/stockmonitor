@@ -1,6 +1,4 @@
-import { useState } from 'react'
 import { Fragment } from 'react'
-import FundamentalsPanel from './FundamentalsPanel'
 import { fmt } from '../utils/format'
 
 function ChangeCell({ value, isPercent }) {
@@ -41,8 +39,7 @@ function RangeCell({ lo, hi, current }) {
   )
 }
 
-export default function StockTable({ watchlist, quotes, priceFlash, onRemove }) {
-  const [expanded, setExpanded] = useState(null)
+export default function StockTable({ watchlist, quotes, priceFlash, onRemove, onChartOpen }) {
 
   if (watchlist.length === 0) {
     return (
@@ -80,11 +77,7 @@ export default function StockTable({ watchlist, quotes, priceFlash, onRemove }) 
         <tbody>
           {watchlist.map((sym, idx) => {
             const q = quotes[sym]
-            const isExpanded = expanded === sym
             const flash = priceFlash[sym]
-            const isPos = q?.change != null && q.change >= 0
-            const isNeg = q?.change != null && q.change < 0
-
             let rowBg = idx % 2 === 0 ? 'bg-gray-900/20' : 'bg-transparent'
             if (flash === 'up') rowBg = 'bg-emerald-900/25'
             if (flash === 'down') rowBg = 'bg-red-900/25'
@@ -92,14 +85,14 @@ export default function StockTable({ watchlist, quotes, priceFlash, onRemove }) 
             return (
               <Fragment key={sym}>
                 <tr
-                  onClick={() => setExpanded(isExpanded ? null : sym)}
+                  onClick={() => onChartOpen(sym)}
                   className={`border-b border-gray-800/60 cursor-pointer transition-colors duration-300 hover:bg-gray-800/50 ${rowBg}`}
                 >
                   {/* Symbol + Name */}
                   <td className="py-3 px-3">
                     <div className="font-bold text-white flex items-center gap-2">
                       {sym}
-                      <span className="text-gray-600 text-xs">{isExpanded ? '▲' : '▼'}</span>
+                      <span className="text-gray-700 text-xs">↗</span>
                     </div>
                     {q?.name && (
                       <div className="text-xs text-gray-500 truncate max-w-[140px]">{q.name}</div>
@@ -169,14 +162,6 @@ export default function StockTable({ watchlist, quotes, priceFlash, onRemove }) 
                   </td>
                 </tr>
 
-                {/* Fundamentals panel */}
-                {isExpanded && q && !q.error && (
-                  <tr className="border-b border-gray-700 bg-gray-950">
-                    <td colSpan={9} className="px-6 py-4">
-                      <FundamentalsPanel quote={q} />
-                    </td>
-                  </tr>
-                )}
               </Fragment>
             )
           })}

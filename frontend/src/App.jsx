@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Header from './components/Header'
 import StockTable from './components/StockTable'
+import ChartModal from './components/ChartModal'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -20,6 +21,7 @@ export default function App() {
   const [error, setError] = useState(null)
   const [countdown, setCountdown] = useState(30)
   const [priceFlash, setPriceFlash] = useState({})
+  const [chartSymbol, setChartSymbol] = useState(null)
   const prevPricesRef = useRef({})
   const flashTimerRef = useRef(null)
 
@@ -121,8 +123,16 @@ export default function App() {
           quotes={quotes}
           priceFlash={priceFlash}
           onRemove={removeTicker}
+          onChartOpen={setChartSymbol}
         />
       </main>
+      {chartSymbol && (
+        <ChartModal
+          symbol={chartSymbol}
+          quote={quotes[chartSymbol]}
+          onClose={() => setChartSymbol(null)}
+        />
+      )}
     </div>
   )
 }
