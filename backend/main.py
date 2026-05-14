@@ -191,6 +191,53 @@ def get_chart(symbol: str, period: str = "1d"):
     return result
 
 
+_news_cache: dict[str, tuple[list, datetime]] = {}
+_NEWS_TTL = timedelta(minutes=5)
+
+
+@app.get("/api/news/{symbol}")
+def get_news(symbol: str):
+    symbol = symbol.upper()
+    now = datetime.utcnow()
+    cached = _news_cache.get(symbol)
+    if cached and (now - cached[1]) < _NEWS_TTL:
+        return cached[0]
+
+    try:
+        raw_news = yf.Ticker(symbol, session=_session).news or []
+        articles = []
+        for item in raw_news:
+            # yfinance 1.x wraps items under a "content" key
+            content = item.get("content", {})
+            title = content.get("title") or item.get("title", "")
+            publisher = (
+                content.get("provider", {}).get("displayName")
+                or item.get("publisher", "")
+            )
+            link = (
+                content.get("canonicalUrl", {}).get("url")
+                or item.get("link", "")
+            )
+            pub_date = content.get("pubDate") or item.get("providerPublishTime")
+            if isinstance(pub_date, (int, float)):
+                pub_date = datetime.utcfromtimestamp(pub_date).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if title and link:
+                articles.append({
+                    "title": title,
+                    "publisher": publisher,
+                    "link": link,
+                    "publishedAt": pub_date or "",
+                })
+            if len(articles) == 10:
+                break
+    except Exception as exc:
+        logger.warning("News fetch failed for %s: %s", symbol, exc)
+        articles = []
+
+    _news_cache[symbol] = (articles, now)
+    return articles
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}

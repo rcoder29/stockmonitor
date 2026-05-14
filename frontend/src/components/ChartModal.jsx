@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createChart, CandlestickSeries, HistogramSeries, ColorType, CrosshairMode } from 'lightweight-charts'
 import FundamentalsPanel from './FundamentalsPanel'
+import NewsPanel from './NewsPanel'
 import { fmt } from '../utils/format'
 
 const PERIODS = [
@@ -159,7 +160,7 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
         {/* Tabs */}
         <div className="flex border-b border-gray-800 px-6 shrink-0">
-          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals']].map(([val, label]) => (
+          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals'], ['news', 'News']].map(([val, label]) => (
             <button
               key={val}
               onClick={() => setTab(val)}
@@ -223,6 +224,8 @@ export default function ChartModal({ symbol, quote, onClose }) {
               ? <FundamentalsPanel quote={quote} />
               : <div className="text-gray-500 text-sm py-4">No fundamental data available</div>
           )}
+
+          {tab === 'news' && <NewsPanel symbol={symbol} />}
         </div>
       </div>
     </div>
