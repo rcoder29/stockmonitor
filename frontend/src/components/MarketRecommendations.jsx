@@ -26,8 +26,8 @@ const LAYER_META = {
   'Robotics':         { cls: 'text-lime-300    bg-lime-900/50    border-lime-700'    },
 }
 
-const PERIODS = ['1d', '5d', '1m', '3m', 'ytd']
-const PERIOD_LABELS = { '1d': '1D', '5d': '5D', '1m': '1M', '3m': '3M', 'ytd': 'YTD' }
+const PERIODS = ['1d', '5d', '1m', '3m', '1y', 'ytd']
+const PERIOD_LABELS = { '1d': '1D', '5d': '5D', '1m': '1M', '3m': '3M', '1y': '1Y', 'ytd': 'YTD' }
 
 function SectionLabel({ children }) {
   return <div className="text-gray-600 text-xs uppercase tracking-widest mb-3">{children}</div>
