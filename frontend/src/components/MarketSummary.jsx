@@ -185,67 +185,69 @@ export default function MarketSummary() {
         </div>
       )}
 
-      <div className="space-y-8">
-        {/* ── Major Indices & ETFs ── */}
-        {perf?.indices?.length > 0 && (
-          <section>
-            <SectionLabel>Major Indices &amp; ETFs</SectionLabel>
-            <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2">
-              <PerformanceTable rows={perf.indices} />
-            </div>
-          </section>
-        )}
+      <div className="flex gap-6 items-start">
 
-        {/* ── Sector ETFs ── */}
-        {perf?.sectors?.length > 0 && (
-          <section>
-            <SectionLabel>US Sector ETFs — click any row to view chart</SectionLabel>
-            <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2">
-              <PerformanceTable rows={perf.sectors} onRowClick={setChartRow} />
-            </div>
-          </section>
-        )}
+        {/* ── Left column: tables ── */}
+        <div className="flex-1 min-w-0 space-y-8">
+          {/* Major Indices & ETFs */}
+          {perf?.indices?.length > 0 && (
+            <section>
+              <SectionLabel>Major Indices &amp; ETFs</SectionLabel>
+              <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2">
+                <PerformanceTable rows={perf.indices} />
+              </div>
+            </section>
+          )}
 
-        {/* ── Magnificent 7 ── */}
-        {perf?.mag7?.length > 0 && (
-          <section>
-            <SectionLabel>Magnificent 7</SectionLabel>
-            <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2">
-              <PerformanceTable rows={perf.mag7} />
-            </div>
-          </section>
-        )}
+          {/* Sector ETFs */}
+          {perf?.sectors?.length > 0 && (
+            <section>
+              <SectionLabel>US Sector ETFs — click any row to view chart</SectionLabel>
+              <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2">
+                <PerformanceTable rows={perf.sectors} onRowClick={setChartRow} />
+              </div>
+            </section>
+          )}
 
-        {/* ── Headlines ── */}
+          {/* Magnificent 7 */}
+          {perf?.mag7?.length > 0 && (
+            <section>
+              <SectionLabel>Magnificent 7</SectionLabel>
+              <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2">
+                <PerformanceTable rows={perf.mag7} />
+              </div>
+            </section>
+          )}
+
+          {/* Gainers / Losers */}
+          {(summary?.gainers?.length > 0 || summary?.losers?.length > 0) && (
+            <div className="grid grid-cols-2 gap-6">
+              {summary?.gainers?.length > 0 && (
+                <section>
+                  <SectionLabel>Top 10 Gainers</SectionLabel>
+                  <div className="space-y-1.5">
+                    {summary.gainers.map((s, i) => <MoverRow key={i} stock={s} positive />)}
+                  </div>
+                </section>
+              )}
+              {summary?.losers?.length > 0 && (
+                <section>
+                  <SectionLabel>Top 10 Losers</SectionLabel>
+                  <div className="space-y-1.5">
+                    {summary.losers.map((s, i) => <MoverRow key={i} stock={s} positive={false} />)}
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Right column: news ── */}
         {summary?.headlines?.length > 0 && (
-          <section>
+          <aside className="w-80 shrink-0 space-y-2">
             <SectionLabel>Top Headlines</SectionLabel>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {summary.headlines.map((a, i) => <NewsItem key={i} article={a} />)}
-            </div>
-          </section>
-        )}
-
-        {/* ── Gainers / Losers ── */}
-        {(summary?.gainers?.length > 0 || summary?.losers?.length > 0) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {summary?.gainers?.length > 0 && (
-              <section>
-                <SectionLabel>Top 10 Gainers</SectionLabel>
-                <div className="space-y-1.5">
-                  {summary.gainers.map((s, i) => <MoverRow key={i} stock={s} positive />)}
-                </div>
-              </section>
-            )}
-            {summary?.losers?.length > 0 && (
-              <section>
-                <SectionLabel>Top 10 Losers</SectionLabel>
-                <div className="space-y-1.5">
-                  {summary.losers.map((s, i) => <MoverRow key={i} stock={s} positive={false} />)}
-                </div>
-              </section>
-            )}
-          </div>
+            {summary.headlines.map((a, i) => <NewsItem key={i} article={a} />)}
+          </aside>
         )}
 
       </div>
