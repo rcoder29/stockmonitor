@@ -3,12 +3,14 @@ import Header from './components/Header'
 import StockTable from './components/StockTable'
 import ChartModal from './components/ChartModal'
 import MarketSummary from './components/MarketSummary'
+import MarketRecommendations from './components/MarketRecommendations'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
 const TABS = [
-  { id: 'market',    label: 'Market Summary' },
-  { id: 'watchlist', label: 'Watchlist' },
+  { id: 'market',          label: 'Market Summary' },
+  { id: 'recommendations', label: 'Market Recommendations' },
+  { id: 'watchlist',       label: 'Watchlist' },
 ]
 
 export default function App() {
@@ -156,7 +158,8 @@ export default function App() {
             />
           </div>
         )}
-        {activeTab === 'market' && <MarketSummary />}
+        {activeTab === 'market'          && <MarketSummary />}
+        {activeTab === 'recommendations' && <MarketRecommendations />}
       </main>
 
       {chartSymbol && (

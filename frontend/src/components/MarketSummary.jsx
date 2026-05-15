@@ -2,14 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { fmt } from '../utils/format'
 import ChartModal from './ChartModal'
 
-const ACTION_META = {
-  up:   { label: 'UPGRADE',    cls: 'text-emerald-400 bg-emerald-900/40 border-emerald-800' },
-  down: { label: 'DOWNGRADE',  cls: 'text-red-400    bg-red-900/40    border-red-800'     },
-  init: { label: 'INITIATED',  cls: 'text-sky-400    bg-sky-900/40    border-sky-800'     },
-  reit: { label: 'REITERATED', cls: 'text-gray-400   bg-gray-800/60  border-gray-700'     },
-  main: { label: 'MAINTAINED', cls: 'text-gray-400   bg-gray-800/60  border-gray-700'     },
-}
-
 const PERIODS = ['1d', '5d', '1m', '3m', '6m', '1y', 'ytd']
 const PERIOD_LABELS = { '1d': '1D', '5d': '5D', '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1Y', 'ytd': 'YTD' }
 
@@ -110,23 +102,6 @@ function MoverRow({ stock, positive }) {
             : '—'}
         </span>
       </div>
-    </div>
-  )
-}
-
-function AnalystRow({ action }) {
-  const meta = ACTION_META[action.action] || ACTION_META.main
-  return (
-    <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded bg-gray-800/50 border border-gray-700/30 hover:bg-gray-800 transition-colors">
-      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${meta.cls}`}>{meta.label}</span>
-      <span className="text-white text-xs font-bold">{action.symbol}</span>
-      {action.fromGrade && action.toGrade && action.fromGrade !== action.toGrade
-        ? <span className="text-gray-500 text-xs">{action.fromGrade} → <span className="text-gray-300">{action.toGrade}</span></span>
-        : action.toGrade && <span className="text-gray-300 text-xs">{action.toGrade}</span>
-      }
-      {action.priceTarget && <span className="text-gray-500 text-xs">PT {fmt.price(action.priceTarget)}</span>}
-      <span className="text-gray-600 text-xs ml-auto">{action.firm}</span>
-      <span className="text-gray-700 text-xs">{action.date}</span>
     </div>
   )
 }
@@ -273,27 +248,6 @@ export default function MarketSummary() {
           </div>
         )}
 
-        {/* ── Analyst Upgrades / Downgrades ── */}
-        {(summary?.analystUpgrades?.length > 0 || summary?.analystDowngrades?.length > 0) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {summary?.analystUpgrades?.length > 0 && (
-              <section>
-                <SectionLabel>Analyst Upgrades &amp; Initiations</SectionLabel>
-                <div className="space-y-1.5">
-                  {summary.analystUpgrades.map((a, i) => <AnalystRow key={i} action={a} />)}
-                </div>
-              </section>
-            )}
-            {summary?.analystDowngrades?.length > 0 && (
-              <section>
-                <SectionLabel>Analyst Downgrades</SectionLabel>
-                <div className="space-y-1.5">
-                  {summary.analystDowngrades.map((a, i) => <AnalystRow key={i} action={a} />)}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Sector ETF drilldown chart */}
