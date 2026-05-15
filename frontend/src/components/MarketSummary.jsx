@@ -244,9 +244,11 @@ export default function MarketSummary() {
 
         {/* ── Right column: news ── */}
         {summary?.headlines?.length > 0 && (
-          <aside className="w-80 shrink-0 space-y-2">
+          <aside className="w-80 shrink-0">
             <SectionLabel>Top Headlines</SectionLabel>
-            {summary.headlines.map((a, i) => <NewsItem key={i} article={a} />)}
+            <div className="space-y-2 max-h-[calc(100vh-10rem)] overflow-y-auto pr-1 scrollbar-thin">
+              {summary.headlines.map((a, i) => <NewsItem key={i} article={a} />)}
+            </div>
           </aside>
         )}
 

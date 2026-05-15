@@ -360,31 +360,57 @@ def get_market_performance():
     return result
 
 
-def _fetch_market_headlines() -> list:
+# Ticker symbols used as news feeds: US market, world/Europe, Asia, bonds/macro
+_NEWS_FEEDS = ["^GSPC", "^FTSE", "^N225", "^GDAXI", "GC=F", "CL=F"]
+
+
+def _parse_news_items(raw: list) -> list:
+    articles = []
+    for item in raw:
+        content = item.get("content", {})
+        title = content.get("title") or item.get("title", "")
+        publisher = (
+            content.get("provider", {}).get("displayName")
+            or item.get("publisher", "")
+        )
+        link = (
+            content.get("canonicalUrl", {}).get("url")
+            or item.get("link", "")
+        )
+        pub_date = content.get("pubDate") or item.get("providerPublishTime")
+        if isinstance(pub_date, (int, float)):
+            pub_date = datetime.utcfromtimestamp(pub_date).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if title and link:
+            articles.append({"title": title, "publisher": publisher,
+                              "link": link, "publishedAt": pub_date or ""})
+    return articles
+
+
+def _fetch_feed(sym: str) -> list:
     try:
-        raw_news = yf.Ticker("^GSPC", session=_session).news or []
-        articles = []
-        for item in raw_news[:10]:
-            content = item.get("content", {})
-            title = content.get("title") or item.get("title", "")
-            publisher = (
-                content.get("provider", {}).get("displayName")
-                or item.get("publisher", "")
-            )
-            link = (
-                content.get("canonicalUrl", {}).get("url")
-                or item.get("link", "")
-            )
-            pub_date = content.get("pubDate") or item.get("providerPublishTime")
-            if isinstance(pub_date, (int, float)):
-                pub_date = datetime.utcfromtimestamp(pub_date).strftime("%Y-%m-%dT%H:%M:%SZ")
-            if title and link:
-                articles.append({"title": title, "publisher": publisher,
-                                  "link": link, "publishedAt": pub_date or ""})
-        return articles
+        return _parse_news_items(yf.Ticker(sym, session=_session).news or [])
     except Exception as exc:
-        logger.warning("Market headlines failed: %s", exc)
+        logger.warning("News feed %s failed: %s", sym, exc)
         return []
+
+
+def _fetch_market_headlines() -> list:
+    all_articles: list[dict] = []
+    seen_links: set[str] = set()
+
+    with ThreadPoolExecutor(max_workers=len(_NEWS_FEEDS)) as pool:
+        for articles in pool.map(_fetch_feed, _NEWS_FEEDS):
+            for a in articles:
+                if a["link"] not in seen_links:
+                    seen_links.add(a["link"])
+                    all_articles.append(a)
+
+    # Sort by publish date descending, newest first
+    def sort_key(a):
+        return a.get("publishedAt") or ""
+
+    all_articles.sort(key=sort_key, reverse=True)
+    return all_articles[:20]
 
 
 def _fetch_screener_quotes(predefined_body: str) -> list:
