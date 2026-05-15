@@ -439,7 +439,9 @@ def _fetch_analyst_actions() -> list:
             actions.extend(fut.result())
 
     actions.sort(key=lambda x: x["date"], reverse=True)
-    return actions[:10]
+    upgrades   = [a for a in actions if a["action"] in ("up", "init")][:10]
+    downgrades = [a for a in actions if a["action"] == "down"][:10]
+    return {"upgrades": upgrades, "downgrades": downgrades}
 
 
 @app.get("/api/market/summary")
@@ -454,11 +456,13 @@ def get_market_summary():
         f_gainers   = pool.submit(_fetch_screener_quotes, "day_gainers")
         f_losers    = pool.submit(_fetch_screener_quotes, "day_losers")
         f_analyst   = pool.submit(_fetch_analyst_actions)
+        analyst     = f_analyst.result()
         result = {
-            "headlines":      f_headlines.result(),
-            "gainers":        f_gainers.result(),
-            "losers":         f_losers.result(),
-            "analystActions": f_analyst.result(),
+            "headlines":         f_headlines.result(),
+            "gainers":           f_gainers.result(),
+            "losers":            f_losers.result(),
+            "analystUpgrades":   analyst["upgrades"],
+            "analystDowngrades": analyst["downgrades"],
         }
 
     _market_cache["summary"] = (result, now)

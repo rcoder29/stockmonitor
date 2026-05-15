@@ -273,14 +273,26 @@ export default function MarketSummary() {
           </div>
         )}
 
-        {/* ── Analyst Actions ── */}
-        {summary?.analystActions?.length > 0 && (
-          <section>
-            <SectionLabel>Analyst Actions — Upgrades &amp; Downgrades</SectionLabel>
-            <div className="space-y-1.5">
-              {summary.analystActions.map((a, i) => <AnalystRow key={i} action={a} />)}
-            </div>
-          </section>
+        {/* ── Analyst Upgrades / Downgrades ── */}
+        {(summary?.analystUpgrades?.length > 0 || summary?.analystDowngrades?.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {summary?.analystUpgrades?.length > 0 && (
+              <section>
+                <SectionLabel>Analyst Upgrades &amp; Initiations</SectionLabel>
+                <div className="space-y-1.5">
+                  {summary.analystUpgrades.map((a, i) => <AnalystRow key={i} action={a} />)}
+                </div>
+              </section>
+            )}
+            {summary?.analystDowngrades?.length > 0 && (
+              <section>
+                <SectionLabel>Analyst Downgrades</SectionLabel>
+                <div className="space-y-1.5">
+                  {summary.analystDowngrades.map((a, i) => <AnalystRow key={i} action={a} />)}
+                </div>
+              </section>
+            )}
+          </div>
         )}
       </div>
 
