@@ -198,6 +198,48 @@ _NEWS_TTL = timedelta(minutes=5)
 _market_cache: dict[str, tuple[dict, datetime]] = {}
 _MARKET_TTL  = timedelta(minutes=15)
 
+_perf_cache: dict[str, tuple[dict, datetime]] = {}
+_PERF_TTL   = timedelta(minutes=15)
+
+_INDICES_LIST = [
+    {"symbol": "SPY",  "name": "S&P 500 ETF"},
+    {"symbol": "QQQ",  "name": "Nasdaq 100 ETF"},
+    {"symbol": "DIA",  "name": "Dow Jones ETF"},
+    {"symbol": "IWM",  "name": "Russell 2000 ETF"},
+    {"symbol": "VTI",  "name": "Total US Market ETF"},
+    {"symbol": "EFA",  "name": "Intl Developed ETF"},
+    {"symbol": "EEM",  "name": "Emerging Markets ETF"},
+    {"symbol": "TLT",  "name": "20Y Treasury ETF"},
+    {"symbol": "AGG",  "name": "Aggregate Bond ETF"},
+    {"symbol": "GLD",  "name": "Gold ETF"},
+    {"symbol": "USO",  "name": "Oil ETF"},
+    {"symbol": "IBIT", "name": "Bitcoin ETF"},
+]
+
+_MAG7_LIST = [
+    {"symbol": "AAPL",  "name": "Apple"},
+    {"symbol": "MSFT",  "name": "Microsoft"},
+    {"symbol": "NVDA",  "name": "NVIDIA"},
+    {"symbol": "GOOGL", "name": "Alphabet"},
+    {"symbol": "AMZN",  "name": "Amazon"},
+    {"symbol": "META",  "name": "Meta"},
+    {"symbol": "TSLA",  "name": "Tesla"},
+]
+
+_SECTORS_LIST = [
+    {"symbol": "XLK",  "name": "Technology"},
+    {"symbol": "XLF",  "name": "Financials"},
+    {"symbol": "XLV",  "name": "Health Care"},
+    {"symbol": "XLE",  "name": "Energy"},
+    {"symbol": "XLC",  "name": "Comm. Services"},
+    {"symbol": "XLI",  "name": "Industrials"},
+    {"symbol": "XLY",  "name": "Consumer Discret."},
+    {"symbol": "XLP",  "name": "Consumer Staples"},
+    {"symbol": "XLU",  "name": "Utilities"},
+    {"symbol": "XLRE", "name": "Real Estate"},
+    {"symbol": "XLB",  "name": "Materials"},
+]
+
 _MAJOR_STOCKS = [
     "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO",
     "JPM", "V", "MA", "UNH", "XOM", "WMT", "JNJ", "PG", "HD", "COST",
@@ -247,6 +289,75 @@ def get_news(symbol: str):
 
     _news_cache[symbol] = (articles, now)
     return articles
+
+
+def _fetch_perf_one(sym: str) -> dict:
+    try:
+        hist = yf.Ticker(sym, session=_session).history(
+            period="1y", interval="1d", auto_adjust=True
+        )
+        if hist.empty or len(hist) < 2:
+            return {"symbol": sym}
+        closes = hist["Close"]
+        today  = closes.index[-1]
+
+        def pct(n: int):
+            if len(closes) <= n:
+                return None
+            return round((float(closes.iloc[-1]) / float(closes.iloc[-(n + 1)]) - 1) * 100, 2)
+
+        ytd_closes = closes[closes.index.year == today.year]
+        ytd = (
+            round((float(closes.iloc[-1]) / float(ytd_closes.iloc[0]) - 1) * 100, 2)
+            if len(ytd_closes) > 0 else None
+        )
+        return {
+            "symbol": sym,
+            "price":  round(float(closes.iloc[-1]), 4),
+            "1d":  pct(1),
+            "5d":  pct(5),
+            "1m":  pct(21),
+            "3m":  pct(63),
+            "6m":  pct(126),
+            "1y":  pct(252),
+            "ytd": ytd,
+        }
+    except Exception as exc:
+        logger.warning("Perf fetch failed for %s: %s", sym, exc)
+        return {"symbol": sym}
+
+
+@app.get("/api/market/performance")
+def get_market_performance():
+    now = datetime.utcnow()
+    cached = _perf_cache.get("perf")
+    if cached and (now - cached[1]) < _PERF_TTL:
+        return cached[0]
+
+    all_meta = _INDICES_LIST + _MAG7_LIST + _SECTORS_LIST
+    all_syms = [m["symbol"] for m in all_meta]
+    name_map = {m["symbol"]: m["name"] for m in all_meta}
+
+    perf: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        for fut in as_completed({pool.submit(_fetch_perf_one, s): s for s in all_syms}):
+            d = fut.result()
+            perf[d["symbol"]] = d
+
+    def build(items):
+        out = []
+        for m in items:
+            d = perf.get(m["symbol"], {"symbol": m["symbol"]})
+            out.append({**d, "name": name_map[m["symbol"]]})
+        return out
+
+    result = {
+        "indices": build(_INDICES_LIST),
+        "mag7":    build(_MAG7_LIST),
+        "sectors": build(_SECTORS_LIST),
+    }
+    _perf_cache["perf"] = (result, now)
+    return result
 
 
 def _fetch_market_headlines() -> list:

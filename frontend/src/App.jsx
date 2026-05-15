@@ -7,12 +7,12 @@ import MarketSummary from './components/MarketSummary'
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
 const TABS = [
-  { id: 'watchlist', label: 'Watchlist' },
   { id: 'market',    label: 'Market Summary' },
+  { id: 'watchlist', label: 'Watchlist' },
 ]
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('watchlist')
+  const [activeTab, setActiveTab] = useState('market')
   const [watchlist, setWatchlist] = useState(() => {
     try {
       const saved = localStorage.getItem('stockmonitor-watchlist')
