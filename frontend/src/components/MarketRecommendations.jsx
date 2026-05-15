@@ -124,7 +124,7 @@ function AIStocksTable({ stocks, onRowClick }) {
                 {PERIODS.map(p => (
                   <td key={p} className="py-2.5 px-3 text-right tabular-nums"><Pct v={row[p]} /></td>
                 ))}
-                <td className="py-2.5 pl-4 text-gray-500 max-w-xs">{row.thesis}</td>
+                <td className="py-2.5 pl-4 text-gray-500 min-w-[280px]">{row.thesis}</td>
                 <td className="py-2.5 pl-2 text-gray-700">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
