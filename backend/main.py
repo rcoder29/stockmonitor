@@ -569,6 +569,60 @@ def get_market_summary():
     return result
 
 
+_analyst_hist_cache: dict[str, tuple[dict, datetime]] = {}
+_ANALYST_HIST_TTL = timedelta(minutes=10)
+
+
+@app.get("/api/analyst-history/{symbol}")
+def get_analyst_history(symbol: str):
+    symbol = symbol.upper()
+    now = datetime.utcnow()
+    cached = _analyst_hist_cache.get(symbol)
+    if cached and (now - cached[1]) < _ANALYST_HIST_TTL:
+        return cached[0]
+
+    try:
+        ticker = yf.Ticker(symbol, session=_session)
+        df = ticker.upgrades_downgrades
+        fi = ticker.fast_info
+        price       = _safe_float(fi.last_price)
+        prev_close  = _safe_float(fi.previous_close)
+        change_pct  = ((price - prev_close) / prev_close * 100) if price and prev_close else None
+        info_name   = ticker.info.get("shortName") or ticker.info.get("longName") or symbol
+    except Exception as exc:
+        logger.warning("Analyst history failed for %s: %s", symbol, exc)
+        result = {"symbol": symbol, "name": symbol, "price": None,
+                  "changePct": None, "history": []}
+        _analyst_hist_cache[symbol] = (result, now)
+        return result
+
+    history = []
+    if df is not None and not df.empty:
+        cutoff = datetime.utcnow() - timedelta(days=365 * 2)
+        recent = df[df.index >= cutoff]
+        for ts, row in recent.iterrows():
+            history.append({
+                "date":              ts.strftime("%Y-%m-%d"),
+                "firm":              str(row.get("Firm", "")),
+                "toGrade":           str(row.get("ToGrade", "")),
+                "fromGrade":         str(row.get("FromGrade", "")),
+                "action":            str(row.get("Action", "")).lower(),
+                "ptAction":          str(row.get("priceTargetAction", "")),
+                "currentPT":         _safe_float(row.get("currentPriceTarget")),
+                "priorPT":           _safe_float(row.get("priorPriceTarget")),
+            })
+
+    result = {
+        "symbol":    symbol,
+        "name":      info_name,
+        "price":     price,
+        "changePct": round(change_pct, 2) if change_pct is not None else None,
+        "history":   history,
+    }
+    _analyst_hist_cache[symbol] = (result, now)
+    return result
+
+
 @app.get("/api/ai-stocks")
 def get_ai_stocks():
     now = datetime.utcnow()

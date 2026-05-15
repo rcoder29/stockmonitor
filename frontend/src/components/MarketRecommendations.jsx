@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { fmt } from '../utils/format'
 import ChartModal from './ChartModal'
+import AnalystDetailModal from './AnalystDetailModal'
 
 // ── Analyst action badges ─────────────────────────────────────────────────────
 const ACTION_META = {
@@ -140,10 +141,13 @@ function AIStocksTable({ stocks, onRowClick }) {
 }
 
 // ── Analyst rows ──────────────────────────────────────────────────────────────
-function AnalystRow({ action }) {
+function AnalystRow({ action, onClick }) {
   const meta = ACTION_META[action.action] || ACTION_META.main
   return (
-    <div className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded bg-gray-800/50 border border-gray-700/30 hover:bg-gray-800 transition-colors">
+    <div
+      onClick={onClick}
+      className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded bg-gray-800/50 border border-gray-700/30 hover:bg-gray-800 hover:border-gray-600 cursor-pointer transition-colors group"
+    >
       <span className={`text-xs font-bold px-2 py-0.5 rounded border ${meta.cls}`}>{meta.label}</span>
       <span className="text-white text-xs font-bold">{action.symbol}</span>
       {action.fromGrade && action.toGrade && action.fromGrade !== action.toGrade
@@ -153,6 +157,7 @@ function AnalystRow({ action }) {
       {action.priceTarget && <span className="text-gray-500 text-xs">PT {fmt.price(action.priceTarget)}</span>}
       <span className="text-gray-600 text-xs ml-auto">{action.firm}</span>
       <span className="text-gray-700 text-xs">{action.date}</span>
+      <span className="text-gray-700 text-xs group-hover:text-sky-500 transition-colors">↗</span>
     </div>
   )
 }
@@ -165,7 +170,8 @@ export default function MarketRecommendations() {
   const [aiLoading, setAiLoading]  = useState(true)
   const [error, setError]         = useState(null)
   const [lastFetch, setLastFetch] = useState(null)
-  const [chartRow, setChartRow]   = useState(null)
+  const [chartRow, setChartRow]         = useState(null)
+  const [analystAction, setAnalystAction] = useState(null)
 
   const fetchAll = useCallback(async () => {
     setSumLoading(true); setAiLoading(true); setError(null)
@@ -233,7 +239,7 @@ export default function MarketRecommendations() {
               <section>
                 <SectionLabel>Analyst Upgrades &amp; Initiations</SectionLabel>
                 <div className="space-y-1.5">
-                  {summary.analystUpgrades.map((a, i) => <AnalystRow key={i} action={a} />)}
+                  {summary.analystUpgrades.map((a, i) => <AnalystRow key={i} action={a} onClick={() => setAnalystAction(a)} />)}
                 </div>
               </section>
             )}
@@ -241,7 +247,7 @@ export default function MarketRecommendations() {
               <section>
                 <SectionLabel>Analyst Downgrades</SectionLabel>
                 <div className="space-y-1.5">
-                  {summary.analystDowngrades.map((a, i) => <AnalystRow key={i} action={a} />)}
+                  {summary.analystDowngrades.map((a, i) => <AnalystRow key={i} action={a} onClick={() => setAnalystAction(a)} />)}
                 </div>
               </section>
             )}
@@ -254,6 +260,13 @@ export default function MarketRecommendations() {
           symbol={chartRow.symbol}
           quote={makeQuote(chartRow)}
           onClose={() => setChartRow(null)}
+        />
+      )}
+
+      {analystAction && (
+        <AnalystDetailModal
+          action={analystAction}
+          onClose={() => setAnalystAction(null)}
         />
       )}
     </div>
