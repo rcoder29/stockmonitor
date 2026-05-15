@@ -291,6 +291,24 @@ _AI_STOCKS = [
     {"symbol": "PANW",  "name": "Palo Alto Networks","layer": "Cybersecurity",    "thesis": "AI-powered network, cloud & SOC security"},
     {"symbol": "ZS",    "name": "Zscaler",           "layer": "Cybersecurity",    "thesis": "Zero-trust AI security for distributed infra"},
     {"symbol": "S",     "name": "SentinelOne",       "layer": "Cybersecurity",    "thesis": "AI-driven autonomous threat detection & response"},
+    # Quantum Computing
+    {"symbol": "IONQ",  "name": "IonQ",              "layer": "Quantum Computing","thesis": "Trapped-ion quantum systems; cloud QaaS leader"},
+    {"symbol": "RGTI",  "name": "Rigetti Computing", "layer": "Quantum Computing","thesis": "Superconducting QPUs on AWS & Azure marketplaces"},
+    {"symbol": "QUBT",  "name": "Quantum Computing", "layer": "Quantum Computing","thesis": "Photonic quantum optimization for logistics & finance"},
+    {"symbol": "QBTS",  "name": "D-Wave Quantum",    "layer": "Quantum Computing","thesis": "Annealing QPUs for real-world optimization problems"},
+    {"symbol": "IBM",   "name": "IBM",               "layer": "Quantum Computing","thesis": "Eagle/Condor QPUs; Qiskit ecosystem & IBM Quantum Network"},
+    {"symbol": "ARQQ",  "name": "Arqit Quantum",     "layer": "Quantum Computing","thesis": "Quantum-safe satellite encryption for enterprise & govt"},
+    {"symbol": "MSFT",  "name": "Microsoft",         "layer": "Quantum Computing","thesis": "Azure Quantum, topological qubit research program"},
+    # Robotics & Automation
+    {"symbol": "ISRG",  "name": "Intuitive Surgical","layer": "Robotics",         "thesis": "Da Vinci surgical robot monopoly; AI-guided procedures"},
+    {"symbol": "TER",   "name": "Teradyne",          "layer": "Robotics",         "thesis": "Universal Robots cobots + semiconductor test equipment"},
+    {"symbol": "ROK",   "name": "Rockwell Automation","layer": "Robotics",        "thesis": "Industrial automation & AI-driven smart manufacturing"},
+    {"symbol": "CGNX",  "name": "Cognex",            "layer": "Robotics",         "thesis": "Machine vision — the eyes of industrial & warehouse robots"},
+    {"symbol": "PATH",  "name": "UiPath",            "layer": "Robotics",         "thesis": "RPA + agentic AI automating enterprise software workflows"},
+    {"symbol": "ABB",   "name": "ABB Ltd",           "layer": "Robotics",         "thesis": "Global leader in industrial robots & factory automation"},
+    {"symbol": "HON",   "name": "Honeywell",         "layer": "Robotics",         "thesis": "Industrial automation, process control & AI sensors"},
+    {"symbol": "TSLA",  "name": "Tesla",             "layer": "Robotics",         "thesis": "Optimus humanoid robot; FSD autonomous driving AI"},
+    {"symbol": "NVDA",  "name": "NVIDIA",            "layer": "Robotics",         "thesis": "Isaac robotics platform; Jetson edge AI for robots"},
 ]
 
 _ai_cache: dict[str, tuple[list, datetime]] = {}
@@ -558,12 +576,11 @@ def get_ai_stocks():
     if cached and (now - cached[1]) < _AI_TTL:
         return cached[0]
 
-    syms = [s["symbol"] for s in _AI_STOCKS]
-    meta = {s["symbol"]: s for s in _AI_STOCKS}
+    unique_syms = list({s["symbol"] for s in _AI_STOCKS})
 
     perf: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=10) as pool:
-        for fut in as_completed({pool.submit(_fetch_perf_one, s): s for s in syms}):
+        for fut in as_completed({pool.submit(_fetch_perf_one, s): s for s in unique_syms}):
             d = fut.result()
             perf[d["symbol"]] = d
 

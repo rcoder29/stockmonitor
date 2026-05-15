@@ -22,6 +22,8 @@ const LAYER_META = {
   'Data Centers':     { cls: 'text-yellow-300  bg-yellow-900/50  border-yellow-700'  },
   'Software & Apps':  { cls: 'text-emerald-300 bg-emerald-900/50 border-emerald-700' },
   'Cybersecurity':    { cls: 'text-rose-300    bg-rose-900/50    border-rose-700'    },
+  'Quantum Computing':{ cls: 'text-cyan-300    bg-cyan-900/50    border-cyan-700'    },
+  'Robotics':         { cls: 'text-lime-300    bg-lime-900/50    border-lime-700'    },
 }
 
 const PERIODS = ['1d', '5d', '1m', '3m', 'ytd']
@@ -109,9 +111,9 @@ function AIStocksTable({ stocks, onRowClick }) {
             </tr>
           </thead>
           <tbody>
-            {visible.map((row) => (
+            {visible.map((row, i) => (
               <tr
-                key={row.symbol}
+                key={`${row.symbol}-${row.layer}`}
                 onClick={() => onRowClick(row)}
                 className="border-b border-gray-800/40 hover:bg-gray-800/50 cursor-pointer transition-colors"
               >
