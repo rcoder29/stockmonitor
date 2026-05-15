@@ -544,6 +544,56 @@ def _fetch_analyst_actions() -> list:
     return {"upgrades": upgrades, "downgrades": downgrades}
 
 
+_ai_analyst_cache: dict[str, tuple[dict, datetime]] = {}
+_AI_ANALYST_TTL = timedelta(minutes=15)
+
+
+@app.get("/api/ai-analyst-actions")
+def get_ai_analyst_actions():
+    now = datetime.utcnow()
+    cached = _ai_analyst_cache.get("ai_analyst")
+    if cached and (now - cached[1]) < _AI_ANALYST_TTL:
+        return cached[0]
+
+    ai_syms = list({s["symbol"] for s in _AI_STOCKS})
+    actions: list[dict] = []
+    cutoff = datetime.utcnow() - timedelta(days=14)
+
+    def _for_sym(sym: str) -> list:
+        try:
+            df = yf.Ticker(sym, session=_session).upgrades_downgrades
+            if df is None or df.empty:
+                return []
+            recent = df[df.index >= cutoff]
+            result = []
+            for ts, row in recent.iterrows():
+                action = str(row.get("Action", "")).lower()
+                result.append({
+                    "symbol":      sym,
+                    "firm":        str(row.get("Firm", "")),
+                    "toGrade":     str(row.get("ToGrade", "")),
+                    "fromGrade":   str(row.get("FromGrade", "")),
+                    "action":      action,
+                    "date":        ts.strftime("%Y-%m-%d"),
+                    "priceTarget": _safe_float(row.get("currentPriceTarget")),
+                })
+            return result
+        except Exception:
+            return []
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        for fut in as_completed([pool.submit(_for_sym, s) for s in ai_syms]):
+            actions.extend(fut.result())
+
+    actions.sort(key=lambda x: x["date"], reverse=True)
+    result = {
+        "upgrades":   [a for a in actions if a["action"] in ("up", "init")][:10],
+        "downgrades": [a for a in actions if a["action"] == "down"][:10],
+    }
+    _ai_analyst_cache["ai_analyst"] = (result, now)
+    return result
+
+
 @app.get("/api/market/summary")
 def get_market_summary():
     now = datetime.utcnow()

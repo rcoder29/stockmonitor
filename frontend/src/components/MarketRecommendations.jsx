@@ -164,38 +164,43 @@ function AnalystRow({ action, onClick }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function MarketRecommendations() {
-  const [summary, setSummary]     = useState(null)
-  const [aiStocks, setAiStocks]   = useState(null)
-  const [sumLoading, setSumLoading] = useState(true)
-  const [aiLoading, setAiLoading]  = useState(true)
-  const [error, setError]         = useState(null)
-  const [lastFetch, setLastFetch] = useState(null)
-  const [chartRow, setChartRow]         = useState(null)
-  const [analystAction, setAnalystAction] = useState(null)
+  const [summary, setSummary]         = useState(null)
+  const [aiStocks, setAiStocks]       = useState(null)
+  const [aiAnalyst, setAiAnalyst]     = useState(null)
+  const [sumLoading, setSumLoading]   = useState(true)
+  const [aiLoading, setAiLoading]     = useState(true)
+  const [aiALoading, setAiALoading]   = useState(true)
+  const [error, setError]             = useState(null)
+  const [lastFetch, setLastFetch]     = useState(null)
+  const [chartRow, setChartRow]             = useState(null)
+  const [analystAction, setAnalystAction]   = useState(null)
 
   const fetchAll = useCallback(async () => {
-    setSumLoading(true); setAiLoading(true); setError(null)
+    setSumLoading(true); setAiLoading(true); setAiALoading(true); setError(null)
     try {
-      const [rSum, rAI] = await Promise.all([
+      const [rSum, rAI, rAIA] = await Promise.all([
         fetch('/api/market/summary'),
         fetch('/api/ai-stocks'),
+        fetch('/api/ai-analyst-actions'),
       ])
       if (!rSum.ok) throw new Error(`Summary error ${rSum.status}`)
       if (!rAI.ok)  throw new Error(`AI stocks error ${rAI.status}`)
-      const [sumData, aiData] = await Promise.all([rSum.json(), rAI.json()])
+      if (!rAIA.ok) throw new Error(`AI analyst error ${rAIA.status}`)
+      const [sumData, aiData, aiaData] = await Promise.all([rSum.json(), rAI.json(), rAIA.json()])
       setSummary(sumData)
       setAiStocks(aiData)
+      setAiAnalyst(aiaData)
       setLastFetch(new Date())
     } catch (e) {
       setError(e.message)
     } finally {
-      setSumLoading(false); setAiLoading(false)
+      setSumLoading(false); setAiLoading(false); setAiALoading(false)
     }
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
-  const loading = sumLoading || aiLoading
+  const loading = sumLoading || aiLoading || aiALoading
 
   return (
     <div className="p-4 max-w-7xl mx-auto">
@@ -222,6 +227,32 @@ export default function MarketRecommendations() {
       )}
 
       <div className="space-y-10">
+        {/* ── AI Names — Analyst Upgrades / Downgrades ── */}
+        {aiAnalyst && (aiAnalyst.upgrades?.length > 0 || aiAnalyst.downgrades?.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {aiAnalyst.upgrades?.length > 0 && (
+              <section>
+                <SectionLabel>AI Names — Analyst Upgrades &amp; Initiations</SectionLabel>
+                <div className="space-y-1.5">
+                  {aiAnalyst.upgrades.map((a, i) => (
+                    <AnalystRow key={i} action={a} onClick={() => setAnalystAction(a)} />
+                  ))}
+                </div>
+              </section>
+            )}
+            {aiAnalyst.downgrades?.length > 0 && (
+              <section>
+                <SectionLabel>AI Names — Analyst Downgrades</SectionLabel>
+                <div className="space-y-1.5">
+                  {aiAnalyst.downgrades.map((a, i) => (
+                    <AnalystRow key={i} action={a} onClick={() => setAnalystAction(a)} />
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+
         {/* ── AI Growth Watch List ── */}
         {aiStocks?.length > 0 && (
           <section>
