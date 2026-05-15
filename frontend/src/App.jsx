@@ -2,10 +2,17 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Header from './components/Header'
 import StockTable from './components/StockTable'
 import ChartModal from './components/ChartModal'
+import MarketSummary from './components/MarketSummary'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
+const TABS = [
+  { id: 'watchlist', label: 'Watchlist' },
+  { id: 'market',    label: 'Market Summary' },
+]
+
 export default function App() {
+  const [activeTab, setActiveTab] = useState('watchlist')
   const [watchlist, setWatchlist] = useState(() => {
     try {
       const saved = localStorage.getItem('stockmonitor-watchlist')
@@ -117,15 +124,41 @@ export default function App() {
         onRefresh={fetchQuotes}
         onAddTicker={addTicker}
       />
-      <main className="p-4">
-        <StockTable
-          watchlist={watchlist}
-          quotes={quotes}
-          priceFlash={priceFlash}
-          onRemove={removeTicker}
-          onChartOpen={setChartSymbol}
-        />
+
+      {/* Top-level tab bar */}
+      <nav className="bg-gray-900 border-b border-gray-800 px-4">
+        <div className="flex gap-1">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-2.5 px-4 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === tab.id
+                  ? 'border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      <main>
+        {activeTab === 'watchlist' && (
+          <div className="p-4">
+            <StockTable
+              watchlist={watchlist}
+              quotes={quotes}
+              priceFlash={priceFlash}
+              onRemove={removeTicker}
+              onChartOpen={setChartSymbol}
+            />
+          </div>
+        )}
+        {activeTab === 'market' && <MarketSummary />}
       </main>
+
       {chartSymbol && (
         <ChartModal
           symbol={chartSymbol}

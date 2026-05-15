@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 import yfinance as yf
+import yfinance.screener.screener as yf_screener
 import logging
 from curl_cffi import requests as curl_requests
 
@@ -194,6 +195,16 @@ def get_chart(symbol: str, period: str = "1d"):
 _news_cache: dict[str, tuple[list, datetime]] = {}
 _NEWS_TTL = timedelta(minutes=5)
 
+_market_cache: dict[str, tuple[dict, datetime]] = {}
+_MARKET_TTL  = timedelta(minutes=15)
+
+_MAJOR_STOCKS = [
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO",
+    "JPM", "V", "MA", "UNH", "XOM", "WMT", "JNJ", "PG", "HD", "COST",
+    "BAC", "NFLX", "AMD", "ORCL", "QCOM", "CRM", "GS", "MS", "CVX",
+    "GE", "UBER", "COIN",
+]
+
 
 @app.get("/api/news/{symbol}")
 def get_news(symbol: str):
@@ -236,6 +247,111 @@ def get_news(symbol: str):
 
     _news_cache[symbol] = (articles, now)
     return articles
+
+
+def _fetch_market_headlines() -> list:
+    try:
+        raw_news = yf.Ticker("^GSPC", session=_session).news or []
+        articles = []
+        for item in raw_news[:10]:
+            content = item.get("content", {})
+            title = content.get("title") or item.get("title", "")
+            publisher = (
+                content.get("provider", {}).get("displayName")
+                or item.get("publisher", "")
+            )
+            link = (
+                content.get("canonicalUrl", {}).get("url")
+                or item.get("link", "")
+            )
+            pub_date = content.get("pubDate") or item.get("providerPublishTime")
+            if isinstance(pub_date, (int, float)):
+                pub_date = datetime.utcfromtimestamp(pub_date).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if title and link:
+                articles.append({"title": title, "publisher": publisher,
+                                  "link": link, "publishedAt": pub_date or ""})
+        return articles
+    except Exception as exc:
+        logger.warning("Market headlines failed: %s", exc)
+        return []
+
+
+def _fetch_screener_quotes(predefined_body: str) -> list:
+    try:
+        result = yf_screener.screen(predefined_body)
+        quotes = (result or {}).get("quotes", [])[:10]
+        return [
+            {
+                "symbol":        q.get("symbol", ""),
+                "name":          q.get("shortName") or q.get("longName") or q.get("symbol", ""),
+                "price":         _safe_float(q.get("regularMarketPrice")),
+                "change":        _safe_float(q.get("regularMarketChange")),
+                "changePercent": _safe_float(q.get("regularMarketChangePercent")),
+                "volume":        _safe_float(q.get("regularMarketVolume")),
+                "marketCap":     _safe_float(q.get("marketCap")),
+            }
+            for q in quotes if q.get("symbol")
+        ]
+    except Exception as exc:
+        logger.warning("Screener %s failed: %s", predefined_body, exc)
+        return []
+
+
+def _fetch_analyst_actions() -> list:
+    actions: list[dict] = []
+    cutoff = datetime.utcnow() - timedelta(days=14)
+
+    def _for_sym(sym: str) -> list:
+        try:
+            df = yf.Ticker(sym, session=_session).upgrades_downgrades
+            if df is None or df.empty:
+                return []
+            recent = df[df.index >= cutoff]
+            result = []
+            for ts, row in recent.iterrows():
+                action = str(row.get("Action", "")).lower()
+                result.append({
+                    "symbol":    sym,
+                    "firm":      str(row.get("Firm", "")),
+                    "toGrade":   str(row.get("ToGrade", "")),
+                    "fromGrade": str(row.get("FromGrade", "")),
+                    "action":    action,
+                    "date":      ts.strftime("%Y-%m-%d"),
+                    "priceTarget": _safe_float(row.get("currentPriceTarget")),
+                })
+            return result
+        except Exception:
+            return []
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        for fut in as_completed([pool.submit(_for_sym, s) for s in _MAJOR_STOCKS]):
+            actions.extend(fut.result())
+
+    actions.sort(key=lambda x: x["date"], reverse=True)
+    return actions[:10]
+
+
+@app.get("/api/market/summary")
+def get_market_summary():
+    now = datetime.utcnow()
+    cached = _market_cache.get("summary")
+    if cached and (now - cached[1]) < _MARKET_TTL:
+        return cached[0]
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_headlines = pool.submit(_fetch_market_headlines)
+        f_gainers   = pool.submit(_fetch_screener_quotes, "day_gainers")
+        f_losers    = pool.submit(_fetch_screener_quotes, "day_losers")
+        f_analyst   = pool.submit(_fetch_analyst_actions)
+        result = {
+            "headlines":      f_headlines.result(),
+            "gainers":        f_gainers.result(),
+            "losers":         f_losers.result(),
+            "analystActions": f_analyst.result(),
+        }
+
+    _market_cache["summary"] = (result, now)
+    return result
 
 
 @app.get("/health")
