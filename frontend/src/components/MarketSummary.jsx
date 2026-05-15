@@ -196,22 +196,22 @@ export default function MarketSummary() {
           </section>
         )}
 
-        {/* ── Magnificent 7 ── */}
-        {perf?.mag7?.length > 0 && (
-          <section>
-            <SectionLabel>Magnificent 7</SectionLabel>
-            <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2">
-              <PerformanceTable rows={perf.mag7} />
-            </div>
-          </section>
-        )}
-
         {/* ── Sector ETFs ── */}
         {perf?.sectors?.length > 0 && (
           <section>
             <SectionLabel>US Sector ETFs — click any row to view chart</SectionLabel>
             <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2">
               <PerformanceTable rows={perf.sectors} onRowClick={setChartRow} />
+            </div>
+          </section>
+        )}
+
+        {/* ── Magnificent 7 ── */}
+        {perf?.mag7?.length > 0 && (
+          <section>
+            <SectionLabel>Magnificent 7</SectionLabel>
+            <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2">
+              <PerformanceTable rows={perf.mag7} />
             </div>
           </section>
         )}
