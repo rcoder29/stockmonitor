@@ -4,39 +4,60 @@ import StockTable from './components/StockTable'
 import ChartModal from './components/ChartModal'
 import MarketSummary from './components/MarketSummary'
 import MarketRecommendations from './components/MarketRecommendations'
+import PortfolioTracker from './components/PortfolioTracker'
+import DayTrader from './components/DayTrader'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
 const TABS = [
   { id: 'market',          label: 'Market Summary' },
   { id: 'recommendations', label: 'Market Recommendations' },
+  { id: 'daytrader',       label: 'Day Trader' },
+  { id: 'portfolio',       label: 'Portfolio' },
   { id: 'watchlist',       label: 'Watchlist' },
 ]
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('market')
-  const [watchlist, setWatchlist] = useState(() => {
-    try {
-      const saved = localStorage.getItem('stockmonitor-watchlist')
-      return saved ? JSON.parse(saved) : DEFAULT_WATCHLIST
-    } catch {
-      return DEFAULT_WATCHLIST
-    }
-  })
-  const [quotes, setQuotes] = useState({})
+  const [activeTab, setActiveTab]   = useState('market')
+  const [watchlist, setWatchlist]   = useState([])
+  const [quotes, setQuotes]         = useState({})
   const [refreshInterval, setRefreshInterval] = useState(30)
   const [lastUpdated, setLastUpdated] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [countdown, setCountdown] = useState(30)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState(null)
+  const [countdown, setCountdown]   = useState(30)
   const [priceFlash, setPriceFlash] = useState({})
   const [chartSymbol, setChartSymbol] = useState(null)
   const prevPricesRef = useRef({})
   const flashTimerRef = useRef(null)
 
+  // Load watchlist from API; migrate localStorage on first empty load
   useEffect(() => {
-    localStorage.setItem('stockmonitor-watchlist', JSON.stringify(watchlist))
-  }, [watchlist])
+    fetch('/api/watchlist')
+      .then(r => r.json())
+      .then(async (syms) => {
+        if (syms.length === 0) {
+          // Migrate from localStorage or seed defaults
+          let seed = DEFAULT_WATCHLIST
+          try {
+            const saved = localStorage.getItem('stockmonitor-watchlist')
+            if (saved) seed = JSON.parse(saved)
+          } catch { /* ignore */ }
+          await Promise.all(seed.map(sym =>
+            fetch('/api/watchlist', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ symbol: sym }),
+            })
+          ))
+          localStorage.removeItem('stockmonitor-watchlist')
+          setWatchlist(seed)
+        } else {
+          setWatchlist(syms)
+        }
+      })
+      .catch(() => setWatchlist(DEFAULT_WATCHLIST))
+  }, [])
 
   const fetchQuotes = useCallback(async () => {
     if (watchlist.length === 0) return
@@ -77,7 +98,6 @@ export default function App() {
     }
   }, [watchlist])
 
-  // Re-fetch and reset interval when watchlist or refreshInterval changes
   useEffect(() => {
     fetchQuotes()
     setCountdown(refreshInterval)
@@ -88,23 +108,25 @@ export default function App() {
     return () => clearInterval(interval)
   }, [fetchQuotes, refreshInterval])
 
-  // Countdown ticker
   useEffect(() => {
     setCountdown(refreshInterval)
-    const timer = setInterval(() => {
-      setCountdown((c) => Math.max(0, c - 1))
-    }, 1000)
+    const timer = setInterval(() => setCountdown((c) => Math.max(0, c - 1)), 1000)
     return () => clearInterval(timer)
   }, [refreshInterval, lastUpdated])
 
-  const addTicker = (sym) => {
+  const addTicker = async (sym) => {
     const upper = sym.toUpperCase().trim()
-    if (upper && !watchlist.includes(upper)) {
-      setWatchlist((prev) => [...prev, upper])
-    }
+    if (!upper || watchlist.includes(upper)) return
+    await fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol: upper }),
+    })
+    setWatchlist((prev) => [...prev, upper])
   }
 
-  const removeTicker = (sym) => {
+  const removeTicker = async (sym) => {
+    await fetch(`/api/watchlist/${sym}`, { method: 'DELETE' })
     setWatchlist((prev) => prev.filter((s) => s !== sym))
     setQuotes((prev) => {
       const next = { ...prev }
@@ -160,6 +182,8 @@ export default function App() {
         )}
         {activeTab === 'market'          && <MarketSummary />}
         {activeTab === 'recommendations' && <MarketRecommendations />}
+        {activeTab === 'portfolio'       && <PortfolioTracker />}
+        {activeTab === 'daytrader'       && <DayTrader />}
       </main>
 
       {chartSymbol && (
