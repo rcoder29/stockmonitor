@@ -6,6 +6,7 @@ import MarketSummary from './components/MarketSummary'
 import MarketRecommendations from './components/MarketRecommendations'
 import PortfolioTracker from './components/PortfolioTracker'
 import DayTrader from './components/DayTrader'
+import AiBot from './components/AiBot'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'daytrader',       label: 'Day Trader' },
   { id: 'portfolio',       label: 'Portfolio' },
   { id: 'watchlist',       label: 'Watchlist' },
+  { id: 'aibot',           label: 'AI Advisor' },
 ]
 
 export default function App() {
@@ -184,6 +186,7 @@ export default function App() {
         {activeTab === 'recommendations' && <MarketRecommendations />}
         {activeTab === 'portfolio'       && <PortfolioTracker />}
         {activeTab === 'daytrader'       && <DayTrader />}
+        {activeTab === 'aibot'           && <AiBot />}
       </main>
 
       {chartSymbol && (

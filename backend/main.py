@@ -1,12 +1,19 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pydantic import BaseModel
+from typing import List
 import yfinance as yf
 import yfinance.screener.screener as yf_screener
 import logging
+import json
+import os
 from curl_cffi import requests as curl_requests
+from anthropic import Anthropic
+from dotenv import load_dotenv
+load_dotenv()
 
 from database import (
     init_db, db_session, cache_get, cache_set,
@@ -830,6 +837,62 @@ def remove_position(position_id: int):
         row = db.query(PortfolioPosition).filter(PortfolioPosition.id == position_id).first()
         if row:
             db.delete(row)
+
+
+# ── AI Chat ───────────────────────────────────────────────────────────────────
+
+_FINANCE_SYSTEM = """You are an expert financial advisor and investment analyst with deep knowledge of:
+- Equity markets, stock analysis, and valuation methodologies (DCF, P/E, EV/EBITDA, etc.)
+- Options strategies, derivatives, and risk management
+- Technical analysis: chart patterns, indicators (RSI, MACD, Bollinger Bands, moving averages)
+- Fundamental analysis: earnings, revenue growth, margins, balance sheets, cash flow
+- Macro economics: Fed policy, interest rates, inflation, GDP, employment data
+- Sector dynamics: technology, healthcare, energy, financials, consumer, industrials
+- ETFs, mutual funds, fixed income, REITs, commodities, crypto
+- Day trading, swing trading, and long-term investing strategies
+- Portfolio construction, diversification, and risk-adjusted returns
+
+Guidelines:
+- Provide concrete, actionable analysis grounded in financial data and theory
+- Explain your reasoning clearly, referencing relevant metrics and frameworks
+- When discussing specific stocks, include key metrics, risks, and catalysts
+- Always note that your analysis is informational and not personalized financial advice
+- Be direct and specific — avoid vague generalities
+- Use markdown formatting: **bold** for key terms, bullet points for lists, tables where helpful"""
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+
+
+@app.post("/api/ai-chat")
+def ai_chat(body: ChatRequest):
+    def generate():
+        try:
+            client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=2048,
+                system=_FINANCE_SYSTEM,
+                messages=[{"role": m.role, "content": m.content} for m in body.messages],
+            ) as stream:
+                for text in stream.text_stream:
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as exc:
+            logger.error("AI chat error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
