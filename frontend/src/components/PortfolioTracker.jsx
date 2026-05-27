@@ -262,6 +262,7 @@ export default function PortfolioTracker() {
   const [viewMode,     setViewMode]     = useState('heatmap')
   const [sortCol,      setSortCol]      = useState(null)
   const [sortDir,      setSortDir]      = useState('asc')
+  const [portQuery,    setPortQuery]    = useState('')
 
   function handleSort(key) {
     if (!key) return
@@ -518,7 +519,45 @@ export default function PortfolioTracker() {
           {/* ── Table view ── */}
           {viewMode === 'table' && (
             <section>
-              <div className="text-gray-600 text-xs uppercase tracking-widest mb-3">Positions</div>
+              {/* Search bar */}
+              <div className="relative mb-3">
+                <svg
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
+                  fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  value={portQuery}
+                  onChange={e => setPortQuery(e.target.value)}
+                  placeholder="Filter by symbol or company name…"
+                  className="w-full bg-gray-900 border border-gray-700 text-white placeholder-gray-600 pl-9 pr-8 py-2 text-sm rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                {portQuery && (
+                  <button
+                    onClick={() => setPortQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors text-lg leading-none"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              {portQuery.trim() && (() => {
+                const q = portQuery.trim().toLowerCase()
+                const matchCount = withWeight.filter(p =>
+                  p.symbol.toLowerCase().includes(q) || (p.name ?? '').toLowerCase().includes(q)
+                ).length
+                return (
+                  <div className="text-xs text-gray-500 mb-3">
+                    {matchCount === 0
+                      ? `No matches for "${portQuery}"`
+                      : `${matchCount} of ${withWeight.length} positions`}
+                  </div>
+                )
+              })()}
+
               <div className="bg-gray-900/60 border border-gray-800 rounded-lg overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -536,18 +575,35 @@ export default function PortfolioTracker() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(sortCol
-                      ? [...withWeight].sort((a, b) => {
-                          const av = a[sortCol] ?? null
-                          const bv = b[sortCol] ?? null
-                          if (av == null && bv == null) return 0
-                          if (av == null) return 1
-                          if (bv == null) return -1
-                          if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
-                          return sortDir === 'asc' ? av - bv : bv - av
-                        })
-                      : withWeight
-                    ).map(p => (
+                    {(() => {
+                      const q = portQuery.trim().toLowerCase()
+                      const base = q
+                        ? withWeight.filter(p =>
+                            p.symbol.toLowerCase().includes(q) ||
+                            (p.name ?? '').toLowerCase().includes(q)
+                          )
+                        : withWeight
+                      const rows = sortCol
+                        ? [...base].sort((a, b) => {
+                            const av = a[sortCol] ?? null
+                            const bv = b[sortCol] ?? null
+                            if (av == null && bv == null) return 0
+                            if (av == null) return 1
+                            if (bv == null) return -1
+                            if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+                            return sortDir === 'asc' ? av - bv : bv - av
+                          })
+                        : base
+                      if (rows.length === 0 && q) {
+                        return (
+                          <tr>
+                            <td colSpan={PORT_COLS.length} className="py-16 text-center text-gray-600 text-sm">
+                              No positions match &ldquo;{portQuery}&rdquo;
+                            </td>
+                          </tr>
+                        )
+                      }
+                      return rows.map(p => (
                       <tr key={p.id} className="border-b border-gray-800/40 hover:bg-gray-800/40 transition-colors">
                         <td className="py-2.5 px-3">
                           <button
@@ -580,7 +636,8 @@ export default function PortfolioTracker() {
                             className="text-gray-700 hover:text-red-400 transition-colors text-base leading-none px-1">×</button>
                         </td>
                       </tr>
-                    ))}
+                    ))
+                  })()}
                   </tbody>
                 </table>
               </div>
