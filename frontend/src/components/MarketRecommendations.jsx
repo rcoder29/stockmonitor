@@ -56,12 +56,53 @@ function makeQuote(row) {
   return { name: row.name, price: row.price, change: row.price - prev, changePercent: pct }
 }
 
+// ── Sort arrow ────────────────────────────────────────────────────────────────
+function SortArrow({ active, dir }) {
+  return (
+    <span className={`ml-1 text-xs ${active ? 'text-emerald-400' : 'text-gray-700'}`}>
+      {active ? (dir === 'asc' ? '↑' : '↓') : '⇅'}
+    </span>
+  )
+}
+
 // ── AI Stocks Table ───────────────────────────────────────────────────────────
+const AI_COLS = [
+  { label: 'Symbol',  align: 'text-left',  cls: 'pr-3',  key: 'symbol' },
+  { label: 'Company', align: 'text-left',  cls: 'pr-3',  key: 'name' },
+  { label: 'Layer',   align: 'text-left',  cls: 'pr-4',  key: 'layer' },
+  { label: 'Price',   align: 'text-right', cls: 'px-3',  key: 'price' },
+  ...['1d','5d','1m','3m','1y','ytd'].map(p => ({
+    label: { '1d':'1D','5d':'5D','1m':'1M','3m':'3M','1y':'1Y','ytd':'YTD' }[p],
+    align: 'text-right', cls: 'px-3', key: p,
+  })),
+  { label: 'Thesis', align: 'text-left', cls: 'pl-4', key: null },
+  { label: '',        align: '',          cls: 'pl-2', key: null },
+]
+
 function AIStocksTable({ stocks, onRowClick }) {
   const layers = [...new Set(stocks.map(s => s.layer))]
   const [activeLayer, setActiveLayer] = useState(null)
+  const [sortCol, setSortCol] = useState(null)
+  const [sortDir, setSortDir] = useState('asc')
 
-  const visible = activeLayer ? stocks.filter(s => s.layer === activeLayer) : stocks
+  function handleSort(key) {
+    if (!key) return
+    if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(key); setSortDir('asc') }
+  }
+
+  const filtered = activeLayer ? stocks.filter(s => s.layer === activeLayer) : stocks
+  const visible = sortCol
+    ? [...filtered].sort((a, b) => {
+        const av = a[sortCol] ?? null
+        const bv = b[sortCol] ?? null
+        if (av == null && bv == null) return 0
+        if (av == null) return 1
+        if (bv == null) return -1
+        if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+        return sortDir === 'asc' ? av - bv : bv - av
+      })
+    : filtered
 
   return (
     <div>
@@ -98,17 +139,16 @@ function AIStocksTable({ stocks, onRowClick }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-gray-800">
-              <th className="text-left text-gray-600 py-2 pr-3 font-medium tracking-wider uppercase">Symbol</th>
-              <th className="text-left text-gray-600 py-2 pr-3 font-medium tracking-wider uppercase">Company</th>
-              <th className="text-left text-gray-600 py-2 pr-4 font-medium tracking-wider uppercase">Layer</th>
-              <th className="text-right text-gray-600 py-2 px-3 font-medium tracking-wider uppercase">Price</th>
-              {PERIODS.map(p => (
-                <th key={p} className="text-right text-gray-600 py-2 px-3 font-medium tracking-wider uppercase">
-                  {PERIOD_LABELS[p]}
+              {AI_COLS.map(({ label, align, cls, key }) => (
+                <th
+                  key={key ?? label ?? '_x'}
+                  onClick={() => handleSort(key)}
+                  className={`${align} text-gray-600 py-2 ${cls} font-medium tracking-wider uppercase${key ? ' cursor-pointer select-none hover:text-gray-400' : ''}`}
+                >
+                  {label}
+                  {key && <SortArrow active={sortCol === key} dir={sortDir} />}
                 </th>
               ))}
-              <th className="text-left text-gray-600 py-2 pl-4 font-medium tracking-wider uppercase">Thesis</th>
-              <th className="py-2 pl-2" />
             </tr>
           </thead>
           <tbody>

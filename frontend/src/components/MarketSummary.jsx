@@ -15,25 +15,64 @@ function Pct({ v }) {
   return <span className={`text-xs font-medium ${cls}`}>{v > 0 ? '+' : ''}{v.toFixed(2)}%</span>
 }
 
+function SortArrow({ active, dir }) {
+  return (
+    <span className={`ml-1 text-xs ${active ? 'text-emerald-400' : 'text-gray-700'}`}>
+      {active ? (dir === 'asc' ? '↑' : '↓') : '⇅'}
+    </span>
+  )
+}
+
+const PERF_COLS = [
+  { label: 'Symbol', align: 'text-left',  cls: 'pr-4',  key: 'symbol' },
+  { label: 'Name',   align: 'text-left',  cls: 'pr-6',  key: 'name' },
+  { label: 'Price',  align: 'text-right', cls: 'px-3',  key: 'price' },
+  ...['1d','5d','1m','3m','6m','1y','ytd'].map(p => ({
+    label: { '1d':'1D','5d':'5D','1m':'1M','3m':'3M','6m':'6M','1y':'1Y','ytd':'YTD' }[p],
+    align: 'text-right', cls: 'px-3', key: p,
+  })),
+]
+
 function PerformanceTable({ rows, onRowClick }) {
+  const [sortCol, setSortCol] = useState(null)
+  const [sortDir, setSortDir] = useState('asc')
+
+  function handleSort(key) {
+    if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(key); setSortDir('asc') }
+  }
+
+  const sorted = sortCol
+    ? [...rows].sort((a, b) => {
+        const av = a[sortCol] ?? null
+        const bv = b[sortCol] ?? null
+        if (av == null && bv == null) return 0
+        if (av == null) return 1
+        if (bv == null) return -1
+        if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+        return sortDir === 'asc' ? av - bv : bv - av
+      })
+    : rows
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-gray-800">
-            <th className="text-left text-gray-600 py-2 pr-4 font-medium tracking-wider uppercase">Symbol</th>
-            <th className="text-left text-gray-600 py-2 pr-6 font-medium tracking-wider uppercase">Name</th>
-            <th className="text-right text-gray-600 py-2 px-3 font-medium tracking-wider uppercase">Price</th>
-            {PERIODS.map(p => (
-              <th key={p} className="text-right text-gray-600 py-2 px-3 font-medium tracking-wider uppercase">
-                {PERIOD_LABELS[p]}
+            {PERF_COLS.map(({ label, align, cls, key }) => (
+              <th
+                key={key}
+                onClick={() => handleSort(key)}
+                className={`${align} text-gray-600 py-2 ${cls} font-medium tracking-wider uppercase cursor-pointer select-none hover:text-gray-400`}
+              >
+                {label}<SortArrow active={sortCol === key} dir={sortDir} />
               </th>
             ))}
             {onRowClick && <th className="py-2 pl-2" />}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
+          {sorted.map((row, i) => (
             <tr
               key={row.symbol}
               onClick={() => onRowClick?.(row)}

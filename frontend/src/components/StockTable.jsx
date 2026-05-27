@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import { fmt } from '../utils/format'
 
 function ChangeCell({ value, isPercent }) {
@@ -39,7 +39,47 @@ function RangeCell({ lo, hi, current }) {
   )
 }
 
+function SortArrow({ active, dir }) {
+  return (
+    <span className={`ml-1 text-xs ${active ? 'text-emerald-400' : 'text-gray-700'}`}>
+      {active ? (dir === 'asc' ? '↑' : '↓') : '⇅'}
+    </span>
+  )
+}
+
+const COLS = [
+  { label: 'SYMBOL',    align: 'text-left',  width: 'w-40', key: 'symbol' },
+  { label: 'PRICE',     align: 'text-right', width: 'w-28', key: 'price' },
+  { label: 'CHG ($)',   align: 'text-right', width: 'w-28', key: 'change' },
+  { label: 'CHG (%)',   align: 'text-right', width: 'w-28', key: 'changePercent' },
+  { label: 'DAY RANGE', align: 'text-right', width: 'w-44', key: null },
+  { label: 'VOLUME',    align: 'text-right', width: 'w-28', key: 'volume' },
+  { label: '52W RANGE', align: 'text-right', width: 'w-44', key: null },
+  { label: 'MKT CAP',  align: 'text-right', width: 'w-28', key: 'marketCap' },
+  { label: '',          align: 'text-right', width: 'w-10', key: null },
+]
+
 export default function StockTable({ watchlist, quotes, priceFlash, onRemove, onChartOpen }) {
+  const [sortCol, setSortCol] = useState(null)
+  const [sortDir, setSortDir] = useState('asc')
+
+  function handleSort(key) {
+    if (!key) return
+    if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(key); setSortDir('asc') }
+  }
+
+  const sortedList = sortCol
+    ? [...watchlist].sort((a, b) => {
+        const av = sortCol === 'symbol' ? a : (quotes[a]?.[sortCol] ?? null)
+        const bv = sortCol === 'symbol' ? b : (quotes[b]?.[sortCol] ?? null)
+        if (av == null && bv == null) return 0
+        if (av == null) return 1
+        if (bv == null) return -1
+        if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+        return sortDir === 'asc' ? av - bv : bv - av
+      })
+    : watchlist
 
   if (watchlist.length === 0) {
     return (
@@ -54,28 +94,20 @@ export default function StockTable({ watchlist, quotes, priceFlash, onRemove, on
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-gray-800 bg-gray-900">
-            {[
-              ['SYMBOL', 'text-left', 'w-40'],
-              ['PRICE', 'text-right', 'w-28'],
-              ['CHG ($)', 'text-right', 'w-28'],
-              ['CHG (%)', 'text-right', 'w-28'],
-              ['DAY RANGE', 'text-right', 'w-44'],
-              ['VOLUME', 'text-right', 'w-28'],
-              ['52W RANGE', 'text-right', 'w-44'],
-              ['MKT CAP', 'text-right', 'w-28'],
-              ['', 'text-right', 'w-10'],
-            ].map(([label, align, width]) => (
+            {COLS.map(({ label, align, width, key }) => (
               <th
-                key={label}
-                className={`py-2 px-3 ${align} ${width} text-gray-500 text-xs font-semibold tracking-wider`}
+                key={label || '_action'}
+                onClick={() => handleSort(key)}
+                className={`py-2 px-3 ${align} ${width} text-gray-500 text-xs font-semibold tracking-wider${key ? ' cursor-pointer select-none hover:text-gray-300' : ''}`}
               >
                 {label}
+                {key && <SortArrow active={sortCol === key} dir={sortDir} />}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {watchlist.map((sym, idx) => {
+          {sortedList.map((sym, idx) => {
             const q = quotes[sym]
             const flash = priceFlash[sym]
             let rowBg = idx % 2 === 0 ? 'bg-gray-900/20' : 'bg-transparent'

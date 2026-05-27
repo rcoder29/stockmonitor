@@ -327,6 +327,28 @@ function CandidateRow({ stock, plan }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+function SortArrow({ active, dir }) {
+  return (
+    <span className={`ml-1 text-xs ${active ? 'text-emerald-400' : 'text-gray-700'}`}>
+      {active ? (dir === 'asc' ? '↑' : '↓') : '⇅'}
+    </span>
+  )
+}
+
+const CAND_COLS = [
+  { label: 'Symbol',   align: 'text-left',  key: 'symbol' },
+  { label: 'Name',     align: 'text-left',  key: 'name' },
+  { label: 'Price',    align: 'text-right', key: 'price' },
+  { label: 'Chg %',   align: 'text-right', key: 'changePercent' },
+  { label: 'Volume',   align: 'text-right', key: 'volume' },
+  { label: 'Alloc',    align: 'text-right', key: null },
+  { label: 'Shares',   align: 'text-right', key: 'shares' },
+  { label: 'Target',   align: 'text-right', key: 'target' },
+  { label: 'Stop',     align: 'text-right', key: 'stop' },
+  { label: 'Exp Gain', align: 'text-right', key: 'expGain' },
+  { label: 'Max Loss', align: 'text-right', key: 'maxLoss' },
+]
+
 export default function DayTrader() {
   const [capital,      setCapital]      = useState(10000)
   const [targetPct,    setTargetPct]    = useState(2)
@@ -341,6 +363,14 @@ export default function DayTrader() {
   const [newsLoading,  setNewsLoading]  = useState(true)
   const [lastFetch,    setLastFetch]    = useState(null)
   const [error,        setError]        = useState(null)
+  const [candSort,     setCandSort]     = useState(null)
+  const [candDir,      setCandDir]      = useState('asc')
+
+  function handleCandSort(key) {
+    if (!key) return
+    if (candSort === key) setCandDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setCandSort(key); setCandDir('asc') }
+  }
 
   const fetchAll = useCallback(async () => {
     setLoading(true); setNewsLoading(true); setError(null)
@@ -373,11 +403,42 @@ export default function DayTrader() {
   const plan       = { capitalPerTrade, stopPct, rrRatio }
   const alerts     = generateAlerts(scanData)
   const strategy   = STRATEGIES.find(s => s.id === activeId)
-  const candidates = scanData
+  const rawCandidates = scanData
     ? (strategy.scannerKey === 'gainers'  ? scanData.gainers
      : strategy.scannerKey === 'losers'   ? scanData.losers
      : scanData.mostActive) ?? []
     : []
+
+  function candVal(stock, key) {
+    const price = stock.price
+    if (!price || price <= 0) return null
+    const shares = Math.floor(capitalPerTrade / price)
+    switch (key) {
+      case 'symbol':        return stock.symbol
+      case 'name':          return stock.name ?? ''
+      case 'price':         return price
+      case 'changePercent': return stock.changePercent ?? null
+      case 'volume':        return stock.volume ?? null
+      case 'shares':        return shares
+      case 'target':        return price * (1 + (stopPct * rrRatio) / 100)
+      case 'stop':          return price * (1 - stopPct / 100)
+      case 'expGain':       return shares * price * (stopPct * rrRatio) / 100
+      case 'maxLoss':       return shares * price * stopPct / 100
+      default:              return null
+    }
+  }
+
+  const candidates = candSort
+    ? [...rawCandidates].sort((a, b) => {
+        const av = candVal(a, candSort)
+        const bv = candVal(b, candSort)
+        if (av == null && bv == null) return 0
+        if (av == null) return 1
+        if (bv == null) return -1
+        if (typeof av === 'string') return candDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+        return candDir === 'asc' ? av - bv : bv - av
+      })
+    : rawCandidates
 
   return (
     <div className="p-4 max-w-7xl mx-auto">
@@ -517,16 +578,14 @@ export default function DayTrader() {
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b border-gray-800">
-                          {[
-                            ['Symbol', 'text-left'], ['Name', 'text-left'],
-                            ['Price', 'text-right'], ['Chg %', 'text-right'],
-                            ['Volume', 'text-right'], ['Alloc', 'text-right'],
-                            ['Shares', 'text-right'], ['Target', 'text-right'],
-                            ['Stop', 'text-right'], ['Exp Gain', 'text-right'],
-                            ['Max Loss', 'text-right'],
-                          ].map(([h, align]) => (
-                            <th key={h} className={`py-2.5 px-3 text-gray-600 font-medium tracking-wider uppercase ${align}`}>
-                              {h}
+                          {CAND_COLS.map(({ label, align, key }) => (
+                            <th
+                              key={key ?? label}
+                              onClick={() => handleCandSort(key)}
+                              className={`py-2.5 px-3 text-gray-600 font-medium tracking-wider uppercase ${align}${key ? ' cursor-pointer select-none hover:text-gray-400' : ''}`}
+                            >
+                              {label}
+                              {key && <SortArrow active={candSort === key} dir={candDir} />}
                             </th>
                           ))}
                         </tr>

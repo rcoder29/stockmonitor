@@ -229,6 +229,28 @@ function money(v) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+function SortArrow({ active, dir }) {
+  return (
+    <span className={`ml-1 text-xs ${active ? 'text-emerald-400' : 'text-gray-700'}`}>
+      {active ? (dir === 'asc' ? '↑' : '↓') : '⇅'}
+    </span>
+  )
+}
+
+const PORT_COLS = [
+  { label: 'Symbol',       align: 'text-left',  key: 'symbol' },
+  { label: 'Name',         align: 'text-left',  key: 'name' },
+  { label: 'Shares',       align: 'text-right', key: 'shares' },
+  { label: 'Avg Cost',     align: 'text-right', key: 'avgCost' },
+  { label: 'Price',        align: 'text-right', key: 'price' },
+  { label: 'Market Value', align: 'text-right', key: 'curVal' },
+  { label: 'P&L',         align: 'text-right', key: 'pl' },
+  { label: 'P&L %',       align: 'text-right', key: 'plPct' },
+  { label: 'Day P&L',     align: 'text-right', key: 'dayPL' },
+  { label: 'Weight',       align: 'text-right', key: 'weight' },
+  { label: '',             align: 'text-right', key: null },
+]
+
 export default function PortfolioTracker() {
   const [positions,    setPositions]    = useState([])
   const [quotes,       setQuotes]       = useState({})
@@ -238,6 +260,14 @@ export default function PortfolioTracker() {
   const [chartSymbol,  setChartSymbol]  = useState(null)
   const [chartQuote,   setChartQuote]   = useState(null)
   const [viewMode,     setViewMode]     = useState('heatmap')
+  const [sortCol,      setSortCol]      = useState(null)
+  const [sortDir,      setSortDir]      = useState('asc')
+
+  function handleSort(key) {
+    if (!key) return
+    if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(key); setSortDir('asc') }
+  }
 
   // Form state
   const [sym,     setSym]     = useState('')
@@ -493,15 +523,31 @@ export default function PortfolioTracker() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-gray-800">
-                      {['Symbol','Name','Shares','Avg Cost','Price','Market Value','P&L','P&L %','Day P&L','Weight',''].map(h => (
-                        <th key={h} className={`py-2.5 px-3 text-gray-600 font-medium tracking-wider uppercase ${h===''||h==='Name'||h==='Symbol'?'text-left':'text-right'}`}>
-                          {h}
+                      {PORT_COLS.map(({ label, align, key }) => (
+                        <th
+                          key={key ?? '_action'}
+                          onClick={() => handleSort(key)}
+                          className={`py-2.5 px-3 text-gray-600 font-medium tracking-wider uppercase ${align}${key ? ' cursor-pointer select-none hover:text-gray-400' : ''}`}
+                        >
+                          {label}
+                          {key && <SortArrow active={sortCol === key} dir={sortDir} />}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {withWeight.map(p => (
+                    {(sortCol
+                      ? [...withWeight].sort((a, b) => {
+                          const av = a[sortCol] ?? null
+                          const bv = b[sortCol] ?? null
+                          if (av == null && bv == null) return 0
+                          if (av == null) return 1
+                          if (bv == null) return -1
+                          if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+                          return sortDir === 'asc' ? av - bv : bv - av
+                        })
+                      : withWeight
+                    ).map(p => (
                       <tr key={p.id} className="border-b border-gray-800/40 hover:bg-gray-800/40 transition-colors">
                         <td className="py-2.5 px-3">
                           <button
