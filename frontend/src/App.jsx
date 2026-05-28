@@ -9,6 +9,7 @@ import DayTrader from './components/DayTrader'
 import AiBot from './components/AiBot'
 import FinancialAdvisor from './components/FinancialAdvisor'
 import { AlertModal, AlertToast } from './components/PriceAlerts'
+import EarningsCalendar from './components/EarningsCalendar'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -33,9 +34,12 @@ export default function App() {
   const [countdown, setCountdown]   = useState(30)
   const [priceFlash, setPriceFlash] = useState({})
   const [chartSymbol,  setChartSymbol]  = useState(null)
-  const [alerts,       setAlerts]       = useState([])
-  const [alertSymbol,  setAlertSymbol]  = useState(null)  // which symbol's modal is open
-  const [toasts,       setToasts]       = useState([])
+  const [alerts,          setAlerts]          = useState([])
+  const [alertSymbol,     setAlertSymbol]     = useState(null)
+  const [toasts,          setToasts]          = useState([])
+  const [portfolioSymbols,  setPortfolioSymbols]  = useState([])
+  const [earnings,          setEarnings]          = useState([])
+  const [earningsLoading,   setEarningsLoading]   = useState(false)
   const prevPricesRef = useRef({})
   const flashTimerRef = useRef(null)
   const alertsRef     = useRef([])
@@ -78,6 +82,26 @@ export default function App() {
       .then(rows => setAlerts(rows.filter(a => a.status !== 'dismissed')))
       .catch(() => {})
   }, [])
+
+  // Load portfolio symbols so earnings calendar covers portfolio positions too
+  useEffect(() => {
+    fetch('/api/portfolio')
+      .then(r => r.json())
+      .then(rows => setPortfolioSymbols(rows.map(r => r.symbol)))
+      .catch(() => {})
+  }, [])
+
+  // Fetch upcoming earnings whenever watchlist or portfolio symbols change
+  useEffect(() => {
+    const allSyms = [...new Set([...watchlist, ...portfolioSymbols])]
+    if (!allSyms.length) return
+    setEarningsLoading(true)
+    fetch(`/api/earnings/upcoming?symbols=${allSyms.join(',')}`)
+      .then(r => r.json())
+      .then(data => setEarnings(data))
+      .catch(() => {})
+      .finally(() => setEarningsLoading(false))
+  }, [watchlist.join(','), portfolioSymbols.join(',')])
 
   const addAlert = useCallback(async (symbol, targetPrice, condition, note) => {
     const r = await fetch('/api/alerts', {
@@ -232,19 +256,24 @@ export default function App() {
       </nav>
 
       <main>
-        {activeTab === 'watchlist' && (
-          <div className="p-4">
-            <StockTable
-              watchlist={watchlist}
-              quotes={quotes}
-              priceFlash={priceFlash}
-              onRemove={removeTicker}
-              onChartOpen={setChartSymbol}
-              alerts={alerts}
-              onAlertBell={setAlertSymbol}
-            />
-          </div>
-        )}
+        {activeTab === 'watchlist' && (() => {
+          const earningsMap = Object.fromEntries(earnings.map(e => [e.symbol, e]))
+          return (
+            <div className="p-4">
+              <EarningsCalendar earnings={earnings} loading={earningsLoading} />
+              <StockTable
+                watchlist={watchlist}
+                quotes={quotes}
+                priceFlash={priceFlash}
+                onRemove={removeTicker}
+                onChartOpen={setChartSymbol}
+                alerts={alerts}
+                onAlertBell={setAlertSymbol}
+                earningsMap={earningsMap}
+              />
+            </div>
+          )
+        })()}
         {activeTab === 'market'          && <MarketSummary />}
         {activeTab === 'recommendations' && <MarketRecommendations />}
         {activeTab === 'portfolio'       && <PortfolioTracker />}

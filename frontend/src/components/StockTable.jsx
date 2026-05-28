@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react'
 import { fmt } from '../utils/format'
 import { AlertBellButton } from './PriceAlerts'
+import { EarningsBadge } from './EarningsCalendar'
 
 function ChangeCell({ value, isPercent }) {
   if (value == null) return <span className="text-gray-600">—</span>
@@ -60,7 +61,7 @@ const COLS = [
   { label: '',          align: 'text-right', width: 'w-10', key: null },
 ]
 
-export default function StockTable({ watchlist, quotes, priceFlash, onRemove, onChartOpen, alerts = [], onAlertBell }) {
+export default function StockTable({ watchlist, quotes, priceFlash, onRemove, onChartOpen, alerts = [], onAlertBell, earningsMap = {} }) {
   const [sortCol, setSortCol] = useState(null)
   const [sortDir, setSortDir] = useState('asc')
   const [query,   setQuery]   = useState('')
@@ -186,6 +187,7 @@ export default function StockTable({ watchlist, quotes, priceFlash, onRemove, on
                           {onAlertBell && (
                             <AlertBellButton symbol={sym} alerts={alerts} onClick={onAlertBell} />
                           )}
+                          <EarningsBadge daysUntil={earningsMap[sym]?.daysUntil} />
                         </div>
                         {qt?.name && (
                           <div className="text-xs text-gray-500 truncate max-w-[140px]">{qt.name}</div>
