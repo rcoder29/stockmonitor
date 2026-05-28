@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
+import csv
+import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -19,7 +21,7 @@ load_dotenv()
 
 from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
-    WatchlistSymbol, PortfolioPosition, PriceAlert, TradeJournalEntry,
+    WatchlistSymbol, WatchlistGroup, PortfolioPosition, PriceAlert, TradeJournalEntry,
 )
 
 # Corporate proxy uses a self-signed cert — reuse one session with SSL disabled
@@ -778,12 +780,48 @@ def get_day_trader_news():
 
 class SymbolIn(BaseModel):
     symbol: str
+    list:   str = "default"
+
+
+@app.get("/api/watchlists")
+def list_watchlists():
+    """Return all watchlist names with symbol counts."""
+    with db_session() as db:
+        default_count = db.query(WatchlistSymbol).count()
+        groups = db.query(WatchlistGroup.list_name).distinct().all()
+    names = ["default"] + [g[0] for g in groups if g[0] != "default"]
+    result = [{"name": "default", "count": default_count}]
+    with db_session() as db:
+        for name in names[1:]:
+            cnt = db.query(WatchlistGroup).filter(WatchlistGroup.list_name == name).count()
+            result.append({"name": name, "count": cnt})
+    return result
+
+
+@app.post("/api/watchlists", status_code=201)
+def create_watchlist(body: dict):
+    name = (body.get("name") or "").strip()
+    if not name or name == "default":
+        raise HTTPException(400, "Invalid list name")
+    return {"name": name}
+
+
+@app.delete("/api/watchlists/{name}", status_code=204)
+def delete_watchlist(name: str):
+    if name == "default":
+        raise HTTPException(400, "Cannot delete default watchlist")
+    with db_session() as db:
+        db.query(WatchlistGroup).filter(WatchlistGroup.list_name == name).delete()
 
 
 @app.get("/api/watchlist")
-def get_watchlist():
+def get_watchlist(list: str = "default"):
+    if list == "default":
+        with db_session() as db:
+            rows = db.query(WatchlistSymbol).order_by(WatchlistSymbol.added_at).all()
+            return [r.symbol for r in rows]
     with db_session() as db:
-        rows = db.query(WatchlistSymbol).order_by(WatchlistSymbol.added_at).all()
+        rows = db.query(WatchlistGroup).filter(WatchlistGroup.list_name == list).order_by(WatchlistGroup.added_at).all()
         return [r.symbol for r in rows]
 
 
@@ -792,21 +830,31 @@ def add_to_watchlist(body: SymbolIn):
     sym = body.symbol.strip().upper()
     if not sym:
         raise HTTPException(400, "Symbol required")
-    with db_session() as db:
-        exists = db.query(WatchlistSymbol).filter(WatchlistSymbol.symbol == sym).first()
-        if exists:
-            return {"symbol": sym}
-        db.add(WatchlistSymbol(symbol=sym))
+    list_name = body.list or "default"
+    if list_name == "default":
+        with db_session() as db:
+            if not db.query(WatchlistSymbol).filter(WatchlistSymbol.symbol == sym).first():
+                db.add(WatchlistSymbol(symbol=sym))
+    else:
+        with db_session() as db:
+            if not db.query(WatchlistGroup).filter(WatchlistGroup.list_name == list_name, WatchlistGroup.symbol == sym).first():
+                db.add(WatchlistGroup(list_name=list_name, symbol=sym))
     return {"symbol": sym}
 
 
 @app.delete("/api/watchlist/{symbol}", status_code=204)
-def remove_from_watchlist(symbol: str):
+def remove_from_watchlist(symbol: str, list: str = "default"):
     symbol = symbol.upper()
-    with db_session() as db:
-        row = db.query(WatchlistSymbol).filter(WatchlistSymbol.symbol == symbol).first()
-        if row:
-            db.delete(row)
+    if list == "default":
+        with db_session() as db:
+            row = db.query(WatchlistSymbol).filter(WatchlistSymbol.symbol == symbol).first()
+            if row:
+                db.delete(row)
+    else:
+        with db_session() as db:
+            row = db.query(WatchlistGroup).filter(WatchlistGroup.list_name == list, WatchlistGroup.symbol == symbol).first()
+            if row:
+                db.delete(row)
 
 
 # ── Portfolio ─────────────────────────────────────────────────────────────────
@@ -2184,6 +2232,288 @@ def get_institutional(symbol: str):
 
     cache_set(cache_key, result)
     return result
+
+
+# ── Backtester ────────────────────────────────────────────────────────────────
+
+class BacktestRequest(BaseModel):
+    symbol:          str
+    strategy:        str   = "ma_cross"  # 'ma_cross' | 'rsi' | 'bb'
+    period:          str   = "1y"
+    fast_period:     int   = 20
+    slow_period:     int   = 50
+    rsi_period:      int   = 14
+    rsi_oversold:    float = 30.0
+    rsi_overbought:  float = 70.0
+    bb_period:       int   = 20
+    bb_std:          float = 2.0
+    initial_capital: float = 10000.0
+
+
+def _bt_sma(closes, period):
+    out = [None] * len(closes)
+    for i in range(period - 1, len(closes)):
+        out[i] = sum(closes[i - period + 1:i + 1]) / period
+    return out
+
+
+def _bt_rsi(closes, period=14):
+    out = [None] * len(closes)
+    if len(closes) <= period:
+        return out
+    gains  = [max(closes[i] - closes[i-1], 0) for i in range(1, len(closes))]
+    losses = [max(closes[i-1] - closes[i], 0) for i in range(1, len(closes))]
+    ag = sum(gains[:period]) / period
+    al = sum(losses[:period]) / period
+    out[period] = 100 - 100 / (1 + ag / al) if al > 0 else 100
+    for i in range(period + 1, len(closes)):
+        ag = (ag * (period - 1) + gains[i - 1]) / period
+        al = (al * (period - 1) + losses[i - 1]) / period
+        out[i] = 100 - 100 / (1 + ag / al) if al > 0 else 100
+    return out
+
+
+def _bt_bb(closes, period=20, mult=2.0):
+    upper = [None] * len(closes)
+    lower = [None] * len(closes)
+    for i in range(period - 1, len(closes)):
+        w = closes[i - period + 1:i + 1]
+        sma = sum(w) / period
+        std = (sum((x - sma) ** 2 for x in w) / period) ** 0.5
+        upper[i] = sma + mult * std
+        lower[i] = sma - mult * std
+    return upper, lower
+
+
+@app.post("/api/backtest")
+def run_backtest(body: BacktestRequest):
+    symbol = body.symbol.upper()
+    period_map = {"6mo": "6mo", "1y": "1y", "2y": "2y", "5y": "5y"}
+    yf_period = period_map.get(body.period, "1y")
+
+    try:
+        hist = yf.Ticker(symbol, session=_session).history(period=yf_period)
+        if hist.empty or len(hist) < 60:
+            raise HTTPException(400, "Insufficient price history")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Data fetch failed: {e}")
+
+    closes = [float(v) for v in hist["Close"].tolist()]
+    dates  = [str(d.date()) for d in hist.index]
+    n = len(closes)
+
+    signals = [0] * n  # 1=buy, -1=sell
+
+    if body.strategy == "ma_cross":
+        fast = _bt_sma(closes, body.fast_period)
+        slow = _bt_sma(closes, body.slow_period)
+        in_pos = False
+        for i in range(1, n):
+            if None in (fast[i], slow[i], fast[i-1], slow[i-1]):
+                continue
+            if not in_pos and fast[i] > slow[i] and fast[i-1] <= slow[i-1]:
+                signals[i] = 1; in_pos = True
+            elif in_pos and fast[i] < slow[i] and fast[i-1] >= slow[i-1]:
+                signals[i] = -1; in_pos = False
+
+    elif body.strategy == "rsi":
+        rsi = _bt_rsi(closes, body.rsi_period)
+        in_pos = False
+        for i in range(1, n):
+            if None in (rsi[i], rsi[i-1]):
+                continue
+            if not in_pos and rsi[i-1] < body.rsi_oversold <= rsi[i]:
+                signals[i] = 1; in_pos = True
+            elif in_pos and rsi[i-1] < body.rsi_overbought <= rsi[i]:
+                signals[i] = -1; in_pos = False
+
+    elif body.strategy == "bb":
+        upper, lower = _bt_bb(closes, body.bb_period, body.bb_std)
+        in_pos = False
+        for i in range(1, n):
+            if None in (lower[i], upper[i], lower[i-1], upper[i-1]):
+                continue
+            if not in_pos and closes[i] < lower[i] and closes[i-1] >= lower[i-1]:
+                signals[i] = 1; in_pos = True
+            elif in_pos and closes[i] > upper[i] and closes[i-1] <= upper[i-1]:
+                signals[i] = -1; in_pos = False
+
+    # Simulate
+    capital = body.initial_capital
+    shares = 0.0
+    equity = [0.0] * n
+    trades = []
+    last_buy_value = capital
+
+    for i in range(n):
+        if signals[i] == 1 and shares == 0:
+            shares = capital / closes[i]
+            last_buy_value = capital
+            trades.append({"date": dates[i], "action": "BUY",
+                           "price": round(closes[i], 2), "value": round(capital, 2)})
+            capital = 0
+        elif signals[i] == -1 and shares > 0:
+            sell_val = shares * closes[i]
+            pnl = sell_val - last_buy_value
+            trades.append({"date": dates[i], "action": "SELL",
+                           "price": round(closes[i], 2), "value": round(sell_val, 2),
+                           "pnl": round(pnl, 2), "pnl_pct": round(pnl / last_buy_value * 100, 2)})
+            capital = sell_val; shares = 0
+        equity[i] = round(capital + shares * closes[i], 2)
+
+    bh_shares = body.initial_capital / closes[0]
+    benchmark = [round(bh_shares * c, 2) for c in closes]
+
+    final_eq = equity[-1]
+    total_ret = (final_eq / body.initial_capital - 1) * 100
+    bh_ret    = (benchmark[-1] / body.initial_capital - 1) * 100
+
+    peak = equity[0]; max_dd = 0.0
+    for e in equity:
+        if e > peak: peak = e
+        dd = (e - peak) / peak * 100 if peak > 0 else 0
+        if dd < max_dd: max_dd = dd
+
+    daily_rets = [(equity[i] / equity[i-1] - 1) for i in range(1, n) if equity[i-1] > 0]
+    if len(daily_rets) > 1:
+        avg_r = sum(daily_rets) / len(daily_rets)
+        std_r = (sum((r - avg_r) ** 2 for r in daily_rets) / len(daily_rets)) ** 0.5
+        sharpe = (avg_r - 0.045 / 252) / std_r * (252 ** 0.5) if std_r > 0 else 0
+    else:
+        sharpe = 0.0
+
+    sells = [t for t in trades if t["action"] == "SELL"]
+    win_rate = sum(1 for t in sells if t.get("pnl", 0) > 0) / len(sells) * 100 if sells else 0
+
+    return {
+        "dates":     dates,
+        "equity":    equity,
+        "benchmark": benchmark,
+        "trades":    trades,
+        "stats": {
+            "total_return":  round(total_ret, 2),
+            "bh_return":     round(bh_ret, 2),
+            "alpha":         round(total_ret - bh_ret, 2),
+            "max_drawdown":  round(max_dd, 2),
+            "sharpe":        round(sharpe, 2),
+            "win_rate":      round(win_rate, 1),
+            "num_trades":    len(sells),
+            "final_equity":  round(final_eq, 2),
+        },
+    }
+
+
+# ── AI News Sentiment ─────────────────────────────────────────────────────────
+
+_SENTIMENT_TTL = timedelta(hours=1)
+
+
+@app.get("/api/sentiment/{symbol}")
+def get_sentiment(symbol: str):
+    symbol = symbol.upper()
+    cache_key = f"sentiment:{symbol}"
+    cached = cache_get(cache_key, _SENTIMENT_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        ticker = yf.Ticker(symbol, session=_session)
+        news_items = ticker.news or []
+        headlines = []
+        for item in news_items[:12]:
+            title = (item.get("content") or {}).get("title") or item.get("title", "")
+            if title:
+                headlines.append(title)
+
+        if not headlines:
+            result = {"symbol": symbol, "score": 0.0, "label": "Neutral",
+                      "summary": "No recent news available.", "headlines": []}
+            cache_set(cache_key, result)
+            return result
+
+        headline_text = "\n".join(f"{i+1}. {h}" for i, h in enumerate(headlines))
+        client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            system="""You are a financial news sentiment analyzer. Return ONLY a JSON object (no markdown fences) with:
+- "score": number -1.0 to 1.0 (very bearish to very bullish)
+- "label": exactly one of "Very Bearish", "Bearish", "Neutral", "Bullish", "Very Bullish"
+- "summary": 1-2 sentences summarizing the overall sentiment
+- "headlines": array of {"text": "...", "score": -1.0 to 1.0, "reason": "brief reason"} for each headline""",
+            messages=[{"role": "user", "content": f"Stock: {symbol}\n\nHeadlines:\n{headline_text}"}],
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = "\n".join(raw.split("\n")[1:-1])
+        result = json.loads(raw)
+        result["symbol"] = symbol
+
+    except Exception as e:
+        logger.warning("sentiment failed %s: %s", symbol, e)
+        result = {"symbol": symbol, "score": 0.0, "label": "Neutral",
+                  "summary": "Sentiment analysis unavailable.", "headlines": [], "error": str(e)}
+
+    cache_set(cache_key, result)
+    return result
+
+
+# ── CSV Export / Import ───────────────────────────────────────────────────────
+
+@app.get("/api/portfolio/export")
+def export_portfolio():
+    with db_session() as db:
+        positions = db.query(PortfolioPosition).order_by(PortfolioPosition.symbol).all()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Symbol", "Shares", "Avg Cost"])
+    for p in positions:
+        w.writerow([p.symbol, p.shares, p.avg_cost])
+    return Response(content=buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=portfolio.csv"})
+
+
+class CSVImportBody(BaseModel):
+    csv_data: str
+
+
+@app.post("/api/portfolio/import")
+def import_portfolio(body: CSVImportBody):
+    reader = csv.DictReader(io.StringIO(body.csv_data))
+    imported = 0
+    errors = []
+    for i, row in enumerate(reader):
+        try:
+            sym    = (row.get("Symbol") or row.get("symbol") or "").strip().upper()
+            shares = float(row.get("Shares") or row.get("shares") or row.get("Quantity") or 0)
+            cost   = float(row.get("Avg Cost") or row.get("avg_cost") or row.get("Average Price") or row.get("Cost Basis") or 0)
+            if not sym or shares <= 0:
+                continue
+            with db_session() as db:
+                existing = db.query(PortfolioPosition).filter(PortfolioPosition.symbol == sym).first()
+                if existing:
+                    existing.shares = shares; existing.avg_cost = cost
+                else:
+                    db.add(PortfolioPosition(symbol=sym, shares=shares, avg_cost=cost))
+            imported += 1
+        except Exception as e:
+            errors.append(f"Row {i+1}: {e}")
+    return {"imported": imported, "errors": errors}
+
+
+@app.get("/api/journal/export")
+def export_journal():
+    with db_session() as db:
+        entries = db.query(TradeJournalEntry).order_by(TradeJournalEntry.trade_date.desc()).all()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Date", "Symbol", "Side", "Price", "Shares", "Strategy", "Notes"])
+    for e in entries:
+        w.writerow([e.trade_date, e.symbol, e.side, e.price, e.shares, e.strategy or "", e.notes or ""])
+    return Response(content=buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=trade_journal.csv"})
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

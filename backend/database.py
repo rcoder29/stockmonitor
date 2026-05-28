@@ -3,7 +3,7 @@ import os
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text, create_engine
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, UniqueConstraint, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "stockmonitor.db")
@@ -23,6 +23,16 @@ class WatchlistSymbol(Base):
     id       = Column(Integer, primary_key=True, autoincrement=True)
     symbol   = Column(String(20), unique=True, nullable=False)
     added_at = Column(DateTime, default=datetime.utcnow)
+
+
+class WatchlistGroup(Base):
+    """Named watchlists beyond the default one."""
+    __tablename__ = "watchlist_groups"
+    id        = Column(Integer, primary_key=True, autoincrement=True)
+    list_name = Column(String(50), nullable=False, index=True)
+    symbol    = Column(String(20), nullable=False)
+    added_at  = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint("list_name", "symbol", name="uq_wlg_list_symbol"),)
 
 
 class PortfolioPosition(Base):
