@@ -34,6 +34,18 @@ class PortfolioPosition(Base):
     added_at = Column(DateTime, default=datetime.utcnow)
 
 
+class PriceAlert(Base):
+    __tablename__ = "price_alerts"
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    symbol       = Column(String(20), nullable=False, index=True)
+    target_price = Column(Float, nullable=False)
+    condition    = Column(String(10), nullable=False)   # 'above' | 'below'
+    note         = Column(String(200), nullable=True)
+    status       = Column(String(20), default='active') # 'active' | 'triggered' | 'dismissed'
+    created_at   = Column(DateTime, default=datetime.utcnow)
+    triggered_at = Column(DateTime, nullable=True)
+
+
 # ── Generic key-value cache ───────────────────────────────────────────────────
 
 class CacheEntry(Base):

@@ -8,6 +8,7 @@ import PortfolioTracker from './components/PortfolioTracker'
 import DayTrader from './components/DayTrader'
 import AiBot from './components/AiBot'
 import FinancialAdvisor from './components/FinancialAdvisor'
+import { AlertModal, AlertToast } from './components/PriceAlerts'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -31,9 +32,13 @@ export default function App() {
   const [error, setError]           = useState(null)
   const [countdown, setCountdown]   = useState(30)
   const [priceFlash, setPriceFlash] = useState({})
-  const [chartSymbol, setChartSymbol] = useState(null)
+  const [chartSymbol,  setChartSymbol]  = useState(null)
+  const [alerts,       setAlerts]       = useState([])
+  const [alertSymbol,  setAlertSymbol]  = useState(null)  // which symbol's modal is open
+  const [toasts,       setToasts]       = useState([])
   const prevPricesRef = useRef({})
   const flashTimerRef = useRef(null)
+  const alertsRef     = useRef([])
 
   // Load watchlist from API; migrate localStorage on first empty load
   useEffect(() => {
@@ -63,6 +68,38 @@ export default function App() {
       .catch(() => setWatchlist(DEFAULT_WATCHLIST))
   }, [])
 
+  // Keep alertsRef in sync so fetchQuotes can read latest alerts without stale closure
+  useEffect(() => { alertsRef.current = alerts }, [alerts])
+
+  // Load alerts from DB on mount
+  useEffect(() => {
+    fetch('/api/alerts')
+      .then(r => r.json())
+      .then(rows => setAlerts(rows.filter(a => a.status !== 'dismissed')))
+      .catch(() => {})
+  }, [])
+
+  const addAlert = useCallback(async (symbol, targetPrice, condition, note) => {
+    const r = await fetch('/api/alerts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, target_price: targetPrice, condition, note }),
+    })
+    if (!r.ok) throw new Error('Failed to create alert')
+    const created = await r.json()
+    setAlerts(prev => [created, ...prev])
+  }, [])
+
+  const deleteAlert = useCallback(async (id) => {
+    await fetch(`/api/alerts/${id}`, { method: 'DELETE' })
+    setAlerts(prev => prev.filter(a => a.id !== id))
+  }, [])
+
+  const dismissAlert = useCallback(async (id) => {
+    await fetch(`/api/alerts/${id}/dismiss`, { method: 'PATCH' })
+    setAlerts(prev => prev.filter(a => a.id !== id))
+  }, [])
+
   const fetchQuotes = useCallback(async () => {
     if (watchlist.length === 0) return
     setLoading(true)
@@ -89,12 +126,34 @@ export default function App() {
         flashTimerRef.current = setTimeout(() => setPriceFlash({}), 1200)
       }
 
+      // Build quote map for alert checking before state update
+      const quoteMap = {}
+      data.forEach(q => { quoteMap[q.symbol] = q })
+
       setQuotes((prev) => {
         const next = { ...prev }
         data.forEach((q) => { next[q.symbol] = q })
         return next
       })
       setLastUpdated(new Date())
+
+      // Check active alerts against new prices
+      const activeAlerts = alertsRef.current.filter(a => a.status === 'active')
+      const nowTriggered = activeAlerts.filter(a => {
+        const price = quoteMap[a.symbol]?.price
+        if (price == null) return false
+        return a.condition === 'above' ? price >= a.target_price : price <= a.target_price
+      })
+      if (nowTriggered.length > 0) {
+        nowTriggered.forEach(a => fetch(`/api/alerts/${a.id}/trigger`, { method: 'PATCH' }))
+        setAlerts(prev => prev.map(a =>
+          nowTriggered.find(t => t.id === a.id) ? { ...a, status: 'triggered' } : a
+        ))
+        setToasts(prev => [
+          ...prev,
+          ...nowTriggered.map(a => ({ ...a, _toastId: `${a.id}-${Date.now()}` })),
+        ])
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -181,6 +240,8 @@ export default function App() {
               priceFlash={priceFlash}
               onRemove={removeTicker}
               onChartOpen={setChartSymbol}
+              alerts={alerts}
+              onAlertBell={setAlertSymbol}
             />
           </div>
         )}
@@ -199,6 +260,30 @@ export default function App() {
           onClose={() => setChartSymbol(null)}
         />
       )}
+
+      {alertSymbol && (
+        <AlertModal
+          symbol={alertSymbol}
+          currentPrice={quotes[alertSymbol]?.price ?? null}
+          alerts={alerts}
+          onClose={() => setAlertSymbol(null)}
+          onAdd={addAlert}
+          onDelete={deleteAlert}
+          onDismiss={dismissAlert}
+        />
+      )}
+
+      {/* Toast notifications — bottom-right */}
+      <div className="fixed bottom-5 right-5 z-[200] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(t => (
+          <div key={t._toastId} className="pointer-events-auto">
+            <AlertToast
+              alert={t}
+              onClose={() => setToasts(prev => prev.filter(x => x._toastId !== t._toastId))}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
