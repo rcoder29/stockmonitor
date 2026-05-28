@@ -8,6 +8,7 @@ import PortfolioTracker from './components/PortfolioTracker'
 import DayTrader from './components/DayTrader'
 import AiBot from './components/AiBot'
 import FinancialAdvisor from './components/FinancialAdvisor'
+import Screener from './components/Screener'
 import { AlertModal, AlertToast } from './components/PriceAlerts'
 import EarningsCalendar from './components/EarningsCalendar'
 
@@ -19,6 +20,7 @@ const TABS = [
   { id: 'daytrader',       label: 'Day Trader' },
   { id: 'portfolio',       label: 'Portfolio' },
   { id: 'watchlist',       label: 'Watchlist' },
+  { id: 'screener',        label: 'Screener' },
   { id: 'aibot',           label: 'AI Advisor' },
   { id: 'advisor',         label: 'Financial Advisor' },
 ]
@@ -278,6 +280,7 @@ export default function App() {
         {activeTab === 'recommendations' && <MarketRecommendations />}
         {activeTab === 'portfolio'       && <PortfolioTracker />}
         {activeTab === 'daytrader'       && <DayTrader />}
+        {activeTab === 'screener'        && <Screener />}
         {activeTab === 'aibot'           && <AiBot />}
         {activeTab === 'advisor'         && <FinancialAdvisor />}
       </main>
