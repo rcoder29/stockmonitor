@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { fmt } from '../utils/format'
 import ChartModal from './ChartModal'
 import PortfolioRisk from './PortfolioRisk'
+import EfficientFrontier from './EfficientFrontier'
 
 const COLORS = [
   '#10b981','#3b82f6','#8b5cf6','#f59e0b','#ef4444',
@@ -1372,7 +1373,7 @@ export default function PortfolioTracker() {
         <div className="flex items-center gap-3">
           {/* View toggle */}
           <div className="flex rounded overflow-hidden border border-gray-700">
-            {[['heatmap', 'Heatmap'], ['table', 'Table'], ['equity', 'Equity Curve'], ['exposure', 'Exposure'], ['risk', 'Risk'], ['performance', 'Performance'], ['dividends', 'Dividends'], ['correlation', 'Correlation'], ['rebalance', 'Rebalancer']].map(([id, label]) => (
+            {[['heatmap', 'Heatmap'], ['table', 'Table'], ['equity', 'Equity Curve'], ['exposure', 'Exposure'], ['risk', 'Risk'], ['optimize', 'Optimizer'], ['performance', 'Performance'], ['dividends', 'Dividends'], ['correlation', 'Correlation'], ['rebalance', 'Rebalancer']].map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setViewMode(id)}
@@ -1525,6 +1526,13 @@ export default function PortfolioTracker() {
               <div className="border-t border-gray-800 pt-6">
                 <PortfolioRisk />
               </div>
+            </section>
+          )}
+
+          {/* ── Optimizer view ── */}
+          {viewMode === 'optimize' && (
+            <section>
+              <EfficientFrontier />
             </section>
           )}
 
