@@ -3761,6 +3761,370 @@ async def calc_position_size(req: PositionSizeRequest):
     }
 
 
+# ── Portfolio Optimizer (Efficient Frontier) ───────────────────────────────────
+
+_OPTIMIZE_TTL = timedelta(minutes=30)
+
+
+def _min_vol_weights(ann_cov: np.ndarray, n: int) -> np.ndarray | None:
+    """Minimum-variance portfolio via analytical Lagrange (long-only clamped via 200 SLSQP-free iterations)."""
+    # Use gradient descent projection (simple, no scipy needed)
+    w = np.ones(n) / n
+    lr = 0.01
+    for _ in range(2000):
+        grad = 2 * ann_cov @ w
+        w = w - lr * grad
+        w = np.maximum(w, 0)
+        s = w.sum()
+        if s > 0:
+            w /= s
+        else:
+            w = np.ones(n) / n
+    return w
+
+
+def _max_sharpe_weights(ann_rets: np.ndarray, ann_cov: np.ndarray, n: int) -> np.ndarray | None:
+    """Max-Sharpe portfolio via gradient ascent on Sharpe."""
+    w = np.ones(n) / n
+    lr = 0.005
+    for _ in range(3000):
+        port_r = float(np.dot(w, ann_rets))
+        port_v = float(np.sqrt(w @ ann_cov @ w))
+        if port_v < 1e-8:
+            break
+        grad_r = ann_rets
+        grad_v = (ann_cov @ w) / port_v
+        grad_sharpe = (grad_r * port_v - port_r * grad_v) / (port_v ** 2)
+        w = w + lr * grad_sharpe
+        w = np.maximum(w, 0)
+        s = w.sum()
+        if s > 0:
+            w /= s
+    return w
+
+
+def _compute_efficient_frontier() -> dict:
+    cache_key = "portfolio:frontier"
+    cached = cache_get(cache_key, _OPTIMIZE_TTL)
+    if cached is not None:
+        return cached
+
+    with db_session() as db:
+        positions = db.query(PortfolioPosition).all()
+        holdings  = [{"symbol": p.symbol, "shares": p.shares} for p in positions]
+
+    if len(holdings) < 2:
+        raise ValueError("Need at least 2 portfolio positions to optimize")
+
+    symbols = [h["symbol"] for h in holdings]
+    raw = yf.download(symbols, period="1y", interval="1d", auto_adjust=True, progress=False, session=_session)
+    closes = raw["Close"].dropna(how="all") if isinstance(raw.columns, pd.MultiIndex) else raw.dropna(how="all")
+
+    rets = closes.pct_change().dropna()
+    valid = [s for s in symbols if s in rets.columns and rets[s].count() >= 100]
+    if len(valid) < 2:
+        raise ValueError("Insufficient price history for optimization (need ≥2 symbols with 100+ days)")
+
+    rets     = rets[valid]
+    n        = len(valid)
+    ann_rets = rets.mean().values * 252
+    ann_cov  = rets.cov().values  * 252
+
+    # Current weights by market value
+    prices    = {s: float(closes[s].dropna().iloc[-1]) for s in valid}
+    vals      = {h["symbol"]: prices[h["symbol"]] * h["shares"] for h in holdings if h["symbol"] in prices}
+    total_val = sum(vals.values()) or 1.0
+    cur_w     = np.array([vals.get(s, 0) / total_val for s in valid])
+    cur_r     = float(np.dot(cur_w, ann_rets))
+    cur_v     = float(np.sqrt(cur_w @ ann_cov @ cur_w))
+
+    # Monte Carlo
+    rng      = np.random.default_rng(42)
+    mc_w     = rng.dirichlet(np.ones(n), size=4000)
+    mc_r     = mc_w @ ann_rets
+    mc_v     = np.sqrt(np.einsum("ij,jk,ik->i", mc_w, ann_cov, mc_w))
+    mc_sh    = np.where(mc_v > 0, mc_r / mc_v, 0)
+    mc_points = [{"r": round(float(mc_r[i])*100, 2), "v": round(float(mc_v[i])*100, 2), "sh": round(float(mc_sh[i]), 2)}
+                 for i in range(len(mc_r))]
+
+    # Optimized portfolios
+    ms_w  = _max_sharpe_weights(ann_rets, ann_cov, n)
+    mv_w  = _min_vol_weights(ann_cov, n)
+
+    def port_stats(w):
+        r = float(np.dot(w, ann_rets))
+        v = float(np.sqrt(w @ ann_cov @ w))
+        return round(r * 100, 2), round(v * 100, 2), round(r / v if v > 0 else 0, 2)
+
+    ms_r, ms_v, ms_sh = port_stats(ms_w)
+    mv_r, mv_v, mv_sh = port_stats(mv_w)
+
+    # Frontier: vary target return, find min-vol portfolio at each level
+    frontier = []
+    r_min = float(np.min(ann_rets))
+    r_max = float(np.max(ann_rets))
+    for target in np.linspace(r_min, r_max, 30):
+        # Constrained descent: minimize vol subject to return = target (soft constraint)
+        w = np.ones(n) / n
+        lr = 0.008
+        for _ in range(1500):
+            port_r = float(np.dot(w, ann_rets))
+            port_v = float(np.sqrt(w @ ann_cov @ w))
+            grad_v = (ann_cov @ w) / (port_v + 1e-10)
+            penalty_grad = 2 * 50 * (port_r - target) * ann_rets
+            w = w - lr * (grad_v - penalty_grad)
+            w = np.maximum(w, 0)
+            s = w.sum()
+            if s > 0:
+                w /= s
+        r, v, _ = port_stats(w)
+        if abs(r - target * 100) < 5:
+            frontier.append({"r": r, "v": v})
+
+    # Deduplicate and sort frontier
+    seen = set()
+    clean_frontier = []
+    for pt in sorted(frontier, key=lambda p: p["r"]):
+        key = round(pt["r"])
+        if key not in seen:
+            seen.add(key)
+            clean_frontier.append(pt)
+
+    result = {
+        "symbols": valid,
+        "current": {
+            "weights":     {valid[i]: round(float(cur_w[i]), 3) for i in range(n)},
+            "return_pct":  round(cur_r * 100, 2),
+            "vol_pct":     round(cur_v * 100, 2),
+            "sharpe":      round(cur_r / cur_v if cur_v > 0 else 0, 2),
+        },
+        "max_sharpe": {
+            "weights":    {valid[i]: round(float(ms_w[i]), 3) for i in range(n)},
+            "return_pct": ms_r, "vol_pct": ms_v, "sharpe": ms_sh,
+        },
+        "min_vol": {
+            "weights":    {valid[i]: round(float(mv_w[i]), 3) for i in range(n)},
+            "return_pct": mv_r, "vol_pct": mv_v, "sharpe": mv_sh,
+        },
+        "frontier":     clean_frontier,
+        "monte_carlo":  mc_points[:600],
+    }
+    cache_set(cache_key, result)
+    return result
+
+
+@app.get("/api/portfolio/optimize")
+async def get_portfolio_optimize():
+    loop = asyncio.get_event_loop()
+    try:
+        return await loop.run_in_executor(None, _compute_efficient_frontier)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+# ── Rich Earnings Calendar ─────────────────────────────────────────────────────
+
+_RICH_EARN_TTL = timedelta(hours=2)
+
+
+def _enrich_earnings(symbol: str) -> dict | None:
+    cache_key = f"rich_earn:{symbol}"
+    cached = cache_get(cache_key, _RICH_EARN_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        t = yf.Ticker(symbol, session=_session)
+
+        # Next earnings date
+        next_date = None
+        eps_estimate = None
+        try:
+            cal = t.calendar
+            if cal is not None and not cal.empty:
+                for col in cal.columns:
+                    if "Earnings" in col and next_date is None:
+                        vals = cal[col].dropna()
+                        if not vals.empty:
+                            next_date = str(pd.to_datetime(vals.iloc[0]).date())
+                    if "EPS" in col and "Estimate" in col and eps_estimate is None:
+                        vals = cal[col].dropna()
+                        if not vals.empty:
+                            eps_estimate = _safe_float(vals.iloc[0])
+        except Exception:
+            pass
+
+        if not next_date:
+            return None
+
+        days_away = (pd.to_datetime(next_date).date() - datetime.utcnow().date()).days
+
+        # Historical beat rate + earnings dates for pre-drift
+        beat_count = total_count = 0
+        earn_dates = []
+        try:
+            eh = t.earnings_history
+            if eh is not None and not eh.empty:
+                for idx, row in eh.iterrows():
+                    est = _safe_float(row.get("epsEstimate"))
+                    act = _safe_float(row.get("epsActual"))
+                    if est is not None and act is not None:
+                        total_count += 1
+                        if act >= est:
+                            beat_count += 1
+                    dt = idx.date() if hasattr(idx, "date") else None
+                    if dt:
+                        earn_dates.append(dt)
+        except Exception:
+            pass
+
+        beat_rate = round(beat_count / total_count * 100) if total_count > 0 else None
+
+        # Pre-earnings drift: avg return 5 days before each historical earnings date
+        pre_drift_pct = None
+        try:
+            hist = t.history(period="2y", interval="1d", auto_adjust=True)
+            if not hist.empty and earn_dates:
+                drifts = []
+                for ed in earn_dates:
+                    idx_pos = hist.index.searchsorted(pd.Timestamp(ed))
+                    if idx_pos >= 5:
+                        pre  = float(hist["Close"].iloc[idx_pos - 5])
+                        eve  = float(hist["Close"].iloc[idx_pos - 1])
+                        if pre > 0:
+                            drifts.append((eve / pre - 1) * 100)
+                if drifts:
+                    pre_drift_pct = round(float(np.mean(drifts)), 2)
+        except Exception:
+            pass
+
+        # Expected move from nearest expiry ATM straddle
+        expected_move_pct = straddle_cost = None
+        try:
+            price = float(t.fast_info.last_price)
+            exps  = t.options
+            if exps and price:
+                chain = t.option_chain(exps[0])
+                calls, puts = chain.calls, chain.puts
+                def _mid(row):
+                    b = float(row.get("bid", 0) or 0)
+                    a = float(row.get("ask", 0) or 0)
+                    lp = float(row.get("lastPrice", 0) or 0)
+                    return (b + a) / 2 if a > b > 0 else lp
+                atm_c = calls.loc[(calls["strike"] - price).abs().idxmin()]
+                atm_p = puts.loc[(puts["strike"] - price).abs().idxmin()]
+                cost  = _mid(atm_c) + _mid(atm_p)
+                if cost > 0:
+                    straddle_cost      = round(cost, 2)
+                    expected_move_pct  = round(cost / price * 100, 1)
+        except Exception:
+            pass
+
+        result = {
+            "symbol":            symbol,
+            "next_date":         next_date,
+            "days_away":         days_away,
+            "eps_estimate":      eps_estimate,
+            "beat_rate":         beat_rate,
+            "beat_count":        beat_count,
+            "total_count":       total_count,
+            "expected_move_pct": expected_move_pct,
+            "straddle_cost":     straddle_cost,
+            "pre_drift_pct":     pre_drift_pct,
+        }
+        cache_set(cache_key, result)
+        return result
+    except Exception as e:
+        logger.debug("rich earnings %s: %s", symbol, e)
+        return None
+
+
+class RichCalendarRequest(BaseModel):
+    symbols: List[str]
+
+
+@app.post("/api/earnings/rich-calendar")
+async def get_rich_calendar(req: RichCalendarRequest):
+    symbols = [s.upper().strip() for s in req.symbols[:60]]
+    loop    = asyncio.get_event_loop()
+    results = await asyncio.gather(*[loop.run_in_executor(None, _enrich_earnings, s) for s in symbols])
+    out = [r for r in results if r is not None]
+    out.sort(key=lambda r: r.get("days_away", 9999))
+    return out
+
+
+# ── News Sentiment Engine ──────────────────────────────────────────────────────
+
+_SENTIMENT_TTL = timedelta(hours=2)
+
+_SENTIMENT_SYSTEM = (
+    "You are a financial news sentiment analyzer. "
+    "Given headlines grouped by ticker, return ONLY a JSON object (no markdown, no explanation) in this shape:\n"
+    '{"TICKER": {"score": <float -1 to 1>, "label": "bullish"|"bearish"|"neutral", '
+    '"summary": "<1 sentence>", "top_story": "<most impactful headline>"}}\n'
+    "score: -1=very bearish, 0=neutral, +1=very bullish. "
+    "Include only tickers that appear in the input."
+)
+
+
+def _fetch_headlines(symbol: str, max_items: int = 6) -> list[str]:
+    try:
+        news = yf.Ticker(symbol, session=_session).news or []
+        titles = []
+        for item in news[:max_items]:
+            t = (item.get("content") or {}).get("title") or item.get("title", "")
+            if t:
+                titles.append(t)
+        return titles
+    except Exception:
+        return []
+
+
+class SentimentRequest(BaseModel):
+    symbols: List[str]
+
+
+@app.post("/api/news/sentiment")
+async def get_news_sentiment(req: SentimentRequest):
+    symbols   = [s.upper().strip() for s in req.symbols[:20]]
+    cache_key = f"sentiment:{','.join(sorted(symbols))}"
+    cached    = cache_get(cache_key, _SENTIMENT_TTL)
+    if cached is not None:
+        return cached
+
+    loop         = asyncio.get_event_loop()
+    news_results = await asyncio.gather(*[loop.run_in_executor(None, _fetch_headlines, s) for s in symbols])
+
+    prompt_lines = []
+    for sym, headlines in zip(symbols, news_results):
+        if headlines:
+            prompt_lines.append(f"{sym}:")
+            for h in headlines:
+                prompt_lines.append(f"  - {h}")
+
+    if not prompt_lines:
+        return {}
+
+    try:
+        client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        msg    = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            system=_SENTIMENT_SYSTEM,
+            messages=[{"role": "user", "content": "\n".join(prompt_lines)}],
+        )
+        raw = msg.content[0].text.strip()
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            raw   = "\n".join(lines[1: len(lines) - (1 if lines[-1].strip() == "```" else 0)])
+        result = json.loads(raw)
+        cache_set(cache_key, result)
+        return result
+    except Exception as e:
+        logger.warning("sentiment failed: %s", e)
+        raise HTTPException(500, f"Sentiment analysis failed: {e}")
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
