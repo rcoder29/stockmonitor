@@ -367,6 +367,8 @@ export default function DayTrader() {
   const [candSort,     setCandSort]     = useState(null)
   const [candDir,      setCandDir]      = useState('asc')
   const [candQuery,    setCandQuery]    = useState('')
+  const [uoaData,      setUoaData]      = useState([])
+  const [uoaLoading,   setUoaLoading]   = useState(false)
 
   function handleCandSort(key) {
     if (!key) return
@@ -395,6 +397,21 @@ export default function DayTrader() {
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  useEffect(() => {
+    if (!scanData) return
+    const syms = new Set()
+    ;(scanData.gainers    || []).forEach(s => syms.add(s.symbol))
+    ;(scanData.losers     || []).forEach(s => syms.add(s.symbol))
+    ;(scanData.mostActive || []).forEach(s => syms.add(s.symbol))
+    if (!syms.size) return
+    setUoaLoading(true)
+    fetch(`/api/market/options-uoa?symbols=${[...syms].join(',')}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setUoaData)
+      .catch(() => {})
+      .finally(() => setUoaLoading(false))
+  }, [scanData])
 
   // Derived plan values
   const capitalPerTrade = capital / Math.max(tradesPerDay, 1)
@@ -770,6 +787,63 @@ export default function DayTrader() {
                 <AlertCard key={`${alert.symbol}-${alert.alertType}-${i}`} alert={alert} />
               ))}
             </div>
+          </section>
+
+          {/* Options UOA */}
+          <section>
+            <div className="text-gray-600 text-xs uppercase tracking-widest mb-3">
+              Options UOA
+              {uoaData.length > 0 && (
+                <span className="ml-2 text-purple-400 font-bold">{uoaData.length}</span>
+              )}
+            </div>
+            {uoaLoading && (
+              <div className="text-gray-600 text-xs text-center py-4 animate-pulse">Scanning options flow…</div>
+            )}
+            {!uoaLoading && uoaData.length === 0 && (
+              <div className="text-gray-700 text-xs text-center py-4">No unusual activity detected</div>
+            )}
+            {!uoaLoading && uoaData.length > 0 && (
+              <div className="bg-gray-900/60 border border-gray-800 rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-800/60">
+                      <th className="py-1.5 px-2 text-gray-600 font-medium uppercase tracking-wide text-left">Sym</th>
+                      <th className="py-1.5 px-2 text-gray-600 font-medium uppercase tracking-wide text-center">Type</th>
+                      <th className="py-1.5 px-2 text-gray-600 font-medium uppercase tracking-wide text-right">Strike</th>
+                      <th className="py-1.5 px-2 text-gray-600 font-medium uppercase tracking-wide text-right">Vol</th>
+                      <th className="py-1.5 px-2 text-gray-600 font-medium uppercase tracking-wide text-right">OI</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {uoaData.slice(0, 12).map((u, i) => (
+                      <tr key={i} className="border-b border-gray-800/30 hover:bg-gray-800/40">
+                        <td className="py-1.5 px-2 font-bold text-white">{u.symbol}</td>
+                        <td className="py-1.5 px-2 text-center">
+                          <span className={`text-xs font-bold ${u.option_type === 'call' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {u.option_type?.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-2 text-right text-gray-300 tabular-nums">
+                          {u.strike != null ? `$${u.strike.toFixed(0)}` : '—'}
+                        </td>
+                        <td className="py-1.5 px-2 text-right text-purple-400 tabular-nums font-semibold">
+                          {u.volume != null ? u.volume.toLocaleString() : '—'}
+                        </td>
+                        <td className="py-1.5 px-2 text-right text-gray-500 tabular-nums">
+                          {u.open_interest != null ? u.open_interest.toLocaleString() : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {uoaData.length > 12 && (
+                  <div className="px-3 py-1.5 text-gray-700 text-xs border-t border-gray-800">
+                    +{uoaData.length - 12} more
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           {/* News Feed */}

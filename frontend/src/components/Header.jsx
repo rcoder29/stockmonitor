@@ -17,6 +17,9 @@ export default function Header({
   countdown,
   onRefresh,
   onAddTicker,
+  wsConnected,
+  notifPermission,
+  onRequestNotif,
 }) {
   const [input, setInput] = useState('')
 
@@ -73,6 +76,23 @@ export default function Header({
               </button>
             ))}
           </div>
+        </div>
+
+        {/* WS + Notif */}
+        <div className="flex items-center gap-2">
+          <span
+            title={wsConnected ? 'Live prices connected' : 'Live prices disconnected'}
+            className={`w-2 h-2 rounded-full shrink-0 transition-colors ${wsConnected ? 'bg-emerald-400' : 'bg-gray-600'}`}
+          />
+          {notifPermission === 'default' && (
+            <button
+              onClick={onRequestNotif}
+              title="Enable browser notifications for price alerts"
+              className="text-gray-600 hover:text-amber-400 text-xs border border-gray-700 rounded px-2 py-1 transition-colors"
+            >
+              🔔 Enable alerts
+            </button>
+          )}
         </div>
 
         {/* Status */}

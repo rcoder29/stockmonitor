@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 import csv
 import io
+import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -2514,6 +2515,273 @@ def export_journal():
         w.writerow([e.trade_date, e.symbol, e.side, e.price, e.shares, e.strategy or "", e.notes or ""])
     return Response(content=buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": "attachment; filename=trade_journal.csv"})
+
+
+# ── WebSocket live quotes ─────────────────────────────────────────────────────
+
+@app.websocket("/ws/quotes")
+async def ws_quotes(websocket: WebSocket, symbols: str = ""):
+    await websocket.accept()
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not syms:
+        await websocket.close()
+        return
+    loop = asyncio.get_event_loop()
+    try:
+        while True:
+            results = await loop.run_in_executor(
+                None,
+                lambda: [_fetch_quote(s) for s in syms],
+            )
+            await websocket.send_json(results)
+            await asyncio.sleep(4)
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.warning("WS quotes error: %s", e)
+
+
+# ── SEC Filings ───────────────────────────────────────────────────────────────
+
+_EDGAR_TTL       = timedelta(hours=12)
+_TICKER_CIK_MAP: dict[str, str] = {}
+
+
+def _get_cik(ticker: str) -> str | None:
+    global _TICKER_CIK_MAP
+    if not _TICKER_CIK_MAP:
+        try:
+            r = _session.get(
+                "https://www.sec.gov/files/company_tickers.json",
+                headers={"User-Agent": "StockMonitor raghuravuri@gmail.com"},
+            )
+            data = r.json()
+            _TICKER_CIK_MAP = {
+                v["ticker"]: str(v["cik_str"]).zfill(10) for v in data.values()
+            }
+        except Exception as e:
+            logger.warning("Failed to load EDGAR ticker map: %s", e)
+            return None
+    return _TICKER_CIK_MAP.get(ticker.upper())
+
+
+@app.get("/api/filings/{symbol}")
+def get_filings(symbol: str):
+    symbol = symbol.upper()
+    cache_key = f"filings:{symbol}"
+    cached = cache_get(cache_key, _EDGAR_TTL)
+    if cached is not None:
+        return cached
+
+    cik = _get_cik(symbol)
+    if not cik:
+        result = {"symbol": symbol, "filings": [], "error": "Ticker not found in EDGAR"}
+        cache_set(cache_key, result)
+        return result
+
+    try:
+        url = f"https://data.sec.gov/submissions/CIK{cik}.json"
+        r = _session.get(url, headers={"User-Agent": "StockMonitor raghuravuri@gmail.com"})
+        data = r.json()
+
+        recent   = data.get("filings", {}).get("recent", {})
+        forms    = recent.get("form", [])
+        dates    = recent.get("filingDate", [])
+        accnums  = recent.get("accessionNumber", [])
+        docs     = recent.get("primaryDocument", [])
+        descs    = recent.get("primaryDocDescription", [])
+
+        target = {"10-K", "10-Q", "8-K", "10-K/A", "10-Q/A"}
+        filings = []
+        cik_int = int(cik)
+        for form, date, acc, doc, desc in zip(forms, dates, accnums, docs, descs):
+            if form not in target:
+                continue
+            acc_clean = acc.replace("-", "")
+            filing_url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_clean}/{doc}"
+            filings.append({
+                "form":   form,
+                "date":   date,
+                "url":    filing_url,
+                "desc":   desc or doc,
+                "acc":    acc,
+            })
+            if len(filings) >= 25:
+                break
+
+        result = {
+            "symbol":      symbol,
+            "companyName": data.get("name", symbol),
+            "cik":         cik,
+            "filings":     filings,
+        }
+    except Exception as e:
+        logger.warning("EDGAR filings failed %s: %s", symbol, e)
+        result = {"symbol": symbol, "filings": [], "error": str(e)}
+
+    cache_set(cache_key, result)
+    return result
+
+
+# ── Custom Screener ───────────────────────────────────────────────────────────
+
+_SP100 = [
+    "AAPL","MSFT","AMZN","GOOGL","META","NVDA","TSLA","JPM","V","UNH",
+    "JNJ","WMT","XOM","MA","PG","HD","CVX","LLY","ABBV","MRK",
+    "PEP","KO","AVGO","COST","TMO","MCD","ABT","CSCO","DHR","ACN",
+    "NEE","WFC","TXN","CMCSA","VZ","INTC","BMY","AMGN","RTX","HON",
+    "PM","IBM","GE","LOW","CAT","BA","UPS","GS","MS","BLK",
+    "SPGI","ISRG","MDT","SYK","GILD","CRM","ADBE","QCOM","AMAT","NOW",
+    "LRCX","MU","PANW","PYPL","UBER","AMD","NFLX","DIS","SBUX","NKE",
+    "T","F","GM","BAC","C","WBA","PFE","AXP","MMM","MO",
+]
+
+_CUSTOM_SCREEN_FIELDS = {
+    "peRatio":             "P/E Ratio",
+    "forwardPE":           "Forward P/E",
+    "priceToBook":         "P/B Ratio",
+    "beta":                "Beta",
+    "dividendYield":       "Dividend Yield",
+    "marketCap":           "Market Cap ($B)",
+    "profitMargin":        "Profit Margin",
+    "roe":                 "ROE",
+    "debtToEquity":        "Debt/Equity",
+    "shortPercentOfFloat": "Short Float %",
+}
+
+
+class FilterCondition(BaseModel):
+    field:  str
+    op:     str    # 'lt' | 'gt' | 'lte' | 'gte' | 'between'
+    value:  float
+    value2: float | None = None
+
+
+class CustomScreenRequest(BaseModel):
+    filters: list[FilterCondition]
+    symbols: list[str] = []   # empty → use SP100
+
+
+def _apply_filter(fund: dict, f: FilterCondition) -> bool:
+    raw = fund.get(f.field)
+    if raw is None:
+        return False
+    # dividendYield and related are stored as fractions (0.02 = 2%)
+    val = raw
+    if f.field in ("dividendYield", "profitMargin", "roe", "shortPercentOfFloat"):
+        val = raw * 100
+    if f.field == "marketCap":
+        val = raw / 1e9
+    if f.op == "lt":   return val < f.value
+    if f.op == "gt":   return val > f.value
+    if f.op == "lte":  return val <= f.value
+    if f.op == "gte":  return val >= f.value
+    if f.op == "between" and f.value2 is not None:
+        return f.value <= val <= f.value2
+    return False
+
+
+@app.post("/api/screener/custom")
+def run_custom_screener(body: CustomScreenRequest):
+    universe = [s.upper() for s in body.symbols] if body.symbols else _SP100
+    if not body.filters:
+        raise HTTPException(400, "At least one filter required")
+
+    results = []
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        futures = {ex.submit(_fetch_fundamentals, s): s for s in universe}
+        for f in as_completed(futures):
+            sym = futures[f]
+            try:
+                fund = f.result()
+                q_cached = cache_get(f"quote:{sym}", timedelta(minutes=10))
+                price = q_cached.get("price") if q_cached else None
+                if all(_apply_filter(fund, filt) for filt in body.filters):
+                    results.append({
+                        "symbol":        sym,
+                        "name":          fund.get("name", sym),
+                        "price":         price,
+                        "peRatio":       fund.get("peRatio"),
+                        "forwardPE":     fund.get("forwardPE"),
+                        "priceToBook":   fund.get("priceToBook"),
+                        "beta":          fund.get("beta"),
+                        "dividendYield": fund.get("dividendYield"),
+                        "marketCap":     fund.get("marketCap") or (q_cached.get("marketCap") if q_cached else None),
+                        "profitMargin":  fund.get("profitMargin"),
+                        "roe":           fund.get("roe"),
+                        "debtToEquity":  fund.get("debtToEquity"),
+                        "shortPercentOfFloat": fund.get("shortPercentOfFloat"),
+                        "sector":        fund.get("sector"),
+                    })
+            except Exception as e:
+                logger.warning("custom screen %s: %s", sym, e)
+
+    results.sort(key=lambda x: x.get("marketCap") or 0, reverse=True)
+    return results[:50]
+
+
+# ── Options Unusual Activity Feed ─────────────────────────────────────────────
+
+_UOA_TTL = timedelta(minutes=10)
+
+
+def _fetch_uoa_for(sym: str) -> list:
+    cache_key = f"uoa:{sym}"
+    cached = cache_get(cache_key, _UOA_TTL)
+    if cached is not None:
+        return cached
+
+    results = []
+    try:
+        t = yf.Ticker(sym, session=_session)
+        exps = t.options
+        if not exps:
+            cache_set(cache_key, results)
+            return results
+
+        # Check nearest two expiries for more coverage
+        for exp in exps[:2]:
+            try:
+                chain = t.option_chain(exp)
+                for c_type, df in [("call", chain.calls), ("put", chain.puts)]:
+                    for _, row in df.iterrows():
+                        volume = int(row.get("volume") or 0)
+                        oi     = int(row.get("openInterest") or 0)
+                        if volume >= 500 and (oi == 0 or volume > 2 * oi):
+                            results.append({
+                                "symbol":        sym,
+                                "type":          c_type,
+                                "strike":        round(float(row.get("strike") or 0), 2),
+                                "expiry":        exp,
+                                "volume":        volume,
+                                "openInterest":  oi,
+                                "lastPrice":     round(float(row.get("lastPrice") or 0), 2),
+                                "impliedVol":    round(float(row.get("impliedVolatility") or 0) * 100, 1),
+                                "inTheMoney":    bool(row.get("inTheMoney", False)),
+                            })
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning("UOA fetch failed %s: %s", sym, e)
+
+    cache_set(cache_key, results)
+    return results
+
+
+@app.get("/api/market/options-uoa")
+def get_options_uoa(symbols: str = ""):
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not syms:
+        return []
+
+    all_uoa = []
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futures = [ex.submit(_fetch_uoa_for, s) for s in syms]
+        for f in as_completed(futures):
+            all_uoa.extend(f.result())
+
+    all_uoa.sort(key=lambda x: x["volume"], reverse=True)
+    return all_uoa[:60]
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
