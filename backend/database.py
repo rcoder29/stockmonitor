@@ -67,6 +67,20 @@ class PortfolioSnapshot(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 
+class OptionsPosition(Base):
+    """Open options positions for P&L tracking."""
+    __tablename__ = "options_positions"
+    id             = Column(Integer, primary_key=True, autoincrement=True)
+    symbol         = Column(String(20), nullable=False, index=True)
+    option_type    = Column(String(4), nullable=False)    # 'call' | 'put'
+    strike         = Column(Float, nullable=False)
+    expiry         = Column(String(10), nullable=False)   # YYYY-MM-DD
+    quantity       = Column(Integer, nullable=False)       # contracts (negative = short)
+    entry_premium  = Column(Float, nullable=False)         # per share (×100 per contract)
+    note           = Column(String(200), nullable=True)
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+
 class SmartAlertRule(Base):
     """Condition-based alert rules (volume spike, gap, RSI, MA cross, earnings proximity)."""
     __tablename__ = "smart_alert_rules"
@@ -113,6 +127,16 @@ def migrate_db():
     migrations = [
         "ALTER TABLE price_alerts ADD COLUMN alert_type VARCHAR(30) DEFAULT 'price'",
         "ALTER TABLE price_alerts ADD COLUMN trigger_value REAL",
+        ("CREATE TABLE IF NOT EXISTS options_positions ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "symbol VARCHAR(20) NOT NULL, "
+         "option_type VARCHAR(4) NOT NULL, "
+         "strike REAL NOT NULL, "
+         "expiry VARCHAR(10) NOT NULL, "
+         "quantity INTEGER NOT NULL, "
+         "entry_premium REAL NOT NULL, "
+         "note VARCHAR(200), "
+         "created_at DATETIME)"),
         ("CREATE TABLE IF NOT EXISTS smart_alert_rules ("
          "id INTEGER PRIMARY KEY AUTOINCREMENT, "
          "symbol VARCHAR(20) NOT NULL, "

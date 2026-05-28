@@ -22,6 +22,8 @@ import SmartAlerts from './components/SmartAlerts'
 import PositionSizer from './components/PositionSizer'
 import RichEarningsCalendar from './components/RichEarningsCalendar'
 import NewsSentiment from './components/NewsSentiment'
+import OptionsTracker from './components/OptionsTracker'
+import SectorMomentum from './components/SectorMomentum'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -45,6 +47,8 @@ const TABS = [
   { id: 'positionsize',    label: 'Position Sizer' },
   { id: 'richearnings',    label: 'Earnings+' },
   { id: 'newssentiment',   label: 'Sentiment' },
+  { id: 'optionstracker',  label: 'Options P&L' },
+  { id: 'sectormomentum',  label: 'Sector Momentum' },
 ]
 
 function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
@@ -479,6 +483,8 @@ export default function App() {
         {activeTab === 'newssentiment'  && (
           <NewsSentiment symbols={watchlist} />
         )}
+        {activeTab === 'optionstracker' && <OptionsTracker />}
+        {activeTab === 'sectormomentum' && <SectorMomentum />}
       </main>
 
       {chartSymbol && (
