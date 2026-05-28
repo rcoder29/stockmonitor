@@ -16,6 +16,8 @@ import StockComparison from './components/StockComparison'
 import Backtester from './components/Backtester'
 import { AlertModal, AlertToast } from './components/PriceAlerts'
 import EarningsCalendar from './components/EarningsCalendar'
+import TechnicalSignals from './components/TechnicalSignals'
+import TradeIdeas from './components/TradeIdeas'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -33,6 +35,8 @@ const TABS = [
   { id: 'backtest',        label: 'Backtester' },
   { id: 'aibot',           label: 'AI Advisor' },
   { id: 'advisor',         label: 'Financial Advisor' },
+  { id: 'signals',         label: 'Signals' },
+  { id: 'tradeideas',      label: 'Trade Ideas' },
 ]
 
 function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
@@ -453,6 +457,12 @@ export default function App() {
         {activeTab === 'backtest'        && <Backtester />}
         {activeTab === 'aibot'           && <AiBot />}
         {activeTab === 'advisor'         && <FinancialAdvisor />}
+        {activeTab === 'signals'         && (
+          <TechnicalSignals symbols={[...new Set([...watchlist, ...portfolioSymbols])]} />
+        )}
+        {activeTab === 'tradeideas'      && (
+          <TradeIdeas watchlist={watchlist} quotes={quotes} alerts={alerts} />
+        )}
       </main>
 
       {chartSymbol && (
