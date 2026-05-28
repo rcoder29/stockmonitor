@@ -23,7 +23,7 @@ load_dotenv()
 from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
     WatchlistSymbol, WatchlistGroup, PortfolioPosition, PortfolioSnapshot,
-    PriceAlert, SmartAlertRule, OptionsPosition, TradeJournalEntry,
+    PriceAlert, SmartAlertRule, OptionsPosition, PriceTarget, TradeJournalEntry,
 )
 
 # Corporate proxy uses a self-signed cert — reuse one session with SSL disabled
@@ -4447,6 +4447,289 @@ async def get_sector_momentum():
     results.sort(key=lambda r: -(r.get("composite") or -999))
     cache_set(cache_key, results)
     return results
+
+
+# ── Market Breadth Dashboard ──────────────────────────────────────────────────
+
+_BREADTH_TTL = timedelta(minutes=30)
+
+
+@app.get("/api/market/breadth")
+async def get_market_breadth():
+    cache_key = "market:breadth"
+    cached = cache_get(cache_key, _BREADTH_TTL)
+    if cached is not None:
+        return cached
+
+    loop = asyncio.get_event_loop()
+
+    # Download universe + VIX in parallel
+    def _fetch_universe():
+        return yf.download(
+            SCREENER_UNIVERSE, period="1y", interval="1d",
+            auto_adjust=True, progress=False, session=_session,
+        )
+
+    def _fetch_vix():
+        try:
+            v = yf.Ticker("^VIX", session=_session)
+            fi = v.fast_info
+            price = _safe_float(fi.last_price)
+            prev  = _safe_float(fi.previous_close)
+            hist  = v.history(period="1y", interval="1d", auto_adjust=True)
+            hist_vals = hist["Close"].dropna().values.tolist()[-252:]
+            return {"price": round(price, 2), "chg1d": round((price/prev-1)*100, 2) if prev else None,
+                    "history": [round(x, 2) for x in hist_vals[-60:]]}
+        except Exception:
+            return {"price": None}
+
+    def _fetch_pcratio():
+        try:
+            # Use SPY options put/call volume ratio as proxy
+            spy = yf.Ticker("SPY", session=_session)
+            exps = spy.options
+            if not exps:
+                return None
+            chain = spy.option_chain(exps[0])
+            call_vol = float(chain.calls["volume"].sum())
+            put_vol  = float(chain.puts["volume"].sum())
+            return round(put_vol / call_vol, 2) if call_vol > 0 else None
+        except Exception:
+            return None
+
+    raw_data, vix_data, pc_ratio = await asyncio.gather(
+        loop.run_in_executor(None, _fetch_universe),
+        loop.run_in_executor(None, _fetch_vix),
+        loop.run_in_executor(None, _fetch_pcratio),
+    )
+
+    closes = raw_data["Close"].dropna(how="all") if isinstance(raw_data.columns, pd.MultiIndex) else raw_data.dropna(how="all")
+
+    above_50 = above_200 = new_highs = new_lows = advances = declines = 0
+    total = 0
+
+    for sym in SCREENER_UNIVERSE:
+        if sym not in closes.columns:
+            continue
+        c = closes[sym].dropna()
+        if len(c) < 10:
+            continue
+        total += 1
+        last = float(c.iloc[-1])
+        prev_close = float(c.iloc[-2]) if len(c) >= 2 else last
+
+        if last > prev_close:
+            advances += 1
+        elif last < prev_close:
+            declines += 1
+
+        if len(c) >= 50:
+            ma50 = float(c.iloc[-50:].mean())
+            if last > ma50:
+                above_50 += 1
+
+        if len(c) >= 200:
+            ma200 = float(c.iloc[-200:].mean())
+            if last > ma200:
+                above_200 += 1
+
+        if len(c) >= 252:
+            hi52 = float(c.iloc[-252:].max())
+            lo52 = float(c.iloc[-252:].min())
+            if last >= hi52 * 0.98:
+                new_highs += 1
+            if last <= lo52 * 1.02:
+                new_lows += 1
+
+    # Rolling A/D line (last 60 days using daily net advances across universe)
+    ad_line = []
+    ad_cum  = 0
+    for i in range(max(0, len(closes) - 60), len(closes)):
+        row  = closes.iloc[i]
+        prev = closes.iloc[i - 1] if i > 0 else row
+        net  = int((row > prev).sum()) - int((row < prev).sum())
+        ad_cum += net
+        ad_line.append({"date": str(closes.index[i].date()), "value": ad_cum})
+
+    result = {
+        "universe_size":   total,
+        "advances":        advances,
+        "declines":        declines,
+        "unchanged":       total - advances - declines,
+        "ad_ratio":        round(advances / declines, 2) if declines > 0 else None,
+        "above_50ma_pct":  round(above_50  / total * 100, 1) if total else None,
+        "above_200ma_pct": round(above_200 / total * 100, 1) if total else None,
+        "new_highs":       new_highs,
+        "new_lows":        new_lows,
+        "hl_ratio":        round(new_highs / (new_highs + new_lows), 2) if (new_highs + new_lows) > 0 else None,
+        "vix":             vix_data,
+        "put_call_ratio":  pc_ratio,
+        "ad_line":         ad_line,
+    }
+    cache_set(cache_key, result)
+    return result
+
+
+# ── Fundamental Comparison Tool ───────────────────────────────────────────────
+
+_FUNDC_TTL = timedelta(hours=2)
+
+_COMPARE_METRICS = [
+    ("Market Cap",         "marketCap",           "B",    lambda v: f"${v/1e9:.1f}B"),
+    ("Price",              "currentPrice",         "$",    lambda v: f"${v:.2f}"),
+    ("P/E (Trailing)",     "trailingPE",           "x",    lambda v: f"{v:.1f}x"),
+    ("P/E (Forward)",      "forwardPE",            "x",    lambda v: f"{v:.1f}x"),
+    ("P/S",                "priceToSalesTrailing12Months", "x", lambda v: f"{v:.1f}x"),
+    ("P/B",                "priceToBook",          "x",    lambda v: f"{v:.1f}x"),
+    ("EV/EBITDA",          "enterpriseToEbitda",   "x",    lambda v: f"{v:.1f}x"),
+    ("Rev Growth (YoY)",   "revenueGrowth",        "%",    lambda v: f"{v*100:.1f}%"),
+    ("Gross Margin",       "grossMargins",         "%",    lambda v: f"{v*100:.1f}%"),
+    ("Op Margin",          "operatingMargins",     "%",    lambda v: f"{v*100:.1f}%"),
+    ("Net Margin",         "profitMargins",        "%",    lambda v: f"{v*100:.1f}%"),
+    ("ROE",                "returnOnEquity",       "%",    lambda v: f"{v*100:.1f}%"),
+    ("ROA",                "returnOnAssets",       "%",    lambda v: f"{v*100:.1f}%"),
+    ("Debt/Equity",        "debtToEquity",         "x",    lambda v: f"{v:.2f}x"),
+    ("Current Ratio",      "currentRatio",         "x",    lambda v: f"{v:.2f}x"),
+    ("Dividend Yield",     "dividendYield",        "%",    lambda v: f"{v*100:.2f}%"),
+    ("Beta",               "beta",                 "",     lambda v: f"{v:.2f}"),
+    ("Short % Float",      "shortPercentOfFloat",  "%",    lambda v: f"{v*100:.1f}%"),
+    ("Insider Own%",       "heldPercentInsiders",  "%",    lambda v: f"{v*100:.1f}%"),
+    ("52W High",           "fiftyTwoWeekHigh",     "$",    lambda v: f"${v:.2f}"),
+    ("52W Low",            "fiftyTwoWeekLow",      "$",    lambda v: f"${v:.2f}"),
+]
+
+# Metrics where lower = better (for color-coding)
+_LOWER_BETTER = {"P/E (Trailing)", "P/E (Forward)", "P/S", "P/B", "EV/EBITDA", "Debt/Equity", "Short % Float"}
+# Metrics where direction doesn't clearly apply
+_NEUTRAL_METRICS = {"Price", "Market Cap", "52W High", "52W Low", "Beta", "Dividend Yield"}
+
+
+def _fetch_compare_symbol(symbol: str) -> dict:
+    cache_key = f"fundc:{symbol}"
+    cached = cache_get(cache_key, _FUNDC_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        info = yf.Ticker(symbol, session=_session).info
+        row  = {"symbol": symbol, "name": info.get("shortName", symbol)}
+        for label, key, _, _ in _COMPARE_METRICS:
+            row[label] = _safe_float(info.get(key))
+        cache_set(cache_key, row)
+        return row
+    except Exception as e:
+        return {"symbol": symbol, "error": str(e)}
+
+
+@app.get("/api/compare/fundamentals")
+async def compare_fundamentals(symbols: str):
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()][:5]
+    if not syms:
+        raise HTTPException(400, "Provide at least one symbol")
+    loop    = asyncio.get_event_loop()
+    results = await asyncio.gather(*[loop.run_in_executor(None, _fetch_compare_symbol, s) for s in syms])
+
+    # Compute per-metric best/worst for highlighting
+    metrics_meta = []
+    for label, _, unit, fmt_fn in _COMPARE_METRICS:
+        vals = {r["symbol"]: r.get(label) for r in results if r.get(label) is not None}
+        if not vals:
+            metrics_meta.append({"label": label, "unit": unit, "best": None, "worst": None})
+            continue
+        if label in _NEUTRAL_METRICS:
+            metrics_meta.append({"label": label, "unit": unit, "best": None, "worst": None})
+            continue
+        lower_better = label in _LOWER_BETTER
+        best  = min(vals, key=vals.get) if lower_better else max(vals, key=vals.get)
+        worst = max(vals, key=vals.get) if lower_better else min(vals, key=vals.get)
+        metrics_meta.append({"label": label, "unit": unit, "best": best, "worst": worst})
+
+    return {"symbols": syms, "rows": list(results), "metrics": metrics_meta}
+
+
+# ── Price Target Tracker ──────────────────────────────────────────────────────
+
+class PriceTargetCreate(BaseModel):
+    symbol:       str
+    target_price: float
+    target_date:  str = ""
+    note:         str = ""
+
+
+@app.get("/api/price-targets")
+async def list_price_targets():
+    with db_session() as db:
+        targets = db.query(PriceTarget).order_by(PriceTarget.created_at.desc()).all()
+        items   = [{"id": t.id, "symbol": t.symbol, "target_price": t.target_price,
+                    "target_date": t.target_date, "note": t.note, "created_at": str(t.created_at)}
+                   for t in targets]
+
+    if not items:
+        return []
+
+    # Enrich with live prices + analyst consensus
+    syms = list({i["symbol"] for i in items})
+    loop = asyncio.get_event_loop()
+
+    def _fetch_price_and_consensus(sym):
+        try:
+            t     = yf.Ticker(sym, session=_session)
+            fi    = t.fast_info
+            price = _safe_float(fi.last_price)
+            info  = t.info
+            consensus = _safe_float(info.get("targetMeanPrice"))
+            return sym, price, consensus
+        except Exception:
+            return sym, None, None
+
+    price_results = await asyncio.gather(*[loop.run_in_executor(None, _fetch_price_and_consensus, s) for s in syms])
+    price_map = {sym: (price, consensus) for sym, price, consensus in price_results}
+
+    today = datetime.utcnow().date()
+    enriched = []
+    for item in items:
+        price, consensus = price_map.get(item["symbol"], (None, None))
+        pct_to_target = None
+        if price and price > 0:
+            pct_to_target = round((item["target_price"] / price - 1) * 100, 2)
+        days_remaining = None
+        if item["target_date"]:
+            try:
+                days_remaining = (pd.to_datetime(item["target_date"]).date() - today).days
+            except Exception:
+                pass
+        enriched.append({
+            **item,
+            "current_price":    round(price, 2) if price else None,
+            "pct_to_target":    pct_to_target,
+            "analyst_consensus": round(consensus, 2) if consensus else None,
+            "days_remaining":   days_remaining,
+        })
+    return enriched
+
+
+@app.post("/api/price-targets")
+def create_price_target(req: PriceTargetCreate):
+    with db_session() as db:
+        pt = PriceTarget(
+            symbol=req.symbol.upper().strip(),
+            target_price=req.target_price,
+            target_date=req.target_date or None,
+            note=req.note or None,
+        )
+        db.add(pt)
+        db.flush()
+        return {"id": pt.id, "symbol": pt.symbol}
+
+
+@app.delete("/api/price-targets/{target_id}")
+def delete_price_target(target_id: int):
+    with db_session() as db:
+        pt = db.query(PriceTarget).filter(PriceTarget.id == target_id).first()
+        if not pt:
+            raise HTTPException(404, "Target not found")
+        db.delete(pt)
+    return {"ok": True}
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

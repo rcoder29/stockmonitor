@@ -67,6 +67,17 @@ class PortfolioSnapshot(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 
+class PriceTarget(Base):
+    """User-defined price targets per watchlist symbol."""
+    __tablename__ = "price_targets"
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    symbol       = Column(String(20), nullable=False, index=True)
+    target_price = Column(Float, nullable=False)
+    target_date  = Column(String(10), nullable=True)   # YYYY-MM-DD optional deadline
+    note         = Column(String(300), nullable=True)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
 class OptionsPosition(Base):
     """Open options positions for P&L tracking."""
     __tablename__ = "options_positions"
@@ -127,6 +138,13 @@ def migrate_db():
     migrations = [
         "ALTER TABLE price_alerts ADD COLUMN alert_type VARCHAR(30) DEFAULT 'price'",
         "ALTER TABLE price_alerts ADD COLUMN trigger_value REAL",
+        ("CREATE TABLE IF NOT EXISTS price_targets ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "symbol VARCHAR(20) NOT NULL, "
+         "target_price REAL NOT NULL, "
+         "target_date VARCHAR(10), "
+         "note VARCHAR(300), "
+         "created_at DATETIME)"),
         ("CREATE TABLE IF NOT EXISTS options_positions ("
          "id INTEGER PRIMARY KEY AUTOINCREMENT, "
          "symbol VARCHAR(20) NOT NULL, "
