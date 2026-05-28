@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react'
 import { fmt } from '../utils/format'
+import { AlertBellButton } from './PriceAlerts'
 
 function ChangeCell({ value, isPercent }) {
   if (value == null) return <span className="text-gray-600">—</span>
@@ -59,7 +60,7 @@ const COLS = [
   { label: '',          align: 'text-right', width: 'w-10', key: null },
 ]
 
-export default function StockTable({ watchlist, quotes, priceFlash, onRemove, onChartOpen }) {
+export default function StockTable({ watchlist, quotes, priceFlash, onRemove, onChartOpen, alerts = [], onAlertBell }) {
   const [sortCol, setSortCol] = useState(null)
   const [sortDir, setSortDir] = useState('asc')
   const [query,   setQuery]   = useState('')
@@ -182,6 +183,9 @@ export default function StockTable({ watchlist, quotes, priceFlash, onRemove, on
                             <line x1="3" y1="2" x2="3" y2="12" />
                             <line x1="3" y1="12" x2="15" y2="12" />
                           </svg>
+                          {onAlertBell && (
+                            <AlertBellButton symbol={sym} alerts={alerts} onClick={onAlertBell} />
+                          )}
                         </div>
                         {qt?.name && (
                           <div className="text-xs text-gray-500 truncate max-w-[140px]">{qt.name}</div>
