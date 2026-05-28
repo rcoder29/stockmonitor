@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Header from './components/Header'
 import StockTable from './components/StockTable'
 import ChartModal from './components/ChartModal'
@@ -30,32 +30,133 @@ import PriceTargets from './components/PriceTargets'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
-const TABS = [
-  { id: 'market',          label: 'Market Summary' },
-  { id: 'recommendations', label: 'Market Recommendations' },
-  { id: 'daytrader',       label: 'Day Trader' },
-  { id: 'portfolio',       label: 'Portfolio' },
-  { id: 'watchlist',       label: 'Watchlist' },
-  { id: 'screener',        label: 'Screener' },
-  { id: 'journal',         label: 'Journal' },
-  { id: 'macro',           label: 'Macro Calendar' },
-  { id: 'sectors',         label: 'Sector Rotation' },
-  { id: 'compare',         label: 'Compare' },
-  { id: 'backtest',        label: 'Backtester' },
-  { id: 'aibot',           label: 'AI Advisor' },
-  { id: 'advisor',         label: 'Financial Advisor' },
-  { id: 'signals',         label: 'Signals' },
-  { id: 'tradeideas',      label: 'Trade Ideas' },
-  { id: 'smartalerts',     label: 'Smart Alerts' },
-  { id: 'positionsize',    label: 'Position Sizer' },
-  { id: 'richearnings',    label: 'Earnings+' },
-  { id: 'newssentiment',   label: 'Sentiment' },
-  { id: 'optionstracker',  label: 'Options P&L' },
-  { id: 'sectormomentum',  label: 'Sector Momentum' },
-  { id: 'breadth',         label: 'Market Breadth' },
-  { id: 'fundamentals',    label: 'Compare' },
-  { id: 'pricetargets',    label: 'Price Targets' },
+// ── Sidebar icons (inline SVG, no icon library needed) ────────────────────────
+
+const Icons = {
+  market: (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+      <rect x="1" y="9" width="3" height="6" rx="0.5"/>
+      <rect x="6" y="5" width="3" height="10" rx="0.5"/>
+      <rect x="11" y="1" width="3" height="14" rx="0.5"/>
+    </svg>
+  ),
+  watchlist: (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+      <path d="M8 2.5C4.4 2.5 1 5.3 1 8s3.4 5.5 7 5.5S15 10.7 15 8 11.6 2.5 8 2.5zm0 9a3.5 3.5 0 110-7 3.5 3.5 0 010 7zm0-5.5a2 2 0 100 4 2 2 0 000-4z"/>
+    </svg>
+  ),
+  portfolio: (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+      <path d="M5.5 2A1.5 1.5 0 004 3.5V4H2a1 1 0 00-1 1v8a1 1 0 001 1h12a1 1 0 001-1V5a1 1 0 00-1-1h-2v-.5A1.5 1.5 0 0010.5 2h-5zm0 1.5h5V4h-5v-.5z"/>
+    </svg>
+  ),
+  research: (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+      <path d="M11.2 10.1a5.5 5.5 0 10-1.1 1.1l3.1 3.1 1.1-1.1-3.1-3.1zm-4.7.9a4 4 0 110-8 4 4 0 010 8z"/>
+    </svg>
+  ),
+  sectors: (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+      <path d="M8 1.5A6.5 6.5 0 1014.5 8H8V1.5zm1.5-.1V6.5H15A6.52 6.52 0 009.5 1.4z"/>
+    </svg>
+  ),
+  trading: (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+      <path d="M8.8 1.2L5.5 8.5H9l-2 6.3 7.5-8.8H11L13.5 1.2z"/>
+    </svg>
+  ),
+  ai: (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+      <path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/>
+      <path d="M13 11l.75 2.25L16 14l-2.25.75L13 17l-.75-2.25L10 14l2.25-.75z" opacity="0.5"/>
+    </svg>
+  ),
+  chevron: (
+    <svg viewBox="0 0 16 16" className="w-3 h-3 shrink-0" fill="currentColor">
+      <path d="M4.5 6l3.5 3.5L11.5 6"/>
+    </svg>
+  ),
+}
+
+// ── Navigation groups ─────────────────────────────────────────────────────────
+
+const NAV_GROUPS = [
+  {
+    id: 'market',
+    label: 'Market',
+    icon: Icons.market,
+    items: [
+      { id: 'market',          label: 'Overview' },
+      { id: 'recommendations', label: 'Recommendations' },
+      { id: 'breadth',         label: 'Breadth' },
+      { id: 'macro',           label: 'Macro Calendar' },
+    ],
+  },
+  {
+    id: 'watchlist',
+    label: 'Watchlist',
+    icon: Icons.watchlist,
+    items: [
+      { id: 'watchlist',     label: 'Watchlist' },
+      { id: 'pricetargets',  label: 'Price Targets' },
+      { id: 'richearnings',  label: 'Earnings+' },
+      { id: 'newssentiment', label: 'Sentiment' },
+    ],
+  },
+  {
+    id: 'portfolio',
+    label: 'Portfolio',
+    icon: Icons.portfolio,
+    items: [
+      { id: 'portfolio',      label: 'Portfolio' },
+      { id: 'optionstracker', label: 'Options P&L' },
+      { id: 'journal',        label: 'Trade Journal' },
+    ],
+  },
+  {
+    id: 'research',
+    label: 'Research',
+    icon: Icons.research,
+    items: [
+      { id: 'screener',     label: 'Screener' },
+      { id: 'signals',      label: 'Signals' },
+      { id: 'compare',      label: 'Chart Compare' },
+      { id: 'fundamentals', label: 'Fundamentals' },
+      { id: 'backtest',     label: 'Backtester' },
+    ],
+  },
+  {
+    id: 'sectors',
+    label: 'Sectors',
+    icon: Icons.sectors,
+    items: [
+      { id: 'sectors',        label: 'Sector Rotation' },
+      { id: 'sectormomentum', label: 'Momentum' },
+    ],
+  },
+  {
+    id: 'trading',
+    label: 'Trading',
+    icon: Icons.trading,
+    items: [
+      { id: 'daytrader',    label: 'Day Trader' },
+      { id: 'tradeideas',   label: 'Trade Ideas' },
+      { id: 'smartalerts',  label: 'Smart Alerts' },
+      { id: 'positionsize', label: 'Position Sizer' },
+    ],
+  },
+  {
+    id: 'ai',
+    label: 'AI Tools',
+    icon: Icons.ai,
+    items: [
+      { id: 'aibot',   label: 'AI Chat' },
+      { id: 'advisor', label: 'Financial Advisor' },
+    ],
+  },
 ]
+
+// ── Watchlist selector bar ────────────────────────────────────────────────────
 
 function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
   const [creating, setCreating] = useState(false)
@@ -122,6 +223,76 @@ function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
   )
 }
 
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+
+function Sidebar({ activeTab, onSelect }) {
+  const [expanded, setExpanded] = useState(() => {
+    const init = {}
+    NAV_GROUPS.forEach(g => { init[g.id] = true })
+    return init
+  })
+
+  function toggle(groupId) {
+    setExpanded(prev => ({ ...prev, [groupId]: !prev[groupId] }))
+  }
+
+  return (
+    <aside className="w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto">
+      {NAV_GROUPS.map(group => {
+        const isGroupActive = group.items.some(i => i.id === activeTab)
+        const isOpen = expanded[group.id]
+        return (
+          <div key={group.id}>
+            <button
+              onClick={() => toggle(group.id)}
+              className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors group ${
+                isGroupActive ? 'bg-gray-800/70' : 'hover:bg-gray-800/40'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`transition-colors ${isGroupActive ? 'text-emerald-400' : 'text-gray-600 group-hover:text-gray-400'}`}>
+                  {group.icon}
+                </span>
+                <span className={`text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                  isGroupActive ? 'text-emerald-400' : 'text-gray-500 group-hover:text-gray-300'
+                }`}>
+                  {group.label}
+                </span>
+              </div>
+              <span className={`text-gray-600 transition-transform duration-150 ${isOpen ? '' : '-rotate-90'}`}>
+                ▾
+              </span>
+            </button>
+
+            {isOpen && (
+              <div className="pb-0.5">
+                {group.items.map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => onSelect(item.id)}
+                    className={`w-full text-left text-[13px] pl-9 pr-3 py-1.5 transition-colors relative ${
+                      activeTab === item.id
+                        ? 'text-emerald-400 bg-emerald-900/20'
+                        : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40'
+                    }`}
+                  >
+                    {activeTab === item.id && (
+                      <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-emerald-500 rounded-r" />
+                    )}
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </aside>
+  )
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [activeTab, setActiveTab]   = useState('market')
   const [watchlist, setWatchlist]   = useState([])
@@ -150,12 +321,10 @@ export default function App() {
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
   )
 
-  // Load all watchlist names
   useEffect(() => {
     fetch('/api/watchlists').then(r => r.json()).then(setAllLists).catch(() => {})
   }, [])
 
-  // Load watchlist for active list; migrate localStorage on first empty default load
   useEffect(() => {
     fetch(`/api/watchlist?list=${activeList}`)
       .then(r => r.json())
@@ -182,7 +351,6 @@ export default function App() {
       .catch(() => setWatchlist(activeList === 'default' ? DEFAULT_WATCHLIST : []))
   }, [activeList])
 
-  // Keep alertsRef in sync so WebSocket and fetchQuotes can read latest alerts without stale closure
   useEffect(() => { alertsRef.current = alerts }, [alerts])
 
   const requestNotifPermission = useCallback(async () => {
@@ -207,14 +375,15 @@ export default function App() {
       setPriceFlash(newFlash)
       flashTimerRef.current = setTimeout(() => setPriceFlash({}), 1200)
     }
-    const quoteMap = {}
-    data.forEach(q => { quoteMap[q.symbol] = q })
     setQuotes(prev => {
       const next = { ...prev }
       data.forEach(q => { next[q.symbol] = q })
       return next
     })
     setLastUpdated(new Date())
+
+    const quoteMap = {}
+    data.forEach(q => { quoteMap[q.symbol] = q })
     const activeAlerts = alertsRef.current.filter(a => a.status === 'active')
     const nowTriggered = activeAlerts.filter(a => {
       const q = quoteMap[a.symbol]
@@ -257,7 +426,6 @@ export default function App() {
     }
   }
 
-  // WebSocket live price feed
   const watchlistKey = watchlist.join(',')
   useEffect(() => {
     if (!watchlist.length) return
@@ -272,9 +440,7 @@ export default function App() {
       ws.onopen  = () => setWsConnected(true)
       ws.onclose = () => {
         setWsConnected(false)
-        if (!intentionalClose) {
-          reconnectTimeout = setTimeout(connect, 5000)
-        }
+        if (!intentionalClose) reconnectTimeout = setTimeout(connect, 5000)
       }
       ws.onerror = () => ws.close()
       ws.onmessage = (e) => {
@@ -291,7 +457,6 @@ export default function App() {
     }
   }, [watchlistKey])
 
-  // Load alerts from DB on mount
   useEffect(() => {
     fetch('/api/alerts')
       .then(r => r.json())
@@ -299,7 +464,6 @@ export default function App() {
       .catch(() => {})
   }, [])
 
-  // Load portfolio symbols so earnings calendar covers portfolio positions too
   useEffect(() => {
     fetch('/api/portfolio')
       .then(r => r.json())
@@ -307,7 +471,6 @@ export default function App() {
       .catch(() => {})
   }, [])
 
-  // Fetch upcoming earnings whenever watchlist or portfolio symbols change
   useEffect(() => {
     const allSyms = [...new Set([...watchlist, ...portfolioSymbols])]
     if (!allSyms.length) return
@@ -401,8 +564,11 @@ export default function App() {
     if (activeList === name) setActiveList('default')
   }
 
+  const earningsMap = Object.fromEntries(earnings.map(e => [e.symbol, e]))
+  const allSymbols  = [...new Set([...watchlist, ...portfolioSymbols])]
+
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="flex flex-col h-screen bg-gray-950 text-gray-100 overflow-hidden">
       <Header
         loading={loading}
         error={error}
@@ -417,31 +583,12 @@ export default function App() {
         onRequestNotif={requestNotifPermission}
       />
 
-      {/* Top-level tab bar */}
-      <nav className="bg-gray-900 border-b border-gray-800 px-4">
-        <div className="flex gap-1">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-2.5 px-4 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                activeTab === tab.id
-                  ? 'border-emerald-500 text-emerald-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </nav>
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar activeTab={activeTab} onSelect={setActiveTab} />
 
-      <main>
-        {activeTab === 'watchlist' && (() => {
-          const earningsMap = Object.fromEntries(earnings.map(e => [e.symbol, e]))
-          return (
+        <main className="flex-1 overflow-y-auto">
+          {activeTab === 'watchlist' && (
             <div className="p-4">
-              {/* Multi-watchlist selector */}
               <WatchlistBar
                 lists={allLists}
                 active={activeList}
@@ -461,40 +608,32 @@ export default function App() {
                 earningsMap={earningsMap}
               />
             </div>
-          )
-        })()}
-        {activeTab === 'market'          && <MarketSummary />}
-        {activeTab === 'recommendations' && <MarketRecommendations />}
-        {activeTab === 'portfolio'       && <PortfolioTracker />}
-        {activeTab === 'daytrader'       && <DayTrader />}
-        {activeTab === 'screener'        && <Screener />}
-        {activeTab === 'journal'         && <TradeJournal />}
-        {activeTab === 'macro'           && <MacroCalendar />}
-        {activeTab === 'sectors'         && <SectorDashboard />}
-        {activeTab === 'compare'         && <StockComparison />}
-        {activeTab === 'backtest'        && <Backtester />}
-        {activeTab === 'aibot'           && <AiBot />}
-        {activeTab === 'advisor'         && <FinancialAdvisor />}
-        {activeTab === 'signals'         && (
-          <TechnicalSignals symbols={[...new Set([...watchlist, ...portfolioSymbols])]} />
-        )}
-        {activeTab === 'tradeideas'      && (
-          <TradeIdeas watchlist={watchlist} quotes={quotes} alerts={alerts} />
-        )}
-        {activeTab === 'smartalerts'    && <SmartAlerts />}
-        {activeTab === 'positionsize'   && <PositionSizer />}
-        {activeTab === 'richearnings'   && (
-          <RichEarningsCalendar symbols={[...new Set([...watchlist, ...portfolioSymbols])]} />
-        )}
-        {activeTab === 'newssentiment'  && (
-          <NewsSentiment symbols={watchlist} />
-        )}
-        {activeTab === 'optionstracker' && <OptionsTracker />}
-        {activeTab === 'sectormomentum' && <SectorMomentum />}
-        {activeTab === 'breadth'        && <MarketBreadth />}
-        {activeTab === 'fundamentals'   && <FundamentalComparison />}
-        {activeTab === 'pricetargets'   && <PriceTargets />}
-      </main>
+          )}
+          {activeTab === 'market'          && <MarketSummary />}
+          {activeTab === 'recommendations' && <MarketRecommendations />}
+          {activeTab === 'portfolio'       && <PortfolioTracker />}
+          {activeTab === 'daytrader'       && <DayTrader />}
+          {activeTab === 'screener'        && <Screener />}
+          {activeTab === 'journal'         && <TradeJournal />}
+          {activeTab === 'macro'           && <MacroCalendar />}
+          {activeTab === 'sectors'         && <SectorDashboard />}
+          {activeTab === 'compare'         && <StockComparison />}
+          {activeTab === 'backtest'        && <Backtester />}
+          {activeTab === 'aibot'           && <AiBot />}
+          {activeTab === 'advisor'         && <FinancialAdvisor />}
+          {activeTab === 'signals'         && <TechnicalSignals symbols={allSymbols} />}
+          {activeTab === 'tradeideas'      && <TradeIdeas watchlist={watchlist} quotes={quotes} alerts={alerts} />}
+          {activeTab === 'smartalerts'     && <SmartAlerts />}
+          {activeTab === 'positionsize'    && <PositionSizer />}
+          {activeTab === 'richearnings'    && <RichEarningsCalendar symbols={allSymbols} />}
+          {activeTab === 'newssentiment'   && <NewsSentiment symbols={watchlist} />}
+          {activeTab === 'optionstracker'  && <OptionsTracker />}
+          {activeTab === 'sectormomentum'  && <SectorMomentum />}
+          {activeTab === 'breadth'         && <MarketBreadth />}
+          {activeTab === 'fundamentals'    && <FundamentalComparison />}
+          {activeTab === 'pricetargets'    && <PriceTargets />}
+        </main>
+      </div>
 
       {chartSymbol && (
         <ChartModal
@@ -516,7 +655,6 @@ export default function App() {
         />
       )}
 
-      {/* Toast notifications — bottom-right */}
       <div className="fixed bottom-5 right-5 z-[200] flex flex-col gap-2 pointer-events-none">
         {toasts.map(t => (
           <div key={t._toastId} className="pointer-events-auto">

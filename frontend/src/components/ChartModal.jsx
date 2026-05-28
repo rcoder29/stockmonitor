@@ -10,6 +10,7 @@ import SentimentPanel from './SentimentPanel'
 import FilingsPanel from './FilingsPanel'
 import EarningsPlayCalc from './EarningsPlayCalc'
 import OptionsStrategies from './OptionsStrategies'
+import EarningsCallSummary from './EarningsCallSummary'
 
 // ── Technical indicator calculations ─────────────────────────────────────────
 
@@ -489,6 +490,7 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
           {tab === 'earnings' && (
             <>
+              <EarningsCallSummary symbol={symbol} />
               <EarningsPlayCalc symbol={symbol} currentPrice={quote?.price} />
               <EarningsPanel symbol={symbol} />
             </>
