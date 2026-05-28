@@ -9,6 +9,7 @@ import InstitutionalPanel from './InstitutionalPanel'
 import SentimentPanel from './SentimentPanel'
 import FilingsPanel from './FilingsPanel'
 import EarningsPlayCalc from './EarningsPlayCalc'
+import OptionsStrategies from './OptionsStrategies'
 
 // ── Technical indicator calculations ─────────────────────────────────────────
 
@@ -396,7 +397,7 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
         {/* Tabs */}
         <div className="flex border-b border-gray-800 px-6 shrink-0">
-          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals'], ['news', 'News'], ['earnings', 'Earnings'], ['options', 'Options'], ['insider', 'Insider'], ['analyst', 'Analyst'], ['institutional', 'Institutional'], ['sentiment', 'Sentiment'], ['filings', 'Filings']].map(([val, label]) => (
+          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals'], ['news', 'News'], ['earnings', 'Earnings'], ['options', 'Options'], ['strategies', 'Strategies'], ['insider', 'Insider'], ['analyst', 'Analyst'], ['institutional', 'Institutional'], ['sentiment', 'Sentiment'], ['filings', 'Filings']].map(([val, label]) => (
             <button
               key={val}
               onClick={() => setTab(val)}
@@ -493,7 +494,8 @@ export default function ChartModal({ symbol, quote, onClose }) {
             </>
           )}
 
-          {tab === 'options'  && <OptionsChain symbol={symbol} />}
+          {tab === 'options'     && <OptionsChain symbol={symbol} />}
+          {tab === 'strategies'  && <OptionsStrategies symbol={symbol} currentPrice={quote?.price} />}
 
           {tab === 'insider'  && <InsiderPanel symbol={symbol} />}
 

@@ -3023,6 +3023,374 @@ async def screener_nlp(req: NLPScreenRequest):
         raise HTTPException(500, f"NLP screener error: {e}")
 
 
+# ── Multi-timeframe Technical Signals ─────────────────────────────────────────
+
+_SIGNAL_TTL = timedelta(minutes=30)
+
+def _ema_np(arr: np.ndarray, period: int) -> np.ndarray:
+    k = 2.0 / (period + 1)
+    out = np.full(len(arr), np.nan)
+    if len(arr) < period:
+        return out
+    out[period - 1] = float(arr[:period].mean())
+    for i in range(period, len(arr)):
+        out[i] = arr[i] * k + out[i - 1] * (1 - k)
+    return out
+
+
+def _signal_for(closes: np.ndarray, short_ma: int, long_ma: int, rsi_period: int) -> dict:
+    n = len(closes)
+    if n < long_ma + 1:
+        return {"trend": "neutral", "rsi": None, "macd": "neutral", "bb_pct": None}
+
+    sma_short = float(np.mean(closes[-short_ma:]))
+    sma_long  = float(np.mean(closes[-long_ma:]))
+    last      = float(closes[-1])
+
+    if last > sma_short > sma_long:
+        trend = "bullish"
+    elif last < sma_short < sma_long:
+        trend = "bearish"
+    else:
+        trend = "neutral"
+
+    # RSI
+    ser   = pd.Series(closes)
+    rsi_s = _calc_rsi(ser, rsi_period)
+    rsi_v = None if rsi_s.empty else float(rsi_s.iloc[-1])
+
+    # MACD (12/26 EMA crossover direction)
+    ema12 = _ema_np(closes, 12)
+    ema26 = _ema_np(closes, 26)
+    macd_line = ema12 - ema26
+    macd = "neutral"
+    if not np.isnan(macd_line[-1]) and not np.isnan(macd_line[-2]):
+        if macd_line[-1] > 0 and macd_line[-1] > macd_line[-2]:
+            macd = "bullish"
+        elif macd_line[-1] < 0 and macd_line[-1] < macd_line[-2]:
+            macd = "bearish"
+
+    # Bollinger %B (20-period)
+    bb_pct = None
+    if n >= 20:
+        roll   = pd.Series(closes).rolling(20)
+        mid    = float(roll.mean().iloc[-1])
+        std    = float(roll.std().iloc[-1])
+        if std > 0:
+            bb_pct = round((last - (mid - 2 * std)) / (4 * std) * 100, 1)
+
+    return {
+        "trend":  trend,
+        "rsi":    round(rsi_v, 1) if rsi_v is not None else None,
+        "macd":   macd,
+        "bb_pct": bb_pct,
+    }
+
+
+def _compute_signals(symbol: str) -> dict:
+    cache_key = f"signals:{symbol}"
+    cached = cache_get(cache_key, _SIGNAL_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        t = yf.Ticker(symbol, session=_session)
+        hist = t.history(period="1y", interval="1d", auto_adjust=True)
+        if hist.empty:
+            return {"symbol": symbol, "error": "no data"}
+        closes = hist["Close"].dropna().values.astype(float)
+
+        result = {
+            "symbol": symbol,
+            "1D":  _signal_for(closes[-20:],  5,  10, 5)  if len(closes) >= 10 else None,
+            "1W":  _signal_for(closes[-63:],  10, 20, 9)  if len(closes) >= 20 else None,
+            "1M":  _signal_for(closes,        20, 50, 14) if len(closes) >= 50 else None,
+            "3M":  _signal_for(closes,        50, 200, 14) if len(closes) >= 200 else None,
+        }
+        cache_set(cache_key, result)
+        return result
+    except Exception as e:
+        logger.warning("signals failed for %s: %s", symbol, e)
+        return {"symbol": symbol, "error": str(e)}
+
+
+class SignalsRequest(BaseModel):
+    symbols: List[str]
+
+
+@app.post("/api/screener/signals")
+def get_signals(req: SignalsRequest):
+    symbols = [s.upper().strip() for s in req.symbols[:25]]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_compute_signals, s): s for s in symbols}
+        results = []
+        for f in as_completed(futures):
+            try:
+                results.append(f.result())
+            except Exception as e:
+                results.append({"symbol": futures[f], "error": str(e)})
+    results.sort(key=lambda r: symbols.index(r["symbol"]) if r["symbol"] in symbols else 999)
+    return results
+
+
+# ── Options Strategy Builder ───────────────────────────────────────────────────
+
+_STRATEGY_TTL = timedelta(hours=1)
+
+
+def _compute_strategies(symbol: str, view: str) -> dict:
+    cache_key = f"strategies:{symbol}:{view}"
+    cached = cache_get(cache_key, _STRATEGY_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        t    = yf.Ticker(symbol, session=_session)
+        info = t.fast_info
+        price = float(info.last_price)
+        if not price:
+            raise ValueError("no price")
+
+        exps = t.options
+        if not exps:
+            raise ValueError("no options")
+        expiry = exps[0]
+        chain  = t.option_chain(expiry)
+        calls  = chain.calls
+        puts   = chain.puts
+
+        def nearest_strike(df, target):
+            idx = (df["strike"] - target).abs().idxmin()
+            return df.loc[idx]
+
+        def next_strike_above(df, target):
+            above = df[df["strike"] > target]
+            return above.iloc[0] if not above.empty else None
+
+        def next_strike_below(df, target):
+            below = df[df["strike"] < target]
+            return below.iloc[-1] if not below.empty else None
+
+        atm_call = nearest_strike(calls, price)
+        atm_put  = nearest_strike(puts,  price)
+        atm_strike = float(atm_call["strike"])
+
+        otm_call = next_strike_above(calls, atm_strike)
+        otm_put  = next_strike_below(puts,  atm_strike)
+
+        def mid(row):
+            b, a = float(row.get("bid", 0) or 0), float(row.get("ask", 0) or 0)
+            lp   = float(row.get("lastPrice", 0) or 0)
+            return round((b + a) / 2 if a > b > 0 else lp, 2)
+
+        strategies = []
+
+        if view in ("bullish", "neutral"):
+            # Long Call
+            c_mid = mid(atm_call)
+            strategies.append({
+                "name": "Long Call",
+                "legs": [{"type": "call", "strike": atm_strike, "action": "buy", "cost": c_mid}],
+                "max_profit": "unlimited",
+                "max_loss": round(c_mid * 100, 2),
+                "breakeven": round(atm_strike + c_mid, 2),
+                "cost_debit": round(c_mid * 100, 2),
+                "pop_pct": round(float(atm_call.get("inTheMoney", False)) * 0 + (1 - float(atm_call.get("delta", 0.5) or 0.5)) * 100, 1),
+            })
+
+        if view == "bullish" and otm_call is not None:
+            # Bull Call Spread
+            buy_cost  = mid(atm_call)
+            sell_cost = mid(otm_call)
+            net_debit = round(buy_cost - sell_cost, 2)
+            width     = round(float(otm_call["strike"]) - atm_strike, 2)
+            strategies.append({
+                "name": "Bull Call Spread",
+                "legs": [
+                    {"type": "call", "strike": atm_strike, "action": "buy",  "cost": buy_cost},
+                    {"type": "call", "strike": float(otm_call["strike"]), "action": "sell", "cost": sell_cost},
+                ],
+                "max_profit": round((width - net_debit) * 100, 2),
+                "max_loss":   round(net_debit * 100, 2),
+                "breakeven":  round(atm_strike + net_debit, 2),
+                "cost_debit": round(net_debit * 100, 2),
+                "pop_pct":    None,
+            })
+
+        if view in ("bearish", "neutral"):
+            # Long Put
+            p_mid = mid(atm_put)
+            strategies.append({
+                "name": "Long Put",
+                "legs": [{"type": "put", "strike": atm_strike, "action": "buy", "cost": p_mid}],
+                "max_profit": round((atm_strike - p_mid) * 100, 2),
+                "max_loss":   round(p_mid * 100, 2),
+                "breakeven":  round(atm_strike - p_mid, 2),
+                "cost_debit": round(p_mid * 100, 2),
+                "pop_pct":    None,
+            })
+
+        if view == "bearish" and otm_put is not None:
+            # Bear Put Spread
+            buy_cost  = mid(atm_put)
+            sell_cost = mid(otm_put)
+            net_debit = round(buy_cost - sell_cost, 2)
+            width     = round(atm_strike - float(otm_put["strike"]), 2)
+            strategies.append({
+                "name": "Bear Put Spread",
+                "legs": [
+                    {"type": "put", "strike": atm_strike, "action": "buy",  "cost": buy_cost},
+                    {"type": "put", "strike": float(otm_put["strike"]), "action": "sell", "cost": sell_cost},
+                ],
+                "max_profit": round((width - net_debit) * 100, 2),
+                "max_loss":   round(net_debit * 100, 2),
+                "breakeven":  round(atm_strike - net_debit, 2),
+                "cost_debit": round(net_debit * 100, 2),
+                "pop_pct":    None,
+            })
+
+        if view == "neutral":
+            # Long Straddle
+            c_mid = mid(atm_call)
+            p_mid = mid(atm_put)
+            total = round(c_mid + p_mid, 2)
+            strategies.append({
+                "name": "Long Straddle",
+                "legs": [
+                    {"type": "call", "strike": atm_strike, "action": "buy", "cost": c_mid},
+                    {"type": "put",  "strike": atm_strike, "action": "buy", "cost": p_mid},
+                ],
+                "max_profit": "unlimited",
+                "max_loss":   round(total * 100, 2),
+                "breakeven":  f"${round(atm_strike - total, 2)} / ${round(atm_strike + total, 2)}",
+                "cost_debit": round(total * 100, 2),
+                "pop_pct":    None,
+            })
+
+        if view in ("bullish", "neutral"):
+            # Cash-Secured Put (sell ATM put)
+            p_mid = mid(atm_put)
+            strategies.append({
+                "name": "Cash-Secured Put",
+                "legs": [{"type": "put", "strike": atm_strike, "action": "sell", "cost": p_mid}],
+                "max_profit": round(p_mid * 100, 2),
+                "max_loss":   round((atm_strike - p_mid) * 100, 2),
+                "breakeven":  round(atm_strike - p_mid, 2),
+                "cost_debit": round(-p_mid * 100, 2),
+                "pop_pct":    None,
+            })
+
+        result = {
+            "symbol": symbol,
+            "price":  round(price, 2),
+            "expiry": expiry,
+            "view":   view,
+            "strategies": strategies,
+        }
+        cache_set(cache_key, result)
+        return result
+    except Exception as e:
+        logger.warning("strategies failed for %s: %s", symbol, e)
+        raise HTTPException(500, f"Strategy computation failed: {e}")
+
+
+@app.get("/api/options/strategies/{symbol}")
+async def get_options_strategies(symbol: str, view: str = "bullish"):
+    sym = symbol.upper().strip()
+    if view not in ("bullish", "bearish", "neutral"):
+        raise HTTPException(400, "view must be bullish, bearish, or neutral")
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: _compute_strategies(sym, view))
+
+
+# ── Claude Trade Idea Generator ───────────────────────────────────────────────
+
+_TRADE_IDEA_SYSTEM = """You are a professional equity and options trader generating specific, actionable trade ideas.
+Given a watchlist snapshot and any triggered price alerts, produce 3–5 trade ideas.
+
+For each idea output EXACTLY this markdown format (no deviations):
+
+## [TICKER] — [Strategy Name]
+
+**Thesis:** One sentence on why this trade makes sense right now.
+
+**Entry:** $XX.XX  |  **Stop:** $XX.XX  |  **Target:** $XX.XX  |  **R/R:** X:X
+
+**Catalyst:** What could drive the move (earnings, breakout, mean-reversion, etc.)
+
+---
+
+Rules:
+- Base ideas on the data provided — price levels, change %, technicals implied by proximity to 52W high/low
+- Mix directional and income strategies where appropriate
+- Each idea must have a concrete entry, stop, and target
+- Keep each idea under 6 lines
+- Do not add disclaimers or preamble — go straight to ideas"""
+
+
+class TradeIdeaRequest(BaseModel):
+    watchlist: List[str]
+    quotes: dict = {}
+    alerts: List[dict] = []
+
+
+@app.post("/api/trade-ideas")
+def get_trade_ideas(req: TradeIdeaRequest):
+    lines = ["# Watchlist Snapshot\n"]
+    for sym in req.watchlist:
+        q = req.quotes.get(sym, {})
+        price   = q.get("price")
+        chg_pct = q.get("changePercent")
+        pe      = q.get("pe")
+        w52h    = q.get("week52High")
+        w52l    = q.get("week52Low")
+
+        parts = [sym]
+        if price:
+            parts.append(f"${price:.2f}")
+        if chg_pct is not None:
+            sign = "+" if chg_pct >= 0 else ""
+            parts.append(f"{sign}{chg_pct:.2f}%")
+        if pe:
+            parts.append(f"P/E {pe:.1f}")
+        if price and w52h:
+            pct_from_high = (price / w52h - 1) * 100
+            parts.append(f"{pct_from_high:+.1f}% from 52W high")
+        if price and w52l:
+            pct_from_low  = (price / w52l - 1) * 100
+            parts.append(f"+{pct_from_low:.1f}% from 52W low")
+        lines.append("  ".join(parts))
+
+    if req.alerts:
+        lines.append("\n# Triggered Alerts")
+        for a in req.alerts[:10]:
+            lines.append(f"- {a.get('symbol')} {a.get('type','').upper()} alert at ${a.get('price','')} (target ${a.get('target','')})")
+
+    user_msg = "\n".join(lines)
+
+    def generate():
+        try:
+            client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=2048,
+                system=_TRADE_IDEA_SYSTEM,
+                messages=[{"role": "user", "content": user_msg}],
+            ) as stream:
+                for text in stream.text_stream:
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as exc:
+            logger.error("trade ideas error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
