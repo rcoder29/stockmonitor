@@ -30,6 +30,7 @@ import PriceTargets from './components/PriceTargets'
 import DcfCalculator from './components/DcfCalculator'
 import YieldCurve from './components/YieldCurve'
 import UnusualOptions from './components/UnusualOptions'
+import UserGuide from './components/UserGuide'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -158,6 +159,18 @@ const NAV_GROUPS = [
     items: [
       { id: 'aibot',   label: 'AI Chat' },
       { id: 'advisor', label: 'Financial Advisor' },
+    ],
+  },
+  {
+    id: 'help',
+    label: 'Help',
+    icon: (
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+        <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 11a1 1 0 110-2 1 1 0 010 2zm1-3.5c0 .28-.22.5-.5.5h-1a.5.5 0 01-.5-.5v-.25C7 7.01 8.5 6.5 8.5 5.5c0-.55-.45-1-1-1s-1 .45-1 1H5c0-1.65 1.35-3 3-3s3 1.35 3 3c0 1.5-1.5 2-1.5 3.5H9z"/>
+      </svg>
+    ),
+    items: [
+      { id: 'guide', label: 'User Guide' },
     ],
   },
 ]
@@ -675,6 +688,7 @@ export default function App() {
           {activeTab === 'pricetargets'    && <PriceTargets />}
           {activeTab === 'dcf'             && <DcfCalculator />}
           {activeTab === 'uoa'             && <UnusualOptions symbols={watchlist} />}
+          {activeTab === 'guide'           && <UserGuide />}
         </main>
       </div>
 
