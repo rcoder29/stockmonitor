@@ -24,6 +24,9 @@ import RichEarningsCalendar from './components/RichEarningsCalendar'
 import NewsSentiment from './components/NewsSentiment'
 import OptionsTracker from './components/OptionsTracker'
 import SectorMomentum from './components/SectorMomentum'
+import MarketBreadth from './components/MarketBreadth'
+import FundamentalComparison from './components/FundamentalComparison'
+import PriceTargets from './components/PriceTargets'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -49,6 +52,9 @@ const TABS = [
   { id: 'newssentiment',   label: 'Sentiment' },
   { id: 'optionstracker',  label: 'Options P&L' },
   { id: 'sectormomentum',  label: 'Sector Momentum' },
+  { id: 'breadth',         label: 'Market Breadth' },
+  { id: 'fundamentals',    label: 'Compare' },
+  { id: 'pricetargets',    label: 'Price Targets' },
 ]
 
 function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
@@ -485,6 +491,9 @@ export default function App() {
         )}
         {activeTab === 'optionstracker' && <OptionsTracker />}
         {activeTab === 'sectormomentum' && <SectorMomentum />}
+        {activeTab === 'breadth'        && <MarketBreadth />}
+        {activeTab === 'fundamentals'   && <FundamentalComparison />}
+        {activeTab === 'pricetargets'   && <PriceTargets />}
       </main>
 
       {chartSymbol && (
