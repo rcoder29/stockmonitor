@@ -57,6 +57,16 @@ class TradeJournalEntry(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class PortfolioSnapshot(Base):
+    """Daily portfolio value snapshots for the equity curve."""
+    __tablename__ = "portfolio_snapshots"
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    date        = Column(String(10), unique=True, nullable=False)   # YYYY-MM-DD
+    total_value = Column(Float, nullable=False)
+    total_cost  = Column(Float, nullable=False)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
 class PriceAlert(Base):
     __tablename__ = "price_alerts"
     id            = Column(Integer, primary_key=True, autoincrement=True)

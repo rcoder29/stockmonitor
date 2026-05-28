@@ -365,6 +365,9 @@ export default function Screener() {
     { field: 'peRatio', op: 'lt', value: '20', value2: '' },
     { field: 'profitMargin', op: 'gt', value: '10', value2: '' },
   ])
+  const [nlpQuery,       setNlpQuery]       = useState('')
+  const [nlpLoading,     setNlpLoading]     = useState(false)
+  const [nlpDescription, setNlpDescription] = useState('')
 
   const runScan = useCallback(async (m, key) => {
     setLoading(true); setError(null); setData(null)
@@ -409,6 +412,32 @@ export default function Screener() {
       runScan(mode, mode === 'technical' ? techScan : fundScreen)
     }
   }, [mode, techScan, fundScreen])
+
+  const runNlp = useCallback(async () => {
+    if (!nlpQuery.trim()) return
+    setNlpLoading(true); setError(null); setData(null); setNlpDescription('')
+    try {
+      const r = await fetch('/api/screener/nlp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: nlpQuery }),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      const resp = await r.json()
+      setNlpDescription(resp.description ?? '')
+      if (resp.filters?.length) {
+        setCustomFilters(resp.filters.map(f => ({
+          field: f.field,
+          op: f.op,
+          value: String(f.value ?? ''),
+          value2: f.value2 != null ? String(f.value2) : '',
+        })))
+      }
+      setData(resp.results ?? [])
+      setLastRun(new Date())
+    } catch (e) { setError(e.message) }
+    finally { setNlpLoading(false) }
+  }, [nlpQuery])
 
   function changeFilter(idx, key, val) {
     setCustomFilters(prev => prev.map((f, i) => i === idx ? { ...f, [key]: val } : f))
@@ -484,6 +513,32 @@ export default function Screener() {
       {/* Custom filter builder */}
       {mode === 'custom' && (
         <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5 mb-5 space-y-4">
+          {/* NLP input */}
+          <div className="space-y-2 pb-4 border-b border-gray-800">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-purple-400 font-semibold uppercase tracking-widest">Ask Claude</span>
+              <span className="text-gray-600 text-xs">Describe what you're looking for in plain English</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={nlpQuery}
+                onChange={e => setNlpQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') runNlp() }}
+                placeholder="e.g. profitable tech companies under $50B market cap with strong revenue growth"
+                className="flex-1 bg-gray-800 border border-gray-700 text-white placeholder-gray-600 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-purple-500 transition-colors"
+              />
+              <button onClick={runNlp} disabled={nlpLoading || !nlpQuery.trim()}
+                className="bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-xs px-4 py-2 rounded-lg transition-colors font-medium whitespace-nowrap">
+                {nlpLoading ? 'Asking Claude…' : 'Ask Claude'}
+              </button>
+            </div>
+            {nlpDescription && (
+              <div className="text-purple-300 text-xs bg-purple-900/20 border border-purple-800/30 rounded-lg px-3 py-2">
+                {nlpDescription}
+              </div>
+            )}
+          </div>
+
           <div className="text-gray-400 text-xs uppercase tracking-widest">Filter Builder — S&P 100 Universe</div>
           <div className="space-y-2.5">
             {customFilters.map((f, i) => (

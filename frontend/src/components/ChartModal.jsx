@@ -8,6 +8,7 @@ import AnalystPanel from './AnalystPanel'
 import InstitutionalPanel from './InstitutionalPanel'
 import SentimentPanel from './SentimentPanel'
 import FilingsPanel from './FilingsPanel'
+import EarningsPlayCalc from './EarningsPlayCalc'
 
 // ── Technical indicator calculations ─────────────────────────────────────────
 
@@ -485,7 +486,12 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
           {tab === 'news' && <NewsPanel symbol={symbol} />}
 
-          {tab === 'earnings' && <EarningsPanel symbol={symbol} />}
+          {tab === 'earnings' && (
+            <>
+              <EarningsPlayCalc symbol={symbol} currentPrice={quote?.price} />
+              <EarningsPanel symbol={symbol} />
+            </>
+          )}
 
           {tab === 'options'  && <OptionsChain symbol={symbol} />}
 

@@ -988,6 +988,182 @@ const PORT_COLS = [
   { label: '',             align: 'text-right', key: null },
 ]
 
+// ── Equity Curve View ─────────────────────────────────────────────────────────
+
+function EquityCurveChart({ snapshots }) {
+  if (snapshots.length < 2) return null
+  const W = 800, H = 200, PL = 72, PR = 12, PT = 12, PB = 28
+  const vals  = snapshots.map(s => s.total_value)
+  const costs = snapshots.map(s => s.total_cost)
+  const lo  = Math.min(...vals, ...costs) * 0.995
+  const hi  = Math.max(...vals, ...costs) * 1.005
+  const n   = snapshots.length
+  const toX = i => PL + (i / (n - 1)) * (W - PL - PR)
+  const toY = v => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB)
+
+  const valPath  = snapshots.map((s, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(s.total_value).toFixed(1)}`).join(' ')
+  const costPath = snapshots.map((s, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(s.total_cost).toFixed(1)}`).join(' ')
+
+  const yTicks = [lo, (lo + hi) / 2, hi]
+  const fmtM = v => v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : `$${(v / 1000).toFixed(0)}K`
+
+  const xLabels = [0, Math.floor((n - 1) / 2), n - 1].map(i => ({
+    i,
+    label: snapshots[i]?.date?.slice(0, 10) ?? '',
+  }))
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 200 }}>
+      {yTicks.map(v => (
+        <g key={v}>
+          <line x1={PL} y1={toY(v)} x2={W - PR} y2={toY(v)} stroke="#1f2937" strokeWidth="1" />
+          <text x={PL - 4} y={toY(v)} textAnchor="end" dominantBaseline="middle" fill="#4b5563" fontSize="9">{fmtM(v)}</text>
+        </g>
+      ))}
+      {xLabels.map(({ i, label }) => (
+        <text key={i} x={toX(i)} y={H - 4} textAnchor="middle" fill="#4b5563" fontSize="9">{label}</text>
+      ))}
+      <path d={costPath} fill="none" stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4,3" />
+      <path d={valPath}  fill="none" stroke="#10b981" strokeWidth="2" />
+    </svg>
+  )
+}
+
+function EquityView() {
+  const [snapshots,   setSnapshots]   = useState([])
+  const [attribution, setAttribution] = useState(null)
+  const [saving,      setSaving]      = useState(false)
+  const [snapLoading, setSnapLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/portfolio/snapshots')
+      .then(r => r.json())
+      .then(setSnapshots)
+      .catch(() => {})
+      .finally(() => setSnapLoading(false))
+  }, [])
+
+  async function saveSnapshot() {
+    setSaving(true)
+    try {
+      const r = await fetch('/api/portfolio/snapshot', { method: 'POST' })
+      const data = await r.json()
+      setAttribution(data)
+      const today = data.date
+      setSnapshots(prev => {
+        const idx = prev.findIndex(s => s.date === today)
+        const entry = { date: today, total_value: data.total_value, total_cost: data.total_cost }
+        if (idx >= 0) { const n = [...prev]; n[idx] = entry; return n }
+        return [...prev, entry]
+      })
+    } catch {}
+    finally { setSaving(false) }
+  }
+
+  const last = snapshots[snapshots.length - 1]
+  const totalPL    = last ? last.total_value - last.total_cost : null
+  const totalPlPct = (last && last.total_cost > 0) ? (totalPL / last.total_cost * 100) : null
+
+  return (
+    <div className="space-y-5">
+      {/* Summary + action */}
+      <div className="flex items-center gap-4 flex-wrap">
+        {last && (
+          <>
+            <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2.5">
+              <div className="text-gray-600 text-xs uppercase tracking-wider">Portfolio Value</div>
+              <div className="text-white text-lg font-bold tabular-nums">${last.total_value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2.5">
+              <div className="text-gray-600 text-xs uppercase tracking-wider">Cost Basis</div>
+              <div className="text-white text-lg font-bold tabular-nums">${last.total_cost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            {totalPL != null && (
+              <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2.5">
+                <div className="text-gray-600 text-xs uppercase tracking-wider">Unrealized P&L</div>
+                <div className={`text-lg font-bold tabular-nums ${totalPL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {totalPL >= 0 ? '+' : '-'}${Math.abs(totalPL).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <span className="text-sm ml-1 opacity-80">({totalPlPct >= 0 ? '+' : ''}{totalPlPct?.toFixed(2)}%)</span>
+                </div>
+              </div>
+            )}
+            <div className="bg-gray-900/60 border border-gray-800 rounded-lg px-4 py-2.5">
+              <div className="text-gray-600 text-xs uppercase tracking-wider">Snapshots</div>
+              <div className="text-white text-lg font-bold tabular-nums">{snapshots.length}</div>
+            </div>
+          </>
+        )}
+        <button onClick={saveSnapshot} disabled={saving}
+          className="ml-auto bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-xs px-4 py-2 rounded-lg transition-colors font-medium">
+          {saving ? 'Saving…' : '+ Save Today\'s Snapshot'}
+        </button>
+      </div>
+
+      {/* Equity curve chart */}
+      {snapLoading && <div className="text-gray-600 text-sm text-center py-8 animate-pulse">Loading snapshots…</div>}
+      {!snapLoading && snapshots.length < 2 && (
+        <div className="flex flex-col items-center justify-center h-40 border border-dashed border-gray-700 rounded-xl text-gray-600 text-sm gap-2">
+          <span>No equity curve yet</span>
+          <span className="text-xs">Save your first snapshot to start tracking portfolio value over time</span>
+        </div>
+      )}
+      {snapshots.length >= 2 && (
+        <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-4">
+          <div className="flex items-center gap-5 mb-3">
+            <span className="text-gray-500 text-xs uppercase tracking-widest">Portfolio Value Over Time</span>
+            <span className="flex items-center gap-1.5 text-xs text-gray-500 ml-auto">
+              <span className="w-4 h-0.5 inline-block rounded bg-emerald-400" />Market Value
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="w-4 h-px inline-block border-t border-dashed border-gray-500" />Cost Basis
+            </span>
+          </div>
+          <EquityCurveChart snapshots={snapshots} />
+        </div>
+      )}
+
+      {/* Attribution table (from most recent snapshot save) */}
+      {attribution?.holdings?.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-gray-500 text-xs uppercase tracking-widest">Attribution — {attribution.date}</div>
+          <div className="overflow-x-auto rounded-lg border border-gray-800">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-800 bg-gray-900">
+                  {['Symbol', 'Shares', 'Avg Cost', 'Price', 'Mkt Value', 'P&L', 'P&L %', 'Day %', '% of Port'].map((h, i) => (
+                    <th key={h} className={`py-2.5 px-3 text-gray-500 font-medium uppercase tracking-wider ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {attribution.holdings.map(h => (
+                  <tr key={h.symbol} className="border-b border-gray-800/40 hover:bg-gray-800/20">
+                    <td className="py-2.5 px-3 text-white font-bold">{h.symbol}</td>
+                    <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{h.shares}</td>
+                    <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">${h.avg_cost.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">${h.price.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right text-white font-medium tabular-nums">${h.cur_val.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                    <td className={`py-2.5 px-3 text-right tabular-nums font-medium ${h.pl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {h.pl >= 0 ? '+' : '-'}${Math.abs(h.pl).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                    </td>
+                    <td className={`py-2.5 px-3 text-right tabular-nums ${h.pl_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {h.pl_pct >= 0 ? '+' : ''}{h.pl_pct.toFixed(2)}%
+                    </td>
+                    <td className={`py-2.5 px-3 text-right tabular-nums ${(h.changePercent ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {h.changePercent != null ? `${h.changePercent >= 0 ? '+' : ''}${h.changePercent.toFixed(2)}%` : '—'}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{h.pct_of_portfolio.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PortfolioTracker() {
   const [positions,    setPositions]    = useState([])
   const [quotes,       setQuotes]       = useState({})
@@ -1195,7 +1371,7 @@ export default function PortfolioTracker() {
         <div className="flex items-center gap-3">
           {/* View toggle */}
           <div className="flex rounded overflow-hidden border border-gray-700">
-            {[['heatmap', 'Heatmap'], ['table', 'Table'], ['exposure', 'Exposure'], ['risk', 'Risk'], ['performance', 'Performance'], ['dividends', 'Dividends'], ['correlation', 'Correlation'], ['rebalance', 'Rebalancer']].map(([id, label]) => (
+            {[['heatmap', 'Heatmap'], ['table', 'Table'], ['equity', 'Equity Curve'], ['exposure', 'Exposure'], ['risk', 'Risk'], ['performance', 'Performance'], ['dividends', 'Dividends'], ['correlation', 'Correlation'], ['rebalance', 'Rebalancer']].map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setViewMode(id)}
@@ -1343,6 +1519,13 @@ export default function PortfolioTracker() {
                 ? <div className="text-gray-600 text-sm text-center py-16">Loading risk data…</div>
                 : <RiskView positions={withWeight} totalVal={totalVal} riskData={riskData} />
               }
+            </section>
+          )}
+
+          {/* ── Equity curve view ── */}
+          {viewMode === 'equity' && (
+            <section>
+              <EquityView />
             </section>
           )}
 

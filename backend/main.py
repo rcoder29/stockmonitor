@@ -22,7 +22,7 @@ load_dotenv()
 
 from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
-    WatchlistSymbol, WatchlistGroup, PortfolioPosition, PriceAlert, TradeJournalEntry,
+    WatchlistSymbol, WatchlistGroup, PortfolioPosition, PortfolioSnapshot, PriceAlert, TradeJournalEntry,
 )
 
 # Corporate proxy uses a self-signed cert — reuse one session with SSL disabled
@@ -2782,6 +2782,245 @@ def get_options_uoa(symbols: str = ""):
 
     all_uoa.sort(key=lambda x: x["volume"], reverse=True)
     return all_uoa[:60]
+
+
+# ── Portfolio Equity Curve ────────────────────────────────────────────────────
+
+@app.get("/api/portfolio/snapshots")
+def get_portfolio_snapshots():
+    with db_session() as db:
+        rows = db.query(PortfolioSnapshot).order_by(PortfolioSnapshot.date).all()
+        return [{"date": r.date, "total_value": r.total_value, "total_cost": r.total_cost} for r in rows]
+
+
+@app.post("/api/portfolio/snapshot")
+async def save_portfolio_snapshot():
+    loop = asyncio.get_event_loop()
+
+    with db_session() as db:
+        entries = db.query(PortfolioPosition).all()
+        positions_data = [
+            {"symbol": e.symbol, "shares": e.shares, "avg_cost": e.avg_cost}
+            for e in entries
+        ]
+
+    if not positions_data:
+        return {"date": datetime.utcnow().strftime("%Y-%m-%d"), "total_value": 0,
+                "total_cost": 0, "total_pl": 0, "total_pl_pct": 0, "holdings": []}
+
+    syms = [p["symbol"] for p in positions_data]
+    quotes_list = await loop.run_in_executor(None, lambda: [_fetch_quote(s) for s in syms])
+    quote_map = {q["symbol"]: q for q in quotes_list if q}
+
+    holdings, total_value, total_cost = [], 0.0, 0.0
+    for p in positions_data:
+        q = quote_map.get(p["symbol"], {})
+        price  = q.get("price") or p["avg_cost"]
+        cur_val = p["shares"] * price
+        cost    = p["shares"] * p["avg_cost"]
+        pl      = cur_val - cost
+        total_value += cur_val
+        total_cost  += cost
+        holdings.append({
+            "symbol":   p["symbol"],
+            "shares":   p["shares"],
+            "avg_cost": p["avg_cost"],
+            "price":    price,
+            "cur_val":  round(cur_val, 2),
+            "cost":     round(cost, 2),
+            "pl":       round(pl, 2),
+            "pl_pct":   round((pl / cost * 100) if cost > 0 else 0, 2),
+            "changePercent": q.get("changePercent"),
+        })
+
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    with db_session() as db:
+        existing = db.query(PortfolioSnapshot).filter_by(date=today).first()
+        if existing:
+            existing.total_value = total_value
+            existing.total_cost  = total_cost
+        else:
+            db.add(PortfolioSnapshot(date=today, total_value=total_value, total_cost=total_cost))
+
+    for h in holdings:
+        h["pct_of_portfolio"] = round((h["cur_val"] / total_value * 100) if total_value > 0 else 0, 2)
+    holdings.sort(key=lambda x: x["cur_val"], reverse=True)
+
+    return {
+        "date":         today,
+        "total_value":  round(total_value, 2),
+        "total_cost":   round(total_cost, 2),
+        "total_pl":     round(total_value - total_cost, 2),
+        "total_pl_pct": round(((total_value - total_cost) / total_cost * 100) if total_cost > 0 else 0, 2),
+        "holdings":     holdings,
+    }
+
+
+# ── Earnings Play Calculator ──────────────────────────────────────────────────
+
+_PLAY_TTL = timedelta(hours=4)
+
+
+def _compute_earnings_play(symbol: str) -> dict:
+    try:
+        t     = yf.Ticker(symbol, session=_session)
+        info  = t.info or {}
+        price = _safe_float(info.get("currentPrice") or info.get("regularMarketPrice"))
+
+        # Upcoming earnings date
+        next_earnings = None
+        try:
+            cal = t.calendar
+            if cal and "Earnings Date" in cal:
+                dates = cal["Earnings Date"]
+                iterable = dates if hasattr(dates, "__iter__") and not isinstance(dates, str) else [dates]
+                for d in iterable:
+                    try:
+                        next_earnings = str(d.date()) if hasattr(d, "date") else str(d)
+                        break
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # ATM straddle from nearest expiry
+        straddle_strike = straddle_call = straddle_put = straddle_cost = None
+        expected_move_pct = expiry_used = None
+        if price:
+            try:
+                exps = t.options
+                if exps:
+                    expiry = exps[0]
+                    chain  = t.option_chain(expiry)
+                    calls, puts = chain.calls, chain.puts
+                    if not calls.empty and not puts.empty:
+                        strikes  = calls["strike"].values
+                        atm_idx  = int(abs(strikes - price).argmin())
+                        atm_strike = float(strikes[atm_idx])
+                        c_row = calls[calls["strike"] == atm_strike]
+                        p_row = puts [puts ["strike"] == atm_strike]
+                        if not c_row.empty and not p_row.empty:
+                            cp = _safe_float(c_row["lastPrice"].values[0])
+                            pp = _safe_float(p_row["lastPrice"].values[0])
+                            if cp is not None and pp is not None:
+                                straddle_strike    = atm_strike
+                                straddle_call      = round(cp, 2)
+                                straddle_put       = round(pp, 2)
+                                straddle_cost      = round(cp + pp, 2)
+                                expected_move_pct  = round((straddle_cost / price) * 100, 2)
+                                expiry_used        = expiry
+            except Exception as e:
+                logger.warning("straddle calc %s: %s", symbol, e)
+
+        # Historical EPS (last 8 quarters)
+        history = []
+        try:
+            eh = t.earnings_history
+            if eh is not None and not eh.empty:
+                for idx, row in eh.tail(8).iterrows():
+                    try:
+                        history.append({
+                            "date":        str(idx.date()) if hasattr(idx, "date") else str(idx),
+                            "epsEstimate": _safe_float(row.get("epsEstimate")),
+                            "epsActual":   _safe_float(row.get("epsActual")),
+                            "surprisePct": _safe_float(row.get("surprisePct") or row.get("surprisePercent")),
+                        })
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        return {
+            "symbol":           symbol,
+            "price":            price,
+            "next_earnings":    next_earnings,
+            "straddle_strike":  straddle_strike,
+            "straddle_call":    straddle_call,
+            "straddle_put":     straddle_put,
+            "straddle_cost":    straddle_cost,
+            "expected_move_pct": expected_move_pct,
+            "expiry":           expiry_used,
+            "history":          list(reversed(history)),
+        }
+    except Exception as e:
+        logger.warning("earnings play %s: %s", symbol, e)
+        return {"symbol": symbol, "error": str(e)}
+
+
+@app.get("/api/earnings/play/{symbol}")
+async def get_earnings_play(symbol: str):
+    sym = symbol.upper()
+    cache_key = f"earnings:play:{sym}"
+    cached = cache_get(cache_key, _PLAY_TTL)
+    if cached is not None:
+        return cached
+    loop   = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: _compute_earnings_play(sym))
+    cache_set(cache_key, result)
+    return result
+
+
+# ── NLP Screener (Claude-powered) ────────────────────────────────────────────
+
+_NLP_SYSTEM = """You are a stock screener assistant. Convert the user's natural language query into filter conditions.
+
+Available fields and their units:
+- price: stock price ($)
+- changePercent: today's % change
+- marketCap: market cap in $B (e.g. 100 = $100B)
+- peRatio: trailing P/E ratio
+- forwardPE: forward P/E ratio
+- profitMargin: profit margin % (e.g. 15 = 15%)
+- revenueGrowth: revenue growth % (e.g. 10 = 10%)
+- roe: return on equity % (e.g. 20 = 20%)
+- beta: beta vs S&P 500
+- dividendYield: dividend yield % (e.g. 2 = 2%)
+- debtToEquity: debt-to-equity ratio
+- volume: daily volume (raw number)
+- week52High: 52-week high price ($)
+- week52Low: 52-week low price ($)
+
+Available operators: gt (>), lt (<), gte (>=), lte (<=), between (value to value2)
+
+Return ONLY a valid JSON object with NO markdown fences:
+{"filters":[{"field":"...","op":"...","value":number},...], "description":"one sentence"}"""
+
+
+class NLPScreenRequest(BaseModel):
+    query: str
+
+
+@app.post("/api/screener/nlp")
+async def screener_nlp(req: NLPScreenRequest):
+    try:
+        client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            system=_NLP_SYSTEM,
+            messages=[{"role": "user", "content": req.query}],
+        )
+        raw = msg.content[0].text.strip()
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            raw = "\n".join(lines[1:len(lines) - (1 if lines[-1].strip() == "```" else 0)])
+
+        parsed      = json.loads(raw)
+        description = parsed.get("description", "")
+        filters     = [FilterCondition(**f) for f in parsed.get("filters", [])]
+
+        if not filters:
+            return {"description": description, "filters": [], "results": []}
+
+        results = run_custom_screener(CustomScreenRequest(filters=filters))
+        return {
+            "description": description,
+            "filters":     [{"field": f.field, "op": f.op, "value": f.value, "value2": f.value2} for f in filters],
+            "results":     results,
+        }
+    except Exception as e:
+        logger.warning("NLP screener failed: %s", e)
+        raise HTTPException(500, f"NLP screener error: {e}")
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
