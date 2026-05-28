@@ -12,6 +12,8 @@ import Screener from './components/Screener'
 import TradeJournal from './components/TradeJournal'
 import MacroCalendar from './components/MacroCalendar'
 import SectorDashboard from './components/SectorDashboard'
+import StockComparison from './components/StockComparison'
+import Backtester from './components/Backtester'
 import { AlertModal, AlertToast } from './components/PriceAlerts'
 import EarningsCalendar from './components/EarningsCalendar'
 
@@ -27,9 +29,76 @@ const TABS = [
   { id: 'journal',         label: 'Journal' },
   { id: 'macro',           label: 'Macro Calendar' },
   { id: 'sectors',         label: 'Sector Rotation' },
+  { id: 'compare',         label: 'Compare' },
+  { id: 'backtest',        label: 'Backtester' },
   { id: 'aibot',           label: 'AI Advisor' },
   { id: 'advisor',         label: 'Financial Advisor' },
 ]
+
+function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName]   = useState('')
+
+  function handleCreate(e) {
+    e.preventDefault()
+    if (!newName.trim()) return
+    onCreate(newName.trim())
+    setNewName(''); setCreating(false)
+  }
+
+  if (lists.length <= 1 && !creating) {
+    return (
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-gray-700 text-xs">Watchlist</span>
+        <button onClick={() => setCreating(true)}
+          className="text-gray-600 hover:text-emerald-400 text-xs transition-colors">+ New List</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+      {lists.map(l => (
+        <button
+          key={l.name}
+          onClick={() => onSelect(l.name)}
+          className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+            active === l.name
+              ? 'bg-emerald-700/60 text-emerald-300 border border-emerald-600/50'
+              : 'bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700'
+          }`}
+        >
+          {l.name}
+          <span className="text-[10px] opacity-60">({l.count})</span>
+          {l.name !== 'default' && active === l.name && (
+            <span
+              onClick={e => { e.stopPropagation(); onDelete(l.name) }}
+              className="ml-0.5 opacity-50 hover:opacity-100 text-red-400 hover:text-red-300"
+              title="Delete list"
+            >×</span>
+          )}
+        </button>
+      ))}
+      {creating ? (
+        <form onSubmit={handleCreate} className="flex gap-1">
+          <input
+            autoFocus
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            placeholder="List name"
+            maxLength={30}
+            className="bg-gray-800 border border-gray-600 text-white text-xs px-2 py-1 rounded-lg focus:outline-none focus:border-emerald-500 w-28"
+          />
+          <button type="submit" className="text-emerald-400 text-xs hover:text-emerald-300">✓</button>
+          <button type="button" onClick={() => setCreating(false)} className="text-gray-600 text-xs hover:text-gray-400">✕</button>
+        </form>
+      ) : (
+        <button onClick={() => setCreating(true)}
+          className="text-gray-600 hover:text-emerald-400 text-xs transition-colors px-1">+ New</button>
+      )}
+    </div>
+  )
+}
 
 export default function App() {
   const [activeTab, setActiveTab]   = useState('market')
@@ -48,17 +117,23 @@ export default function App() {
   const [portfolioSymbols,  setPortfolioSymbols]  = useState([])
   const [earnings,          setEarnings]          = useState([])
   const [earningsLoading,   setEarningsLoading]   = useState(false)
+  const [activeList,        setActiveList]        = useState('default')
+  const [allLists,          setAllLists]          = useState([{ name: 'default', count: 0 }])
   const prevPricesRef = useRef({})
   const flashTimerRef = useRef(null)
   const alertsRef     = useRef([])
 
-  // Load watchlist from API; migrate localStorage on first empty load
+  // Load all watchlist names
   useEffect(() => {
-    fetch('/api/watchlist')
+    fetch('/api/watchlists').then(r => r.json()).then(setAllLists).catch(() => {})
+  }, [])
+
+  // Load watchlist for active list; migrate localStorage on first empty default load
+  useEffect(() => {
+    fetch(`/api/watchlist?list=${activeList}`)
       .then(r => r.json())
       .then(async (syms) => {
-        if (syms.length === 0) {
-          // Migrate from localStorage or seed defaults
+        if (syms.length === 0 && activeList === 'default') {
           let seed = DEFAULT_WATCHLIST
           try {
             const saved = localStorage.getItem('stockmonitor-watchlist')
@@ -68,7 +143,7 @@ export default function App() {
             fetch('/api/watchlist', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ symbol: sym }),
+              body: JSON.stringify({ symbol: sym, list: 'default' }),
             })
           ))
           localStorage.removeItem('stockmonitor-watchlist')
@@ -77,8 +152,8 @@ export default function App() {
           setWatchlist(syms)
         }
       })
-      .catch(() => setWatchlist(DEFAULT_WATCHLIST))
-  }, [])
+      .catch(() => setWatchlist(activeList === 'default' ? DEFAULT_WATCHLIST : []))
+  }, [activeList])
 
   // Keep alertsRef in sync so fetchQuotes can read latest alerts without stale closure
   useEffect(() => { alertsRef.current = alerts }, [alerts])
@@ -225,20 +300,35 @@ export default function App() {
     await fetch('/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symbol: upper }),
+      body: JSON.stringify({ symbol: upper, list: activeList }),
     })
     setWatchlist((prev) => [...prev, upper])
   }
 
   const removeTicker = async (sym) => {
-    await fetch(`/api/watchlist/${sym}`, { method: 'DELETE' })
+    await fetch(`/api/watchlist/${sym}?list=${activeList}`, { method: 'DELETE' })
     setWatchlist((prev) => prev.filter((s) => s !== sym))
-    setQuotes((prev) => {
-      const next = { ...prev }
-      delete next[sym]
-      return next
-    })
+    setQuotes((prev) => { const next = { ...prev }; delete next[sym]; return next })
     delete prevPricesRef.current[sym]
+  }
+
+  const createList = async (name) => {
+    const trimmed = name.trim()
+    if (!trimmed || allLists.find(l => l.name === trimmed)) return
+    await fetch('/api/watchlists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: trimmed }),
+    })
+    setAllLists(prev => [...prev, { name: trimmed, count: 0 }])
+    setActiveList(trimmed)
+  }
+
+  const deleteList = async (name) => {
+    if (name === 'default') return
+    await fetch(`/api/watchlists/${name}`, { method: 'DELETE' })
+    setAllLists(prev => prev.filter(l => l.name !== name))
+    if (activeList === name) setActiveList('default')
   }
 
   return (
@@ -278,6 +368,14 @@ export default function App() {
           const earningsMap = Object.fromEntries(earnings.map(e => [e.symbol, e]))
           return (
             <div className="p-4">
+              {/* Multi-watchlist selector */}
+              <WatchlistBar
+                lists={allLists}
+                active={activeList}
+                onSelect={setActiveList}
+                onCreate={createList}
+                onDelete={deleteList}
+              />
               <EarningsCalendar earnings={earnings} loading={earningsLoading} />
               <StockTable
                 watchlist={watchlist}
@@ -300,6 +398,8 @@ export default function App() {
         {activeTab === 'journal'         && <TradeJournal />}
         {activeTab === 'macro'           && <MacroCalendar />}
         {activeTab === 'sectors'         && <SectorDashboard />}
+        {activeTab === 'compare'         && <StockComparison />}
+        {activeTab === 'backtest'        && <Backtester />}
         {activeTab === 'aibot'           && <AiBot />}
         {activeTab === 'advisor'         && <FinancialAdvisor />}
       </main>

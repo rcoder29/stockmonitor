@@ -1249,6 +1249,33 @@ export default function PortfolioTracker() {
           + Add Position
         </button>
         {formErr && <span className="text-red-400 text-xs self-center">{formErr}</span>}
+        <div className="ml-auto flex gap-2">
+          <button
+            type="button"
+            onClick={() => window.open('/api/portfolio/export', '_blank')}
+            className="text-gray-500 hover:text-gray-300 border border-gray-700 hover:border-gray-600 px-3 py-1.5 text-xs rounded transition-colors"
+          >
+            ↓ Export CSV
+          </button>
+          <label className="text-gray-500 hover:text-gray-300 border border-gray-700 hover:border-gray-600 px-3 py-1.5 text-xs rounded transition-colors cursor-pointer">
+            ↑ Import CSV
+            <input type="file" accept=".csv" className="hidden" onChange={async e => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const text = await file.text()
+              const r = await fetch('/api/portfolio/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ csv_data: text }),
+              })
+              const res = await r.json()
+              if (res.imported > 0) fetchQuotes()
+              if (res.errors?.length) setFormErr(`Imported ${res.imported}, ${res.errors.length} error(s)`)
+              else if (res.imported > 0) setFormErr('')
+              e.target.value = ''
+            }} />
+          </label>
+        </div>
       </form>
 
       {positions.length === 0 && (
