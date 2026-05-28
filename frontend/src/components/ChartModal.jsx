@@ -68,6 +68,13 @@ function calcBB(closes, period = 20, mult = 2) {
   }
   return { upper, mid, lower }
 }
+
+function calcSMA(closes, period) {
+  return closes.map((_, i) => {
+    if (i < period - 1) return null
+    return closes.slice(i - period + 1, i + 1).reduce((a, b) => a + b) / period
+  })
+}
 import { fmt } from '../utils/format'
 
 // ── Earnings history panel ────────────────────────────────────────────────────
@@ -225,17 +232,33 @@ const PERIODS = [
   { label: '5Y',  value: '5y' },
 ]
 
+// ── Drawing localStorage helpers ──────────────────────────────────────────────
+
+function loadDrawings(sym) {
+  try { return JSON.parse(localStorage.getItem(`drawings:${sym}`) || '[]') } catch { return [] }
+}
+function saveDrawings(sym, arr) {
+  localStorage.setItem(`drawings:${sym}`, JSON.stringify(arr))
+}
+
 export default function ChartModal({ symbol, quote, onClose }) {
   const [period, setPeriod]         = useState('1d')
   const [tab, setTab]               = useState('chart')
   const [chartData, setChartData]   = useState(null)
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState(null)
-  const [indicators, setIndicators] = useState({ bb: false, rsi: false, macd: false })
+  const [indicators, setIndicators] = useState({ sma20: false, sma50: false, sma200: false, bb: false, rsi: false, macd: false })
   const chartContainerRef           = useRef(null)
   const chartWrapperRef             = useRef(null)
   const rsiContainerRef             = useRef(null)
   const macdContainerRef            = useRef(null)
+  const svgRef                      = useRef(null)
+  const chartApiRef                 = useRef(null)
+
+  // ── Drawing state ──
+  const [drawMode, setDrawMode]       = useState(null)   // null | 'sr' | 'trend'
+  const [drawings, setDrawings]       = useState([])
+  const [pendingPoint, setPendingPoint] = useState(null) // first click of a trend line
 
   const isPos = quote?.change == null || quote.change >= 0
 
@@ -257,6 +280,13 @@ export default function ChartModal({ symbol, quote, onClose }) {
     if (tab === 'chart') fetchChart(symbol, period)
   }, [symbol, period, tab, fetchChart])
 
+  // Load drawings whenever the symbol changes
+  useEffect(() => {
+    setDrawings(loadDrawings(symbol))
+    setPendingPoint(null)
+    setDrawMode(null)
+  }, [symbol])
+
   useEffect(() => {
     const el = chartContainerRef.current
     if (!el || !chartData || chartData.data.length === 0) return
@@ -275,6 +305,7 @@ export default function ChartModal({ symbol, quote, onClose }) {
     // ── Main chart ──
     const chart = createChart(el, { ...baseOpts, height: el.clientHeight,
       rightPriceScale: { borderColor: '#1f2937', scaleMargins: { top: 0.08, bottom: 0.28 } } })
+    chartApiRef.current = chart
 
     chart.addSeries(CandlestickSeries, {
       upColor: '#10b981', downColor: '#ef4444', borderVisible: false,
@@ -296,6 +327,19 @@ export default function ChartModal({ symbol, quote, onClose }) {
       addBB(bb.mid,   '#6b728060')
       addBB(bb.lower, '#3b82f670')
     }
+
+    // ── SMA overlays ──
+    const SMA_CONFIGS = [
+      { key: 'sma20',  period: 20,  color: '#f59e0b' },
+      { key: 'sma50',  period: 50,  color: '#3b82f6' },
+      { key: 'sma200', period: 200, color: '#a855f7' },
+    ]
+    SMA_CONFIGS.forEach(({ key, period, color }) => {
+      if (!indicators[key]) return
+      const vals = calcSMA(closes, period)
+      const s = chart.addSeries(LineSeries, { color, lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+      s.setData(chartData.data.map((d, i) => vals[i] != null ? { time: d.time, value: vals[i] } : null).filter(Boolean))
+    })
 
     chart.timeScale().fitContent()
 
@@ -356,6 +400,7 @@ export default function ChartModal({ symbol, quote, onClose }) {
       chart.remove()
       rsiChart?.remove()
       macdChart?.remove()
+      chartApiRef.current = null
     }
   }, [chartData, indicators])
 
@@ -364,6 +409,78 @@ export default function ChartModal({ symbol, quote, onClose }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // ── Drawing helpers ──────────────────────────────────────────────────────────
+
+  function toggleDrawMode(mode) {
+    setDrawMode(prev => prev === mode ? null : mode)
+    setPendingPoint(null)
+  }
+
+  function handleSvgClick(e) {
+    if (!drawMode || !chartApiRef.current) return
+    const rect = svgRef.current.getBoundingClientRect()
+    const y = e.clientY - rect.top
+    const x = e.clientX - rect.left
+
+    if (drawMode === 'sr') {
+      const price = chartApiRef.current.priceScale('right').coordinateToPrice(y)
+      if (price == null) return
+      const newLine = { type: 'sr', price, id: Date.now() }
+      setDrawings(prev => {
+        const next = [...prev, newLine]
+        saveDrawings(symbol, next)
+        return next
+      })
+    } else if (drawMode === 'trend') {
+      if (!pendingPoint) {
+        setPendingPoint({ x, y })
+      } else {
+        const price1 = chartApiRef.current.priceScale('right').coordinateToPrice(pendingPoint.y)
+        const price2 = chartApiRef.current.priceScale('right').coordinateToPrice(y)
+        if (price1 == null || price2 == null) return
+        const newLine = { type: 'trend', x1: pendingPoint.x, y1: pendingPoint.y, x2: x, y2: y, price1, price2, id: Date.now() }
+        setDrawings(prev => {
+          const next = [...prev, newLine]
+          saveDrawings(symbol, next)
+          return next
+        })
+        setPendingPoint(null)
+      }
+    }
+  }
+
+  function clearDrawings() {
+    setDrawings([])
+    saveDrawings(symbol, [])
+    setPendingPoint(null)
+    setDrawMode(null)
+  }
+
+  // Compute SVG elements for current drawings
+  function renderDrawings() {
+    if (!chartApiRef.current) return null
+    const priceScale = chartApiRef.current.priceScale('right')
+
+    return drawings.map(d => {
+      if (d.type === 'sr') {
+        const y = priceScale.priceToCoordinate(d.price)
+        if (y == null) return null
+        return (
+          <g key={d.id}>
+            <line x1="0" x2="100%" y1={y} y2={y} stroke="#f59e0b" strokeWidth="1" strokeDasharray="4 2" />
+            <text x="4" y={y - 3} fill="#f59e0b" fontSize="10" fontFamily="monospace">{d.price.toFixed(2)}</text>
+          </g>
+        )
+      }
+      if (d.type === 'trend') {
+        return (
+          <line key={d.id} x1={d.x1} y1={d.y1} x2={d.x2} y2={d.y2} stroke="#3b82f6" strokeWidth="1.5" />
+        )
+      }
+      return null
+    })
+  }
 
   return (
     <div
@@ -429,13 +546,38 @@ export default function ChartModal({ symbol, quote, onClose }) {
                   ))}
                 </div>
                 <div className="flex gap-1 ml-auto">
-                  {[['bb', 'BB'], ['rsi', 'RSI'], ['macd', 'MACD']].map(([key, label]) => (
-                    <button key={key}
-                      onClick={() => setIndicators(prev => ({ ...prev, [key]: !prev[key] }))}
-                      className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
-                        indicators[key] ? 'bg-purple-700 text-white' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-                      }`}>{label}</button>
-                  ))}
+                  {(() => {
+                    const IND_COLORS = { sma20: 'bg-amber-600', sma50: 'bg-blue-600', sma200: 'bg-purple-700', bb: 'bg-purple-700', rsi: 'bg-purple-700', macd: 'bg-purple-700' }
+                    return [['sma20', 'SMA20'], ['sma50', 'SMA50'], ['sma200', 'SMA200'], ['bb', 'BB'], ['rsi', 'RSI'], ['macd', 'MACD']].map(([key, label]) => (
+                      <button key={key}
+                        onClick={() => setIndicators(prev => ({ ...prev, [key]: !prev[key] }))}
+                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                          indicators[key] ? `${IND_COLORS[key]} text-white` : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+                        }`}>{label}</button>
+                    ))
+                  })()}
+                </div>
+                {/* Drawing tools */}
+                <div className="flex gap-1 border-l border-gray-700 pl-3">
+                  <button
+                    onClick={() => toggleDrawMode('sr')}
+                    title="Draw horizontal support/resistance line"
+                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                      drawMode === 'sr' ? 'bg-amber-600 text-white' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+                    }`}
+                  >&#9135; S/R</button>
+                  <button
+                    onClick={() => toggleDrawMode('trend')}
+                    title={pendingPoint && drawMode === 'trend' ? 'Click a second point to finish trend line' : 'Draw trend line (click two points)'}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                      drawMode === 'trend' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+                    }`}
+                  >&#8725; Trend{drawMode === 'trend' && pendingPoint ? ' …' : ''}</button>
+                  <button
+                    onClick={clearDrawings}
+                    title="Clear all drawings for this symbol"
+                    className="px-2.5 py-1 rounded text-xs font-semibold text-gray-500 hover:text-red-400 hover:bg-gray-800 transition-colors"
+                  >&#10005; Clear</button>
                 </div>
               </div>
 
@@ -444,6 +586,19 @@ export default function ChartModal({ symbol, quote, onClose }) {
                 {/* Main candlestick chart */}
                 <div className="relative" style={{ height: '360px' }}>
                   <div ref={chartContainerRef} className="w-full h-full" />
+                  {/* Drawing SVG overlay */}
+                  <svg
+                    ref={svgRef}
+                    className="absolute inset-0 w-full h-full"
+                    style={{ pointerEvents: drawMode ? 'auto' : 'none', cursor: drawMode ? 'crosshair' : 'default' }}
+                    onClick={handleSvgClick}
+                  >
+                    {renderDrawings()}
+                    {/* Pending trend point indicator */}
+                    {drawMode === 'trend' && pendingPoint && (
+                      <circle cx={pendingPoint.x} cy={pendingPoint.y} r="4" fill="#3b82f6" opacity="0.8" />
+                    )}
+                  </svg>
                   {loading && (
                     <div className="absolute inset-0 bg-gray-950/80 flex items-center justify-center z-10">
                       <span className="text-gray-400 text-sm animate-pulse">Loading chart…</span>

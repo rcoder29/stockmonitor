@@ -230,6 +230,26 @@ function money(v) {
   return `${v >= 0 ? '+' : '-'}$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+// ── CSV Export ────────────────────────────────────────────────────────────────
+
+function downloadCSV(positions) {
+  const headers = ['Symbol','Name','Shares','Avg Cost','Price','Market Value','P&L ($)','P&L (%)','Day P&L ($)','Weight (%)']
+  const totalValue = positions.reduce((s, p) => s + (p.curVal ?? 0), 0)
+  const rows = positions.map(p => [
+    p.symbol, p.name ?? '', p.shares, p.avgCost?.toFixed(2),
+    p.price?.toFixed(2) ?? '',
+    p.curVal?.toFixed(2) ?? '',
+    p.pl?.toFixed(2) ?? '',
+    p.plPct != null ? (p.plPct).toFixed(2) + '%' : '',
+    p.dayPL?.toFixed(2) ?? '',
+    totalValue > 0 ? ((p.curVal / totalValue) * 100).toFixed(1) + '%' : '',
+  ])
+  const csv = [headers, ...rows].map(r => r.join(',')).join('\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+  const a = document.createElement('a'); a.href = url; a.download = `portfolio_${new Date().toISOString().slice(0,10)}.csv`
+  a.click(); URL.revokeObjectURL(url)
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 function SortArrow({ active, dir }) {
@@ -1388,6 +1408,16 @@ export default function PortfolioTracker() {
               </button>
             ))}
           </div>
+
+          {positions.length > 0 && (
+            <button
+              onClick={() => downloadCSV(withWeight)}
+              className="bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white px-2.5 py-1 text-xs rounded border border-gray-700 transition-colors"
+              title="Download positions as CSV"
+            >
+              ↓ CSV
+            </button>
+          )}
 
           {lastUpdated && (
             <span className="text-gray-600 text-xs">
