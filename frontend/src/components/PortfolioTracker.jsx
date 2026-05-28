@@ -342,7 +342,7 @@ function PerformanceView({ positions, totalVal }) {
     }
   }, [positions, totalVal])
 
-  useEffect(() => { fetchPerf(period) }, [period])
+  useEffect(() => { fetchPerf(period) }, [period, fetchPerf])
 
   const fmtPct = v => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
   const fmtAlpha = v => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)} pp`

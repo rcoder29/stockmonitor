@@ -978,7 +978,13 @@ def get_portfolio_performance(body: PerfRequest):
     if closes.empty:
         raise HTTPException(500, "No price data returned")
 
-    closes = closes.dropna(how="all")
+    closes = closes.dropna(how="all").ffill()
+
+    # Drop leading rows where all portfolio symbols are still NaN after ffill
+    port_cols = [s for s in body.symbols if s in closes.columns]
+    closes = closes.dropna(subset=port_cols, how="all")
+    if closes.empty:
+        raise HTTPException(500, "No overlapping price data for the requested period")
 
     # Normalise: pct return from day-0 for each symbol
     norm = (closes / closes.iloc[0] - 1) * 100
@@ -997,7 +1003,7 @@ def get_portfolio_performance(body: PerfRequest):
     dates = [str(d.date()) for d in closes.index]
 
     def to_list(series):
-        return [round(float(v), 4) if not (v != v) else None for v in series]
+        return [None if (v is None or v != v) else round(float(v), 4) for v in series]
 
     spy = norm["SPY"].ffill() if "SPY" in norm.columns else None
     qqq = norm["QQQ"].ffill() if "QQQ" in norm.columns else None
