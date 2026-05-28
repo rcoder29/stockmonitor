@@ -4,6 +4,150 @@ import FundamentalsPanel from './FundamentalsPanel'
 import NewsPanel from './NewsPanel'
 import { fmt } from '../utils/format'
 
+// ── Earnings history panel ────────────────────────────────────────────────────
+
+function fmtRev(v) {
+  if (v == null) return '—'
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(0)}M`
+  return `$${v.toLocaleString()}`
+}
+
+function EarningsPanel({ symbol }) {
+  const [data,    setData]    = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState(null)
+
+  useEffect(() => {
+    setLoading(true); setError(null)
+    fetch(`/api/earnings/history/${symbol}`)
+      .then(r => { if (!r.ok) throw new Error(`Error ${r.status}`); return r.json() })
+      .then(d => setData(d))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [symbol])
+
+  if (loading) return <div className="py-16 text-center text-gray-500 text-sm animate-pulse">Loading earnings history…</div>
+  if (error)   return <div className="py-16 text-center text-red-400 text-sm">Failed to load: {error}</div>
+  if (!data?.earnings?.length) return <div className="py-16 text-center text-gray-600 text-sm">No earnings history available</div>
+
+  const rows = [...data.earnings].reverse() // oldest → newest for chart
+  const beats = rows.filter(r => (r.epsDifference ?? 0) > 0).length
+  const beatRate = rows.length ? Math.round((beats / rows.length) * 100) : 0
+  const avgSurprise = rows.length
+    ? (rows.reduce((s, r) => s + (r.surprisePercent ?? 0), 0) / rows.length).toFixed(1)
+    : 0
+
+  // SVG bar chart
+  const W = 480, H = 120, PAD = { t: 12, b: 24, l: 8, r: 8 }
+  const innerW = W - PAD.l - PAD.r
+  const innerH = H - PAD.t - PAD.b
+  const barGroupW = innerW / rows.length
+  const barW = Math.min(barGroupW * 0.35, 18)
+  const maxEps = Math.max(...rows.flatMap(r => [Math.abs(r.epsActual ?? 0), Math.abs(r.epsEstimate ?? 0)]), 0.01)
+
+  return (
+    <div className="space-y-5">
+      {/* KPI row */}
+      <div className="flex gap-3 flex-wrap">
+        {[
+          { label: 'Quarters', value: rows.length },
+          { label: 'Beat Rate', value: `${beatRate}%`, cls: beatRate >= 70 ? 'text-emerald-400' : beatRate >= 50 ? 'text-amber-400' : 'text-red-400' },
+          { label: 'Avg Surprise', value: `${avgSurprise > 0 ? '+' : ''}${avgSurprise}%`, cls: avgSurprise > 0 ? 'text-emerald-400' : 'text-red-400' },
+        ].map(({ label, value, cls = 'text-white' }) => (
+          <div key={label} className="bg-gray-800/60 rounded-lg px-4 py-2.5 min-w-[100px]">
+            <div className="text-gray-600 text-xs mb-0.5">{label}</div>
+            <div className={`font-bold text-sm tabular-nums ${cls}`}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* SVG bar chart */}
+      <div className="bg-gray-950 rounded-lg p-3">
+        <div className="text-gray-600 text-xs mb-2 uppercase tracking-wider">EPS — Actual vs Estimate</div>
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+          {rows.map((r, i) => {
+            const cx = PAD.l + (i + 0.5) * barGroupW
+            const scaleY = v => PAD.t + innerH * (1 - Math.min(Math.abs(v ?? 0) / maxEps, 1))
+            const estH = innerH * Math.min(Math.abs(r.epsEstimate ?? 0) / maxEps, 1)
+            const actH = innerH * Math.min(Math.abs(r.epsActual ?? 0) / maxEps, 1)
+            const beat = (r.epsDifference ?? 0) >= 0
+            return (
+              <g key={r.date}>
+                {/* Estimate bar */}
+                <rect
+                  x={cx - barW - 1} y={scaleY(r.epsEstimate ?? 0)}
+                  width={barW} height={Math.max(estH, 1)}
+                  fill="#374151" rx="1"
+                />
+                {/* Actual bar */}
+                <rect
+                  x={cx + 1} y={scaleY(r.epsActual ?? 0)}
+                  width={barW} height={Math.max(actH, 1)}
+                  fill={beat ? '#10b981' : '#ef4444'} rx="1"
+                />
+                {/* Quarter label */}
+                <text
+                  x={cx} y={H - 4}
+                  textAnchor="middle" fontSize="7" fill="#4b5563"
+                >
+                  {r.quarter?.replace('Q', 'Q').slice(-6) ?? ''}
+                </text>
+              </g>
+            )
+          })}
+          {/* Legend */}
+          <rect x={PAD.l} y={PAD.t - 8} width={8} height={4} fill="#374151" rx="1" />
+          <text x={PAD.l + 10} y={PAD.t - 4} fontSize="7" fill="#6b7280">Est</text>
+          <rect x={PAD.l + 32} y={PAD.t - 8} width={8} height={4} fill="#10b981" rx="1" />
+          <text x={PAD.l + 42} y={PAD.t - 4} fontSize="7" fill="#6b7280">Actual</text>
+        </svg>
+      </div>
+
+      {/* Results table */}
+      <div className="overflow-x-auto rounded-lg border border-gray-800">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-gray-800 bg-gray-900">
+              {['Quarter', 'EPS Est.', 'EPS Actual', 'Surprise', 'Surprise %', 'Revenue'].map((h, i) => (
+                <th key={h} className={`py-2 px-4 text-gray-500 font-medium tracking-wider uppercase ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...data.earnings].map(r => {
+              const beat = (r.epsDifference ?? 0) >= 0
+              const surprise = r.surprisePercent
+              return (
+                <tr key={r.date} className="border-b border-gray-800/40 hover:bg-gray-800/30">
+                  <td className="py-2.5 px-4 text-gray-300 font-medium">{r.quarter}</td>
+                  <td className="py-2.5 px-4 text-right text-gray-500 tabular-nums">
+                    {r.epsEstimate != null ? `$${r.epsEstimate.toFixed(2)}` : '—'}
+                  </td>
+                  <td className="py-2.5 px-4 text-right tabular-nums font-semibold text-white">
+                    {r.epsActual != null ? `$${r.epsActual.toFixed(2)}` : '—'}
+                  </td>
+                  <td className={`py-2.5 px-4 text-right tabular-nums ${beat ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {r.epsDifference != null ? `${beat ? '+' : ''}$${r.epsDifference.toFixed(2)}` : '—'}
+                  </td>
+                  <td className={`py-2.5 px-4 text-right tabular-nums ${beat ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {surprise != null
+                      ? <span className={`px-1.5 py-0.5 rounded text-[11px] ${beat ? 'bg-emerald-900/40' : 'bg-red-900/40'}`}>
+                          {beat ? '+' : ''}{surprise.toFixed(1)}%
+                        </span>
+                      : '—'}
+                  </td>
+                  <td className="py-2.5 px-4 text-right text-gray-400 tabular-nums">{fmtRev(r.revenue)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 const PERIODS = [
   { label: '1D',  value: '1d' },
   { label: '5D',  value: '5d' },
@@ -160,7 +304,7 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
         {/* Tabs */}
         <div className="flex border-b border-gray-800 px-6 shrink-0">
-          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals'], ['news', 'News']].map(([val, label]) => (
+          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals'], ['news', 'News'], ['earnings', 'Earnings']].map(([val, label]) => (
             <button
               key={val}
               onClick={() => setTab(val)}
@@ -226,6 +370,8 @@ export default function ChartModal({ symbol, quote, onClose }) {
           )}
 
           {tab === 'news' && <NewsPanel symbol={symbol} />}
+
+          {tab === 'earnings' && <EarningsPanel symbol={symbol} />}
         </div>
       </div>
     </div>

@@ -359,6 +359,7 @@ export default function DayTrader() {
   const [activeId,     setActiveId]     = useState('gap_go')
   const [scanData,     setScanData]     = useState(null)
   const [newsData,     setNewsData]     = useState([])
+  const [preMarket,    setPreMarket]    = useState(null)
   const [loading,      setLoading]      = useState(true)
   const [newsLoading,  setNewsLoading]  = useState(true)
   const [lastFetch,    setLastFetch]    = useState(null)
@@ -376,13 +377,15 @@ export default function DayTrader() {
   const fetchAll = useCallback(async () => {
     setLoading(true); setNewsLoading(true); setError(null)
     try {
-      const [rScan, rNews] = await Promise.all([
+      const [rScan, rNews, rPM] = await Promise.all([
         fetch('/api/day-trader/scanners'),
         fetch('/api/day-trader/news'),
+        fetch('/api/market/premarket-movers'),
       ])
       if (!rScan.ok) throw new Error(`Scanner error ${rScan.status}`)
       setScanData(await rScan.json())
       if (rNews.ok) setNewsData(await rNews.json())
+      if (rPM.ok) setPreMarket(await rPM.json())
       setLastFetch(new Date())
     } catch (e) {
       setError(e.message)
@@ -498,6 +501,98 @@ export default function DayTrader() {
           Disclaimer: Day trading involves substantial risk of loss. Sizing above is illustrative only — adjust per your broker's margin rules and your own risk tolerance.
         </div>
       </section>
+
+      {/* ── Pre-Market Movers ── */}
+      {(preMarket || loading) && (
+        <section className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-gray-600 text-xs uppercase tracking-widest">
+              Pre-Market Movers
+              {preMarket && (
+                <span className="ml-2 text-gray-700 font-normal normal-case tracking-normal">
+                  as of {preMarket.asOf ?? 'pre-market'}
+                </span>
+              )}
+            </div>
+          </div>
+          {loading && (
+            <div className="text-gray-600 text-xs text-center py-4 animate-pulse">Loading pre-market data…</div>
+          )}
+          {!loading && preMarket && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Gainers */}
+              <div className="bg-gray-900/60 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-800">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                  <span className="text-emerald-400 text-xs font-semibold uppercase tracking-wider">Top Gainers</span>
+                </div>
+                {(!preMarket.gainers?.length) ? (
+                  <div className="py-4 text-center text-gray-700 text-xs">No pre-market gainers</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-800/60">
+                        {['Symbol', 'Price', 'Chg %', 'Volume'].map((h, i) => (
+                          <th key={h} className={`py-1.5 px-3 text-gray-600 font-medium uppercase tracking-wide ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preMarket.gainers.map(s => (
+                        <tr key={s.symbol} className="border-b border-gray-800/30 hover:bg-gray-800/40">
+                          <td className="py-2 px-3 font-bold text-white">{s.symbol}</td>
+                          <td className="py-2 px-3 text-right text-gray-300 tabular-nums">{fmt.price(s.price)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums font-medium text-emerald-400">
+                            +{(s.changePercent ?? 0).toFixed(2)}%
+                          </td>
+                          <td className="py-2 px-3 text-right text-gray-500 tabular-nums">
+                            {s.volume != null ? `${(s.volume / 1e6).toFixed(1)}M` : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Losers */}
+              <div className="bg-gray-900/60 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-800">
+                  <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
+                  <span className="text-red-400 text-xs font-semibold uppercase tracking-wider">Top Losers</span>
+                </div>
+                {(!preMarket.losers?.length) ? (
+                  <div className="py-4 text-center text-gray-700 text-xs">No pre-market losers</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-800/60">
+                        {['Symbol', 'Price', 'Chg %', 'Volume'].map((h, i) => (
+                          <th key={h} className={`py-1.5 px-3 text-gray-600 font-medium uppercase tracking-wide ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preMarket.losers.map(s => (
+                        <tr key={s.symbol} className="border-b border-gray-800/30 hover:bg-gray-800/40">
+                          <td className="py-2 px-3 font-bold text-white">{s.symbol}</td>
+                          <td className="py-2 px-3 text-right text-gray-300 tabular-nums">{fmt.price(s.price)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums font-medium text-red-400">
+                            {(s.changePercent ?? 0).toFixed(2)}%
+                          </td>
+                          <td className="py-2 px-3 text-right text-gray-500 tabular-nums">
+                            {s.volume != null ? `${(s.volume / 1e6).toFixed(1)}M` : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── Strategy selector ── */}
       <div className="flex flex-wrap gap-2 mb-6">
