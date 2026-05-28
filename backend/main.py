@@ -22,7 +22,8 @@ load_dotenv()
 
 from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
-    WatchlistSymbol, WatchlistGroup, PortfolioPosition, PortfolioSnapshot, PriceAlert, TradeJournalEntry,
+    WatchlistSymbol, WatchlistGroup, PortfolioPosition, PortfolioSnapshot,
+    PriceAlert, SmartAlertRule, TradeJournalEntry,
 )
 
 # Corporate proxy uses a self-signed cert — reuse one session with SSL disabled
@@ -3389,6 +3390,375 @@ def get_trade_ideas(req: TradeIdeaRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── Portfolio Risk Dashboard ───────────────────────────────────────────────────
+
+_RISK_TTL = timedelta(minutes=30)
+
+
+def _compute_portfolio_risk() -> dict:
+    cache_key = "portfolio:risk"
+    cached = cache_get(cache_key, _RISK_TTL)
+    if cached is not None:
+        return cached
+
+    with db_session() as db:
+        positions = db.query(PortfolioPosition).all()
+        holdings  = [{"symbol": p.symbol, "shares": p.shares, "avg_cost": p.avg_cost} for p in positions]
+
+    if not holdings:
+        return {"error": "No portfolio positions"}
+
+    symbols = [h["symbol"] for h in holdings]
+
+    try:
+        raw = yf.download(symbols + ["SPY"], period="1y", interval="1d",
+                          auto_adjust=True, progress=False, session=_session)
+        closes = raw["Close"].dropna(how="all")
+    except Exception as e:
+        raise ValueError(f"Data fetch failed: {e}")
+
+    rets = closes.pct_change().dropna()
+    spy_ret = rets.get("SPY", pd.Series(dtype=float))
+
+    # Per-holding metrics
+    holdings_out = []
+    port_prices  = {}
+    for h in holdings:
+        sym = h["symbol"]
+        if sym not in closes.columns:
+            continue
+        price = float(closes[sym].dropna().iloc[-1])
+        port_prices[sym] = price
+        mkt_val = price * h["shares"]
+
+        if sym in rets.columns and len(spy_ret) > 10:
+            s_ret = rets[sym].dropna()
+            cov   = s_ret.cov(spy_ret.reindex(s_ret.index).dropna())
+            var_spy = spy_ret.var()
+            beta  = round(cov / var_spy, 2) if var_spy > 0 else None
+        else:
+            beta = None
+
+        holdings_out.append({
+            "symbol":   sym,
+            "shares":   h["shares"],
+            "avg_cost": h["avg_cost"],
+            "price":    round(price, 2),
+            "mkt_val":  round(mkt_val, 2),
+            "beta":     beta,
+        })
+
+    total_val = sum(h["mkt_val"] for h in holdings_out) or 1.0
+    for h in holdings_out:
+        h["weight"]        = round(h["mkt_val"] / total_val * 100, 1)
+        h["beta_adj_exp"]  = round(h["beta"] * h["weight"] / 100, 3) if h["beta"] is not None else None
+
+    # Portfolio return series (value-weighted)
+    port_ret = pd.Series(0.0, index=rets.index)
+    for h in holdings_out:
+        sym = h["symbol"]
+        if sym in rets.columns:
+            w = h["mkt_val"] / total_val
+            port_ret = port_ret.add(rets[sym].reindex(port_ret.index).fillna(0) * w)
+
+    port_ret = port_ret.dropna()
+
+    # Sharpe (annualised, rf=0)
+    sharpe  = round(float(port_ret.mean() / port_ret.std() * np.sqrt(252)), 2) if port_ret.std() > 0 else None
+
+    # Sortino (downside std)
+    down    = port_ret[port_ret < 0]
+    sortino = round(float(port_ret.mean() / down.std() * np.sqrt(252)), 2) if len(down) > 1 and down.std() > 0 else None
+
+    # Max drawdown
+    cum   = (1 + port_ret).cumprod()
+    roll_max = cum.cummax()
+    dd    = (cum - roll_max) / roll_max
+    max_dd = round(float(dd.min()) * 100, 2)
+
+    # VaR (historical, 1-day)
+    var95 = round(-float(np.percentile(port_ret, 5)) * total_val, 2)
+    var99 = round(-float(np.percentile(port_ret, 1)) * total_val, 2)
+
+    # Weighted portfolio beta
+    port_beta = round(sum(
+        h["beta_adj_exp"] for h in holdings_out if h["beta_adj_exp"] is not None
+    ), 2)
+
+    # Correlation matrix (symbols with enough data)
+    valid_syms = [h["symbol"] for h in holdings_out if h["symbol"] in rets.columns]
+    corr_matrix = {}
+    if len(valid_syms) > 1:
+        corr_df = rets[valid_syms].corr().round(2)
+        corr_matrix = corr_df.to_dict()
+
+    result = {
+        "total_value":  round(total_val, 2),
+        "portfolio_beta": port_beta,
+        "sharpe":       sharpe,
+        "sortino":      sortino,
+        "max_drawdown_pct": max_dd,
+        "var95":        var95,
+        "var99":        var99,
+        "holdings":     holdings_out,
+        "correlation":  corr_matrix,
+    }
+    cache_set(cache_key, result)
+    return result
+
+
+@app.get("/api/portfolio/risk")
+async def get_portfolio_risk():
+    loop = asyncio.get_event_loop()
+    try:
+        return await loop.run_in_executor(None, _compute_portfolio_risk)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+# ── Smart Alerts 2.0 ──────────────────────────────────────────────────────────
+
+SMART_ALERT_TYPES = {
+    "volume_spike":       {"param": "multiplier",  "default": 2.0,  "label": "Volume Spike"},
+    "gap_up":             {"param": "pct",          "default": 2.0,  "label": "Gap Up"},
+    "gap_down":           {"param": "pct",          "default": 2.0,  "label": "Gap Down"},
+    "rsi_overbought":     {"param": "threshold",    "default": 70.0, "label": "RSI Overbought"},
+    "rsi_oversold":       {"param": "threshold",    "default": 30.0, "label": "RSI Oversold"},
+    "golden_cross":       {"param": None,           "default": None, "label": "Golden Cross (MA50/200)"},
+    "death_cross":        {"param": None,           "default": None, "label": "Death Cross (MA50/200)"},
+    "earnings_proximity": {"param": "days",         "default": 5,    "label": "Earnings Proximity"},
+}
+
+
+class SmartAlertCreate(BaseModel):
+    symbol:     str
+    alert_type: str
+    params:     dict = {}
+
+
+@app.get("/api/alerts/smart")
+def list_smart_alerts():
+    with db_session() as db:
+        rules = db.query(SmartAlertRule).filter(SmartAlertRule.active == 1).order_by(SmartAlertRule.created_at.desc()).all()
+        return [{"id": r.id, "symbol": r.symbol, "alert_type": r.alert_type,
+                 "params": json.loads(r.params), "created_at": str(r.created_at)} for r in rules]
+
+
+@app.post("/api/alerts/smart")
+def create_smart_alert(req: SmartAlertCreate):
+    sym = req.symbol.upper().strip()
+    if req.alert_type not in SMART_ALERT_TYPES:
+        raise HTTPException(400, f"Unknown alert_type. Valid: {list(SMART_ALERT_TYPES)}")
+    with db_session() as db:
+        rule = SmartAlertRule(symbol=sym, alert_type=req.alert_type, params=json.dumps(req.params))
+        db.add(rule)
+        db.flush()
+        return {"id": rule.id, "symbol": sym, "alert_type": req.alert_type}
+
+
+@app.delete("/api/alerts/smart/{rule_id}")
+def delete_smart_alert(rule_id: int):
+    with db_session() as db:
+        rule = db.query(SmartAlertRule).filter(SmartAlertRule.id == rule_id).first()
+        if not rule:
+            raise HTTPException(404, "Rule not found")
+        rule.active = 0
+    return {"ok": True}
+
+
+def _check_smart_rule(rule: dict) -> dict | None:
+    sym        = rule["symbol"]
+    atype      = rule["alert_type"]
+    params     = rule["params"]
+
+    try:
+        t = yf.Ticker(sym, session=_session)
+        hist = t.history(period="1y", interval="1d", auto_adjust=True)
+        if len(hist) < 5:
+            return None
+        closes  = hist["Close"].dropna().values.astype(float)
+        volumes = hist["Volume"].dropna().values.astype(float)
+
+        if atype == "volume_spike":
+            mult   = params.get("multiplier", 2.0)
+            avg20  = float(np.mean(volumes[-21:-1])) if len(volumes) >= 21 else float(np.mean(volumes[:-1]))
+            today  = float(volumes[-1])
+            if avg20 > 0 and today >= mult * avg20:
+                return {"triggered": True, "detail": f"Volume {today/avg20:.1f}× avg20 ({int(today):,} vs {int(avg20):,})"}
+
+        elif atype in ("gap_up", "gap_down"):
+            pct_thresh = params.get("pct", 2.0)
+            prev_close = float(hist["Close"].dropna().iloc[-2])
+            today_open = float(hist["Open"].dropna().iloc[-1])
+            gap_pct    = (today_open / prev_close - 1) * 100
+            if atype == "gap_up"   and gap_pct >= pct_thresh:
+                return {"triggered": True, "detail": f"Gapped up {gap_pct:+.2f}% at open"}
+            if atype == "gap_down" and gap_pct <= -pct_thresh:
+                return {"triggered": True, "detail": f"Gapped down {gap_pct:+.2f}% at open"}
+
+        elif atype in ("rsi_overbought", "rsi_oversold"):
+            thresh = params.get("threshold", 70 if atype == "rsi_overbought" else 30)
+            rsi    = float(_calc_rsi(pd.Series(closes), 14).iloc[-1])
+            if atype == "rsi_overbought" and rsi >= thresh:
+                return {"triggered": True, "detail": f"RSI(14) = {rsi:.1f} ≥ {thresh}"}
+            if atype == "rsi_oversold"   and rsi <= thresh:
+                return {"triggered": True, "detail": f"RSI(14) = {rsi:.1f} ≤ {thresh}"}
+
+        elif atype in ("golden_cross", "death_cross"):
+            if len(closes) < 201:
+                return None
+            ma50_today  = float(np.mean(closes[-50:]))
+            ma200_today = float(np.mean(closes[-200:]))
+            ma50_prev   = float(np.mean(closes[-51:-1]))
+            ma200_prev  = float(np.mean(closes[-201:-1]))
+            if atype == "golden_cross" and ma50_prev <= ma200_prev and ma50_today > ma200_today:
+                return {"triggered": True, "detail": f"MA50 ({ma50_today:.2f}) crossed above MA200 ({ma200_today:.2f})"}
+            if atype == "death_cross"  and ma50_prev >= ma200_prev and ma50_today < ma200_today:
+                return {"triggered": True, "detail": f"MA50 ({ma50_today:.2f}) crossed below MA200 ({ma200_today:.2f})"}
+
+        elif atype == "earnings_proximity":
+            days_thresh = int(params.get("days", 5))
+            cal = t.calendar
+            if cal is not None and not cal.empty:
+                ed_col = [c for c in cal.columns if "Earnings" in c]
+                if ed_col:
+                    ed = cal[ed_col[0]].dropna()
+                    if not ed.empty:
+                        next_date = pd.to_datetime(ed.iloc[0]).date()
+                        days_away = (next_date - datetime.utcnow().date()).days
+                        if 0 <= days_away <= days_thresh:
+                            return {"triggered": True, "detail": f"Earnings in {days_away} day(s) ({next_date})"}
+
+    except Exception as e:
+        logger.debug("smart alert check failed %s/%s: %s", sym, atype, e)
+
+    return None
+
+
+@app.post("/api/alerts/smart/scan")
+async def scan_smart_alerts():
+    with db_session() as db:
+        rules = db.query(SmartAlertRule).filter(SmartAlertRule.active == 1).all()
+        rule_dicts = [{"id": r.id, "symbol": r.symbol, "alert_type": r.alert_type,
+                       "params": json.loads(r.params)} for r in rules]
+
+    if not rule_dicts:
+        return []
+
+    loop    = asyncio.get_event_loop()
+    futures = {loop.run_in_executor(None, _check_smart_rule, r): r for r in rule_dicts}
+    results = []
+    for fut, rule in futures.items():
+        outcome = await fut
+        if outcome and outcome.get("triggered"):
+            results.append({
+                "id":         rule["id"],
+                "symbol":     rule["symbol"],
+                "alert_type": rule["alert_type"],
+                "label":      SMART_ALERT_TYPES.get(rule["alert_type"], {}).get("label", rule["alert_type"]),
+                "detail":     outcome.get("detail", ""),
+            })
+    return results
+
+
+# ── Position Sizing Calculator ─────────────────────────────────────────────────
+
+class PositionSizeRequest(BaseModel):
+    symbol:       str
+    account_size: float
+    risk_pct:     float        # e.g. 1.0 for 1%
+    entry_price:  float
+    stop_price:   float
+
+
+@app.post("/api/position-sizing")
+async def calc_position_size(req: PositionSizeRequest):
+    sym        = req.symbol.upper().strip()
+    risk_amt   = req.account_size * (req.risk_pct / 100)
+    risk_per_share = abs(req.entry_price - req.stop_price)
+
+    if risk_per_share <= 0:
+        raise HTTPException(400, "entry_price and stop_price must differ")
+
+    # Fixed fractional
+    ff_shares  = risk_amt / risk_per_share
+    ff_dollars = ff_shares * req.entry_price
+    ff_acct_pct = ff_dollars / req.account_size * 100
+
+    # ATR-based (use 14-day ATR as the risk unit; size so that 1 ATR = risk_amt)
+    atr_shares = atr_val = None
+    try:
+        loop = asyncio.get_event_loop()
+        hist = await loop.run_in_executor(
+            None, lambda: yf.Ticker(sym, session=_session).history(period="60d", interval="1d", auto_adjust=True)
+        )
+        if len(hist) >= 15:
+            high = hist["High"].values.astype(float)
+            low  = hist["Low"].values.astype(float)
+            prev = hist["Close"].shift(1).values.astype(float)
+            tr   = np.maximum(high - low, np.maximum(np.abs(high - prev), np.abs(low - prev)))
+            atr_val   = round(float(np.mean(tr[-14:])), 4)
+            if atr_val > 0:
+                atr_shares = risk_amt / atr_val
+    except Exception:
+        pass
+
+    # Kelly (simplified: use last 252d win rate of daily moves)
+    kelly_shares = kelly_pct = None
+    try:
+        loop = asyncio.get_event_loop()
+        hist2 = await loop.run_in_executor(
+            None, lambda: yf.Ticker(sym, session=_session).history(period="1y", interval="1d", auto_adjust=True)
+        )
+        if len(hist2) >= 30:
+            daily = hist2["Close"].pct_change().dropna()
+            wins  = daily[daily > 0]
+            losses= daily[daily < 0]
+            if len(wins) > 0 and len(losses) > 0:
+                win_rate = len(wins) / len(daily)
+                avg_win  = float(wins.mean())
+                avg_loss = abs(float(losses.mean()))
+                kelly_f  = win_rate - (1 - win_rate) / (avg_win / avg_loss) if avg_loss > 0 else 0
+                half_kelly = max(0.0, kelly_f / 2)          # half-Kelly for safety
+                kelly_dollars = req.account_size * half_kelly
+                kelly_shares  = kelly_dollars / req.entry_price
+                kelly_pct     = round(half_kelly * 100, 2)
+    except Exception:
+        pass
+
+    def fmt_row(shares, label, note=""):
+        if shares is None or shares <= 0:
+            return None
+        dollars  = shares * req.entry_price
+        acct_pct = dollars / req.account_size * 100
+        return {
+            "method":   label,
+            "shares":   round(shares, 2),
+            "dollars":  round(dollars, 2),
+            "acct_pct": round(acct_pct, 1),
+            "note":     note,
+        }
+
+    return {
+        "symbol":        sym,
+        "account_size":  req.account_size,
+        "risk_pct":      req.risk_pct,
+        "risk_amount":   round(risk_amt, 2),
+        "entry":         req.entry_price,
+        "stop":          req.stop_price,
+        "risk_per_share": round(risk_per_share, 4),
+        "atr":           atr_val,
+        "methods": [r for r in [
+            fmt_row(ff_shares,    "Fixed Fractional",
+                    f"Risk ${risk_amt:.0f} / ${risk_per_share:.2f} per share"),
+            fmt_row(atr_shares,   "ATR-based (14)",
+                    f"ATR = ${atr_val:.2f}" if atr_val else "ATR unavailable"),
+            fmt_row(kelly_shares, "Half-Kelly",
+                    f"Kelly% = {kelly_pct:.1f}% of account" if kelly_pct else ""),
+        ] if r is not None],
+    }
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

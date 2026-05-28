@@ -67,6 +67,17 @@ class PortfolioSnapshot(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 
+class SmartAlertRule(Base):
+    """Condition-based alert rules (volume spike, gap, RSI, MA cross, earnings proximity)."""
+    __tablename__ = "smart_alert_rules"
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    symbol     = Column(String(20), nullable=False, index=True)
+    alert_type = Column(String(30), nullable=False)   # volume_spike|gap_up|gap_down|rsi_overbought|rsi_oversold|golden_cross|death_cross|earnings_proximity
+    params     = Column(Text, default='{}')           # JSON: thresholds/multipliers
+    active     = Column(Integer, default=1)           # 1=active, 0=disabled
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class PriceAlert(Base):
     __tablename__ = "price_alerts"
     id            = Column(Integer, primary_key=True, autoincrement=True)
@@ -102,6 +113,13 @@ def migrate_db():
     migrations = [
         "ALTER TABLE price_alerts ADD COLUMN alert_type VARCHAR(30) DEFAULT 'price'",
         "ALTER TABLE price_alerts ADD COLUMN trigger_value REAL",
+        ("CREATE TABLE IF NOT EXISTS smart_alert_rules ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "symbol VARCHAR(20) NOT NULL, "
+         "alert_type VARCHAR(30) NOT NULL, "
+         "params TEXT DEFAULT '{}', "
+         "active INTEGER DEFAULT 1, "
+         "created_at DATETIME)"),
     ]
     with engine.connect() as conn:
         for stmt in migrations:
