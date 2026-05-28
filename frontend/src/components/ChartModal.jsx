@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { createChart, CandlestickSeries, HistogramSeries, ColorType, CrosshairMode } from 'lightweight-charts'
 import FundamentalsPanel from './FundamentalsPanel'
 import NewsPanel from './NewsPanel'
+import OptionsChain from './OptionsChain'
 import { fmt } from '../utils/format'
 
 // ── Earnings history panel ────────────────────────────────────────────────────
@@ -304,7 +305,7 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
         {/* Tabs */}
         <div className="flex border-b border-gray-800 px-6 shrink-0">
-          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals'], ['news', 'News'], ['earnings', 'Earnings']].map(([val, label]) => (
+          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals'], ['news', 'News'], ['earnings', 'Earnings'], ['options', 'Options']].map(([val, label]) => (
             <button
               key={val}
               onClick={() => setTab(val)}
@@ -372,6 +373,8 @@ export default function ChartModal({ symbol, quote, onClose }) {
           {tab === 'news' && <NewsPanel symbol={symbol} />}
 
           {tab === 'earnings' && <EarningsPanel symbol={symbol} />}
+
+          {tab === 'options' && <OptionsChain symbol={symbol} />}
         </div>
       </div>
     </div>
