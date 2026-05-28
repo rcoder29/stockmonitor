@@ -18,6 +18,8 @@ import { AlertModal, AlertToast } from './components/PriceAlerts'
 import EarningsCalendar from './components/EarningsCalendar'
 import TechnicalSignals from './components/TechnicalSignals'
 import TradeIdeas from './components/TradeIdeas'
+import SmartAlerts from './components/SmartAlerts'
+import PositionSizer from './components/PositionSizer'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -37,6 +39,8 @@ const TABS = [
   { id: 'advisor',         label: 'Financial Advisor' },
   { id: 'signals',         label: 'Signals' },
   { id: 'tradeideas',      label: 'Trade Ideas' },
+  { id: 'smartalerts',     label: 'Smart Alerts' },
+  { id: 'positionsize',    label: 'Position Sizer' },
 ]
 
 function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
@@ -463,6 +467,8 @@ export default function App() {
         {activeTab === 'tradeideas'      && (
           <TradeIdeas watchlist={watchlist} quotes={quotes} alerts={alerts} />
         )}
+        {activeTab === 'smartalerts'    && <SmartAlerts />}
+        {activeTab === 'positionsize'   && <PositionSizer />}
       </main>
 
       {chartSymbol && (

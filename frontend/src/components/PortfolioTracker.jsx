@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { fmt } from '../utils/format'
 import ChartModal from './ChartModal'
+import PortfolioRisk from './PortfolioRisk'
 
 const COLORS = [
   '#10b981','#3b82f6','#8b5cf6','#f59e0b','#ef4444',
@@ -1513,12 +1514,17 @@ export default function PortfolioTracker() {
 
           {/* ── Risk view ── */}
           {viewMode === 'risk' && (
-            <section>
-              <div className="text-gray-600 text-xs uppercase tracking-widest mb-4">Portfolio Risk Metrics</div>
-              {riskData === null
-                ? <div className="text-gray-600 text-sm text-center py-16">Loading risk data…</div>
-                : <RiskView positions={withWeight} totalVal={totalVal} riskData={riskData} />
-              }
+            <section className="space-y-8">
+              <div>
+                <div className="text-gray-600 text-xs uppercase tracking-widest mb-4">Parametric Risk Estimates</div>
+                {riskData === null
+                  ? <div className="text-gray-600 text-sm text-center py-16">Loading risk data…</div>
+                  : <RiskView positions={withWeight} totalVal={totalVal} riskData={riskData} />
+                }
+              </div>
+              <div className="border-t border-gray-800 pt-6">
+                <PortfolioRisk />
+              </div>
             </section>
           )}
 
