@@ -1,5 +1,159 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { fmt } from '../utils/format'
+
+const CUSTOM_FIELDS = [
+  { id: 'price',         label: 'Price ($)',           unit: '$'  },
+  { id: 'changePercent', label: 'Change %',            unit: '%'  },
+  { id: 'marketCap',     label: 'Market Cap ($B)',      unit: '$B' },
+  { id: 'peRatio',       label: 'P/E (TTM)',            unit: ''   },
+  { id: 'forwardPE',     label: 'Forward P/E',          unit: ''   },
+  { id: 'profitMargin',  label: 'Profit Margin %',      unit: '%'  },
+  { id: 'revenueGrowth', label: 'Revenue Growth %',     unit: '%'  },
+  { id: 'roe',           label: 'Return on Equity %',   unit: '%'  },
+  { id: 'beta',          label: 'Beta',                 unit: ''   },
+  { id: 'dividendYield', label: 'Dividend Yield %',     unit: '%'  },
+  { id: 'debtToEquity',  label: 'Debt / Equity',        unit: ''   },
+  { id: 'volume',        label: 'Volume',               unit: ''   },
+  { id: 'week52High',    label: '52W High ($)',          unit: '$'  },
+  { id: 'week52Low',     label: '52W Low ($)',           unit: '$'  },
+]
+
+const CUSTOM_OPS = [
+  { id: 'gt',      label: '>  greater than'         },
+  { id: 'gte',     label: '≥  ≥ greater or equal'   },
+  { id: 'lt',      label: '<  less than'             },
+  { id: 'lte',     label: '≤  ≤ less or equal'       },
+  { id: 'between', label: '↔  between'               },
+]
+
+function CustomFilterRow({ filter, idx, onChange, onRemove }) {
+  const field = CUSTOM_FIELDS.find(f => f.id === filter.field) ?? CUSTOM_FIELDS[0]
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <select
+        value={filter.field}
+        onChange={e => onChange(idx, 'field', e.target.value)}
+        className="bg-gray-800 border border-gray-700 text-white text-xs px-2 py-1.5 rounded-lg focus:outline-none focus:border-emerald-500 w-44"
+      >
+        {CUSTOM_FIELDS.map(f => (
+          <option key={f.id} value={f.id}>{f.label}</option>
+        ))}
+      </select>
+      <select
+        value={filter.op}
+        onChange={e => onChange(idx, 'op', e.target.value)}
+        className="bg-gray-800 border border-gray-700 text-white text-xs px-2 py-1.5 rounded-lg focus:outline-none focus:border-emerald-500 w-40"
+      >
+        {CUSTOM_OPS.map(o => (
+          <option key={o.id} value={o.id}>{o.label}</option>
+        ))}
+      </select>
+      <input
+        type="number"
+        value={filter.value}
+        onChange={e => onChange(idx, 'value', e.target.value)}
+        placeholder={field.unit || 'value'}
+        className="bg-gray-800 border border-gray-700 text-white text-xs px-2 py-1.5 rounded-lg focus:outline-none focus:border-emerald-500 w-24 tabular-nums"
+      />
+      {filter.op === 'between' && (
+        <>
+          <span className="text-gray-600 text-xs">and</span>
+          <input
+            type="number"
+            value={filter.value2}
+            onChange={e => onChange(idx, 'value2', e.target.value)}
+            placeholder={field.unit || 'value'}
+            className="bg-gray-800 border border-gray-700 text-white text-xs px-2 py-1.5 rounded-lg focus:outline-none focus:border-emerald-500 w-24 tabular-nums"
+          />
+        </>
+      )}
+      <button onClick={() => onRemove(idx)} className="text-gray-700 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+    </div>
+  )
+}
+
+function CustomResults({ data, loading, error }) {
+  const [sortCol, setSortCol] = useState('symbol')
+  const [sortDir, setSortDir] = useState('asc')
+
+  function handleSort(key) {
+    if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(key); setSortDir('desc') }
+  }
+
+  const cols = [
+    { label: 'Symbol',    key: 'symbol',        align: 'text-left'  },
+    { label: 'Name',      key: 'name',          align: 'text-left'  },
+    { label: 'Price',     key: 'price',         align: 'text-right' },
+    { label: 'Chg %',     key: 'changePercent', align: 'text-right' },
+    { label: 'Mkt Cap',   key: 'marketCap',     align: 'text-right' },
+    { label: 'P/E',       key: 'peRatio',       align: 'text-right' },
+    { label: 'Margin %',  key: 'profitMargin',  align: 'text-right' },
+    { label: 'Rev Gr %',  key: 'revenueGrowth', align: 'text-right' },
+    { label: 'Beta',      key: 'beta',          align: 'text-right' },
+    { label: 'Sector',    key: 'sector',        align: 'text-left'  },
+  ]
+
+  const fmtCap = (v) => {
+    if (v == null) return '—'
+    if (v >= 1e12) return `$${(v / 1e12).toFixed(1)}T`
+    if (v >= 1e9)  return `$${(v / 1e9).toFixed(1)}B`
+    return `$${(v / 1e6).toFixed(0)}M`
+  }
+
+  const sorted = [...(data || [])].sort((a, b) => {
+    const av = a[sortCol] ?? null, bv = b[sortCol] ?? null
+    if (av == null && bv == null) return 0
+    if (av == null) return 1; if (bv == null) return -1
+    if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+    return sortDir === 'asc' ? av - bv : bv - av
+  })
+
+  if (loading) return <div className="text-gray-500 text-sm text-center py-20 animate-pulse">Running custom screen…</div>
+  if (error)   return <div className="text-red-400 text-sm text-center py-10">Error: {error}</div>
+  if (!data)   return null
+  if (data.length === 0) return <div className="text-gray-600 text-sm text-center py-16">No stocks matched your filters</div>
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-gray-800">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-gray-800 bg-gray-900/60">
+            {cols.map(({ label, key, align }) => (
+              <th key={key} onClick={() => handleSort(key)}
+                className={`py-2.5 px-3 text-gray-500 font-medium tracking-wider uppercase cursor-pointer select-none hover:text-gray-300 ${align}`}>
+                {label}<SortArrow active={sortCol === key} dir={sortDir} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(row => (
+            <tr key={row.symbol} className="border-b border-gray-800/40 hover:bg-gray-800/40 transition-colors">
+              <td className="py-2.5 px-3 text-white font-bold">{row.symbol}</td>
+              <td className="py-2.5 px-3 text-gray-400 max-w-[140px] truncate">{row.name ?? '—'}</td>
+              <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{row.price != null ? `$${row.price.toFixed(2)}` : '—'}</td>
+              <td className={`py-2.5 px-3 text-right tabular-nums font-medium ${(row.changePercent ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {row.changePercent != null ? `${row.changePercent >= 0 ? '+' : ''}${row.changePercent.toFixed(2)}%` : '—'}
+              </td>
+              <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{fmtCap(row.marketCap)}</td>
+              <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{row.peRatio != null ? row.peRatio.toFixed(1) : '—'}</td>
+              <td className={`py-2.5 px-3 text-right tabular-nums ${(row.profitMargin ?? 0) > 20 ? 'text-emerald-400' : 'text-gray-300'}`}>
+                {row.profitMargin != null ? `${row.profitMargin.toFixed(1)}%` : '—'}
+              </td>
+              <td className={`py-2.5 px-3 text-right tabular-nums ${(row.revenueGrowth ?? 0) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {row.revenueGrowth != null ? `${row.revenueGrowth.toFixed(1)}%` : '—'}
+              </td>
+              <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{row.beta != null ? row.beta.toFixed(2) : '—'}</td>
+              <td className="py-2.5 px-3 text-gray-500 text-[10px]">{row.sector ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="px-4 py-2 text-gray-700 text-xs border-t border-gray-800">{sorted.length} results · S&P 100 universe</div>
+    </div>
+  )
+}
 
 const TECH_SCANS = [
   { id: '52w_high',      label: '52W High',      desc: 'Within 3% of 52-week high — breakout candidates',       icon: '🚀' },
@@ -206,6 +360,12 @@ export default function Screener() {
   const [error, setError]     = useState(null)
   const [lastRun, setLastRun] = useState(null)
 
+  // Custom screener state
+  const [customFilters, setCustomFilters] = useState([
+    { field: 'peRatio', op: 'lt', value: '20', value2: '' },
+    { field: 'profitMargin', op: 'gt', value: '10', value2: '' },
+  ])
+
   const runScan = useCallback(async (m, key) => {
     setLoading(true); setError(null); setData(null)
     const url = m === 'technical'
@@ -220,9 +380,47 @@ export default function Screener() {
     finally { setLoading(false) }
   }, [])
 
+  const runCustom = useCallback(async () => {
+    setLoading(true); setError(null); setData(null)
+    const filters = customFilters
+      .filter(f => f.value !== '')
+      .map(f => ({
+        field: f.field,
+        op: f.op,
+        value: parseFloat(f.value),
+        value2: f.op === 'between' ? parseFloat(f.value2) : undefined,
+      }))
+    if (!filters.length) { setLoading(false); return }
+    try {
+      const r = await fetch('/api/screener/custom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filters }),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      setData(await r.json())
+      setLastRun(new Date())
+    } catch (e) { setError(e.message) }
+    finally { setLoading(false) }
+  }, [customFilters])
+
   useEffect(() => {
-    runScan(mode, mode === 'technical' ? techScan : fundScreen)
+    if (mode !== 'custom') {
+      runScan(mode, mode === 'technical' ? techScan : fundScreen)
+    }
   }, [mode, techScan, fundScreen])
+
+  function changeFilter(idx, key, val) {
+    setCustomFilters(prev => prev.map((f, i) => i === idx ? { ...f, [key]: val } : f))
+  }
+
+  function addFilter() {
+    setCustomFilters(prev => [...prev, { field: 'price', op: 'gt', value: '', value2: '' }])
+  }
+
+  function removeFilter(idx) {
+    setCustomFilters(prev => prev.filter((_, i) => i !== idx))
+  }
 
   const activeScan   = TECH_SCANS.find(s => s.id === techScan)
   const activeScreen = FUND_SCREENS.find(s => s.id === fundScreen)
@@ -234,8 +432,8 @@ export default function Screener() {
         <div className="text-gray-500 text-xs uppercase tracking-widest">Stock Screener</div>
         <div className="flex items-center gap-3">
           <div className="flex rounded overflow-hidden border border-gray-700">
-            {[['technical', 'Technical'], ['fundamental', 'Fundamental']].map(([id, label]) => (
-              <button key={id} onClick={() => setMode(id)}
+            {[['technical', 'Technical'], ['fundamental', 'Fundamental'], ['custom', 'Custom']].map(([id, label]) => (
+              <button key={id} onClick={() => { setMode(id); setData(null) }}
                 className={`px-4 py-1.5 text-xs transition-colors ${mode === id ? 'bg-gray-700 text-white' : 'bg-gray-900 text-gray-500 hover:text-gray-300'}`}>
                 {label}
               </button>
@@ -246,11 +444,13 @@ export default function Screener() {
               Last run {lastRun.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <button onClick={() => runScan(mode, mode === 'technical' ? techScan : fundScreen)}
-            disabled={loading}
-            className="text-xs text-gray-500 hover:text-emerald-400 border border-gray-700 rounded px-3 py-1.5 transition-colors disabled:opacity-40">
-            {loading ? '…' : '↺ Refresh'}
-          </button>
+          {mode !== 'custom' && (
+            <button onClick={() => runScan(mode, mode === 'technical' ? techScan : fundScreen)}
+              disabled={loading}
+              className="text-xs text-gray-500 hover:text-emerald-400 border border-gray-700 rounded px-3 py-1.5 transition-colors disabled:opacity-40">
+              {loading ? '…' : '↺ Refresh'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -281,6 +481,28 @@ export default function Screener() {
         </div>
       )}
 
+      {/* Custom filter builder */}
+      {mode === 'custom' && (
+        <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5 mb-5 space-y-4">
+          <div className="text-gray-400 text-xs uppercase tracking-widest">Filter Builder — S&P 100 Universe</div>
+          <div className="space-y-2.5">
+            {customFilters.map((f, i) => (
+              <CustomFilterRow key={i} filter={f} idx={i} onChange={changeFilter} onRemove={removeFilter} />
+            ))}
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <button onClick={addFilter}
+              className="text-xs text-gray-500 hover:text-emerald-400 border border-gray-700 hover:border-emerald-700 rounded px-3 py-1.5 transition-colors">
+              + Add Filter
+            </button>
+            <button onClick={runCustom} disabled={loading || customFilters.length === 0}
+              className="text-xs bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white rounded px-4 py-1.5 transition-colors font-medium">
+              {loading ? 'Screening…' : 'Run Screener'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Active description */}
       {mode === 'technical' && activeScan && (
         <div className="mb-4 text-gray-500 text-sm">
@@ -294,10 +516,9 @@ export default function Screener() {
       )}
 
       {/* Results */}
-      {mode === 'technical'
-        ? <TechResults data={data} loading={loading} error={error} scan={techScan} />
-        : <FundResults data={data} loading={loading} error={error} />
-      }
+      {mode === 'technical' && <TechResults data={data} loading={loading} error={error} scan={techScan} />}
+      {mode === 'fundamental' && <FundResults data={data} loading={loading} error={error} />}
+      {mode === 'custom' && <CustomResults data={data} loading={loading} error={error} />}
     </div>
   )
 }

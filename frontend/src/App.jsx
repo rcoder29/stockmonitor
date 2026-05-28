@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Header from './components/Header'
 import StockTable from './components/StockTable'
 import ChartModal from './components/ChartModal'
@@ -122,6 +122,11 @@ export default function App() {
   const prevPricesRef = useRef({})
   const flashTimerRef = useRef(null)
   const alertsRef     = useRef([])
+  const wsRef         = useRef(null)
+  const [wsConnected, setWsConnected] = useState(false)
+  const [notifPermission, setNotifPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+  )
 
   // Load all watchlist names
   useEffect(() => {
@@ -155,8 +160,114 @@ export default function App() {
       .catch(() => setWatchlist(activeList === 'default' ? DEFAULT_WATCHLIST : []))
   }, [activeList])
 
-  // Keep alertsRef in sync so fetchQuotes can read latest alerts without stale closure
+  // Keep alertsRef in sync so WebSocket and fetchQuotes can read latest alerts without stale closure
   useEffect(() => { alertsRef.current = alerts }, [alerts])
+
+  const requestNotifPermission = useCallback(async () => {
+    if (typeof Notification === 'undefined') return
+    const result = await Notification.requestPermission()
+    setNotifPermission(result)
+  }, [])
+
+  function processQuoteUpdates(data) {
+    const newFlash = {}
+    data.forEach(q => {
+      if (q.price != null) {
+        const prev = prevPricesRef.current[q.symbol]
+        if (prev != null && prev !== q.price) {
+          newFlash[q.symbol] = q.price > prev ? 'up' : 'down'
+        }
+        prevPricesRef.current[q.symbol] = q.price
+      }
+    })
+    if (Object.keys(newFlash).length > 0) {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
+      setPriceFlash(newFlash)
+      flashTimerRef.current = setTimeout(() => setPriceFlash({}), 1200)
+    }
+    const quoteMap = {}
+    data.forEach(q => { quoteMap[q.symbol] = q })
+    setQuotes(prev => {
+      const next = { ...prev }
+      data.forEach(q => { next[q.symbol] = q })
+      return next
+    })
+    setLastUpdated(new Date())
+    const activeAlerts = alertsRef.current.filter(a => a.status === 'active')
+    const nowTriggered = activeAlerts.filter(a => {
+      const q = quoteMap[a.symbol]
+      if (!q) return false
+      const { price, changePercent, week52High, week52Low, volume, avgVolume } = q
+      if (price == null) return false
+      switch (a.alert_type || 'price') {
+        case 'price':
+          return a.condition === 'above' ? price >= a.target_price : price <= a.target_price
+        case 'pct_change': {
+          const pct = changePercent ?? 0
+          return a.condition === 'above' ? pct >= (a.trigger_value ?? 5) : pct <= -(a.trigger_value ?? 5)
+        }
+        case 'week52_break':
+          return a.condition === 'above'
+            ? (week52High != null && price >= week52High)
+            : (week52Low  != null && price <= week52Low)
+        case 'volume_spike':
+          return avgVolume != null && volume != null && volume >= (a.trigger_value ?? 2) * avgVolume
+        default:
+          return a.condition === 'above' ? price >= a.target_price : price <= a.target_price
+      }
+    })
+    if (nowTriggered.length > 0) {
+      nowTriggered.forEach(a => fetch(`/api/alerts/${a.id}/trigger`, { method: 'PATCH' }))
+      setAlerts(prev => prev.map(a =>
+        nowTriggered.find(t => t.id === a.id) ? { ...a, status: 'triggered' } : a
+      ))
+      setToasts(prev => [
+        ...prev,
+        ...nowTriggered.map(a => ({ ...a, _toastId: `${a.id}-${Date.now()}` })),
+      ])
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        nowTriggered.forEach(a => {
+          new Notification(`Alert: ${a.symbol}`, {
+            body: a.note || `${a.symbol} price alert triggered`,
+          })
+        })
+      }
+    }
+  }
+
+  // WebSocket live price feed
+  const watchlistKey = watchlist.join(',')
+  useEffect(() => {
+    if (!watchlist.length) return
+    let intentionalClose = false
+    let reconnectTimeout = null
+
+    function connect() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const url = `${protocol}//${window.location.host}/ws/quotes?symbols=${watchlist.join(',')}`
+      const ws = new WebSocket(url)
+      wsRef.current = ws
+      ws.onopen  = () => setWsConnected(true)
+      ws.onclose = () => {
+        setWsConnected(false)
+        if (!intentionalClose) {
+          reconnectTimeout = setTimeout(connect, 5000)
+        }
+      }
+      ws.onerror = () => ws.close()
+      ws.onmessage = (e) => {
+        try { processQuoteUpdates(JSON.parse(e.data)) } catch {}
+      }
+    }
+
+    connect()
+    return () => {
+      intentionalClose = true
+      clearTimeout(reconnectTimeout)
+      wsRef.current?.close()
+      setWsConnected(false)
+    }
+  }, [watchlistKey])
 
   // Load alerts from DB on mount
   useEffect(() => {
@@ -207,70 +318,7 @@ export default function App() {
     try {
       const res = await fetch(`/api/quotes?symbols=${watchlist.join(',')}`)
       if (!res.ok) throw new Error(`Server error ${res.status}`)
-      const data = await res.json()
-
-      const newFlash = {}
-      data.forEach((q) => {
-        if (q.price != null) {
-          const prev = prevPricesRef.current[q.symbol]
-          if (prev != null && prev !== q.price) {
-            newFlash[q.symbol] = q.price > prev ? 'up' : 'down'
-          }
-          prevPricesRef.current[q.symbol] = q.price
-        }
-      })
-
-      if (Object.keys(newFlash).length > 0) {
-        if (flashTimerRef.current) clearTimeout(flashTimerRef.current)
-        setPriceFlash(newFlash)
-        flashTimerRef.current = setTimeout(() => setPriceFlash({}), 1200)
-      }
-
-      // Build quote map for alert checking before state update
-      const quoteMap = {}
-      data.forEach(q => { quoteMap[q.symbol] = q })
-
-      setQuotes((prev) => {
-        const next = { ...prev }
-        data.forEach((q) => { next[q.symbol] = q })
-        return next
-      })
-      setLastUpdated(new Date())
-
-      // Check active alerts against new prices (supports smart alert types)
-      const activeAlerts = alertsRef.current.filter(a => a.status === 'active')
-      const nowTriggered = activeAlerts.filter(a => {
-        const q = quoteMap[a.symbol]
-        if (!q) return false
-        const { price, changePercent, week52High, week52Low, volume, avgVolume } = q
-        if (price == null) return false
-        switch (a.alert_type || 'price') {
-          case 'price':
-            return a.condition === 'above' ? price >= a.target_price : price <= a.target_price
-          case 'pct_change': {
-            const pct = changePercent ?? 0
-            return a.condition === 'above' ? pct >= (a.trigger_value ?? 5) : pct <= -(a.trigger_value ?? 5)
-          }
-          case 'week52_break':
-            return a.condition === 'above'
-              ? (week52High != null && price >= week52High)
-              : (week52Low  != null && price <= week52Low)
-          case 'volume_spike':
-            return avgVolume != null && volume != null && volume >= (a.trigger_value ?? 2) * avgVolume
-          default:
-            return a.condition === 'above' ? price >= a.target_price : price <= a.target_price
-        }
-      })
-      if (nowTriggered.length > 0) {
-        nowTriggered.forEach(a => fetch(`/api/alerts/${a.id}/trigger`, { method: 'PATCH' }))
-        setAlerts(prev => prev.map(a =>
-          nowTriggered.find(t => t.id === a.id) ? { ...a, status: 'triggered' } : a
-        ))
-        setToasts(prev => [
-          ...prev,
-          ...nowTriggered.map(a => ({ ...a, _toastId: `${a.id}-${Date.now()}` })),
-        ])
-      }
+      processQuoteUpdates(await res.json())
     } catch (err) {
       setError(err.message)
     } finally {
@@ -342,6 +390,9 @@ export default function App() {
         countdown={countdown}
         onRefresh={fetchQuotes}
         onAddTicker={addTicker}
+        wsConnected={wsConnected}
+        notifPermission={notifPermission}
+        onRequestNotif={requestNotifPermission}
       />
 
       {/* Top-level tab bar */}
