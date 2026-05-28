@@ -4816,7 +4816,8 @@ async def get_transcript_summary(symbol: str):
 
     # Send to Claude for structured summary
     try:
-        claude_resp = await loop.run_in_executor(None, lambda: anthropic_client.messages.create(
+        _ac = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        claude_resp = await loop.run_in_executor(None, lambda: _ac.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=800,
             system=_TRANSCRIPT_SYSTEM,
