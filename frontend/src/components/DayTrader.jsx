@@ -365,6 +365,7 @@ export default function DayTrader() {
   const [error,        setError]        = useState(null)
   const [candSort,     setCandSort]     = useState(null)
   const [candDir,      setCandDir]      = useState('asc')
+  const [candQuery,    setCandQuery]    = useState('')
 
   function handleCandSort(key) {
     if (!key) return
@@ -428,8 +429,16 @@ export default function DayTrader() {
     }
   }
 
+  const cq = candQuery.trim().toLowerCase()
+  const filteredCandidates = cq
+    ? rawCandidates.filter(s =>
+        s.symbol.toLowerCase().includes(cq) ||
+        (s.name ?? '').toLowerCase().includes(cq)
+      )
+    : rawCandidates
+
   const candidates = candSort
-    ? [...rawCandidates].sort((a, b) => {
+    ? [...filteredCandidates].sort((a, b) => {
         const av = candVal(a, candSort)
         const bv = candVal(b, candSort)
         if (av == null && bv == null) return 0
@@ -438,7 +447,7 @@ export default function DayTrader() {
         if (typeof av === 'string') return candDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
         return candDir === 'asc' ? av - bv : bv - av
       })
-    : rawCandidates
+    : filteredCandidates
 
   return (
     <div className="p-4 max-w-7xl mx-auto">
@@ -565,13 +574,52 @@ export default function DayTrader() {
                     Stop {stopPct}% · Target {(stopPct * rrRatio).toFixed(1)}% · {rrRatio}:1 R/R
                   </div>
                 </div>
+
+                {/* Search bar */}
+                <div className="relative mb-3">
+                  <svg
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
+                    fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={candQuery}
+                    onChange={e => setCandQuery(e.target.value)}
+                    placeholder="Filter candidates by symbol or name…"
+                    className="w-full bg-gray-900 border border-gray-700 text-white placeholder-gray-600 pl-9 pr-8 py-2 text-sm rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                  {candQuery && (
+                    <button
+                      onClick={() => setCandQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors text-lg leading-none"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                {cq && rawCandidates.length > 0 && (
+                  <div className="text-xs text-gray-500 mb-3">
+                    {candidates.length === 0
+                      ? `No matches for "${candQuery}"`
+                      : `${candidates.length} of ${rawCandidates.length} candidates`}
+                  </div>
+                )}
+
                 <div className="bg-gray-900/60 border border-gray-800 rounded-lg overflow-x-auto">
                   {loading && (
                     <div className="py-12 text-center text-gray-500 text-sm animate-pulse">Scanning markets…</div>
                   )}
-                  {!loading && candidates.length === 0 && (
+                  {!loading && rawCandidates.length === 0 && (
                     <div className="py-12 text-center text-gray-600 text-sm">
                       No candidates — markets may be closed or scanner returned no results
+                    </div>
+                  )}
+                  {!loading && rawCandidates.length > 0 && candidates.length === 0 && (
+                    <div className="py-12 text-center text-gray-600 text-sm">
+                      No candidates match &ldquo;{candQuery}&rdquo;
                     </div>
                   )}
                   {!loading && candidates.length > 0 && (
