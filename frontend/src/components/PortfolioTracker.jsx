@@ -996,11 +996,15 @@ export default function PortfolioTracker() {
   const [countdown,    setCountdown]    = useState(30)
   const [chartSymbol,  setChartSymbol]  = useState(null)
   const [chartQuote,   setChartQuote]   = useState(null)
-  const [viewMode,     setViewMode]     = useState('heatmap')
-  const [sortCol,      setSortCol]      = useState(null)
-  const [sortDir,      setSortDir]      = useState('asc')
-  const [portQuery,    setPortQuery]    = useState('')
-  const [riskData,     setRiskData]     = useState(null)
+  const [viewMode,        setViewMode]        = useState('heatmap')
+  const [sortCol,         setSortCol]         = useState(null)
+  const [sortDir,         setSortDir]         = useState('asc')
+  const [portQuery,       setPortQuery]       = useState('')
+  const [riskData,        setRiskData]        = useState(null)
+  const [dividendData,    setDividendData]    = useState(null)
+  const [dividendLoading, setDividendLoading] = useState(false)
+  const [corrData,        setCorrData]        = useState(null)
+  const [corrLoading,     setCorrLoading]     = useState(false)
 
   function handleSort(key) {
     if (!key) return
@@ -1016,6 +1020,34 @@ export default function PortfolioTracker() {
         .catch(() => setRiskData({ spy_daily_vol: 0.0095, spy_annual_vol: 0.155, risk_free_rate: 0.045, error: 'fetch failed' }))
     }
   }, [viewMode, riskData])
+
+  useEffect(() => {
+    if (viewMode !== 'dividends' || dividendData || positions.length === 0) return
+    setDividendLoading(true)
+    fetch('/api/dividends', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols: positions.map(p => p.symbol) }),
+    })
+      .then(r => r.json())
+      .then(setDividendData)
+      .catch(() => setDividendData([]))
+      .finally(() => setDividendLoading(false))
+  }, [viewMode, dividendData, positions])
+
+  useEffect(() => {
+    if (viewMode !== 'correlation' || corrData || positions.length < 2) return
+    setCorrLoading(true)
+    fetch('/api/portfolio/correlation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols: positions.map(p => p.symbol), period: '3mo' }),
+    })
+      .then(r => r.json())
+      .then(setCorrData)
+      .catch(() => setCorrData({ error: 'fetch failed' }))
+      .finally(() => setCorrLoading(false))
+  }, [viewMode, corrData, positions])
 
   // Form state
   const [sym,     setSym]     = useState('')
@@ -1162,7 +1194,7 @@ export default function PortfolioTracker() {
         <div className="flex items-center gap-3">
           {/* View toggle */}
           <div className="flex rounded overflow-hidden border border-gray-700">
-            {[['heatmap', 'Heatmap'], ['table', 'Table'], ['exposure', 'Exposure'], ['risk', 'Risk'], ['performance', 'Performance']].map(([id, label]) => (
+            {[['heatmap', 'Heatmap'], ['table', 'Table'], ['exposure', 'Exposure'], ['risk', 'Risk'], ['performance', 'Performance'], ['dividends', 'Dividends'], ['correlation', 'Correlation']].map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setViewMode(id)}
@@ -1290,6 +1322,173 @@ export default function PortfolioTracker() {
           {viewMode === 'performance' && (
             <section>
               <PerformanceView positions={withWeight} totalVal={totalVal} />
+            </section>
+          )}
+
+          {/* ── Dividends view ── */}
+          {viewMode === 'dividends' && (
+            <section>
+              <div className="text-gray-600 text-xs uppercase tracking-widest mb-4">Dividend Income</div>
+              {dividendLoading && <div className="py-16 text-center text-gray-500 text-sm animate-pulse">Loading dividend data…</div>}
+              {!dividendLoading && dividendData && (() => {
+                const payers = dividendData.filter(d => d.paysDividend && !d.error)
+                const totalIncome = payers.reduce((s, d) => {
+                  const pos = positions.find(p => p.symbol === d.symbol)
+                  return s + ((d.dividendRate ?? 0) * (pos?.shares ?? 0))
+                }, 0)
+                return (
+                  <div className="space-y-4">
+                    {/* KPI row */}
+                    <div className="flex flex-wrap gap-3 mb-2">
+                      <div className="bg-gray-800/60 rounded-lg px-4 py-3">
+                        <div className="text-gray-500 text-xs mb-0.5">Annual Dividend Income</div>
+                        <div className="text-emerald-400 font-bold text-lg tabular-nums">
+                          ${totalIncome.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}
+                        </div>
+                      </div>
+                      <div className="bg-gray-800/60 rounded-lg px-4 py-3">
+                        <div className="text-gray-500 text-xs mb-0.5">Dividend Payers</div>
+                        <div className="text-white font-bold text-lg">{payers.length} / {dividendData.length}</div>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-lg border border-gray-800">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-gray-800 bg-gray-900">
+                            {['Symbol', 'Shares', 'Annual Rate', 'Yield %', 'Yield on Cost', 'Annual Income', 'Ex-Div Date', 'Payout Ratio', 'Last Div'].map((h, i) => (
+                              <th key={h} className={`py-2.5 px-3 text-gray-500 font-medium tracking-wider uppercase ${i <= 1 ? 'text-left' : 'text-right'}`}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dividendData.map(d => {
+                            const pos = positions.find(p => p.symbol === d.symbol)
+                            const sh = pos?.shares ?? 0
+                            const annualIncome = (d.dividendRate ?? 0) * sh
+                            const yoc = pos?.avg_cost && d.dividendRate
+                              ? ((d.dividendRate / pos.avg_cost) * 100).toFixed(2)
+                              : null
+                            return (
+                              <tr key={d.symbol} className={`border-b border-gray-800/40 hover:bg-gray-800/30 ${!d.paysDividend ? 'opacity-50' : ''}`}>
+                                <td className="py-2.5 px-3 font-bold text-white">{d.symbol}</td>
+                                <td className="py-2.5 px-3 text-gray-400 tabular-nums">{sh.toLocaleString()}</td>
+                                <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">
+                                  {d.dividendRate ? `$${d.dividendRate.toFixed(4)}` : '—'}
+                                </td>
+                                <td className="py-2.5 px-3 text-right tabular-nums text-emerald-400">
+                                  {d.dividendYield ? `${d.dividendYield}%` : '—'}
+                                </td>
+                                <td className={`py-2.5 px-3 text-right tabular-nums ${yoc ? 'text-sky-400' : 'text-gray-600'}`}>
+                                  {yoc ? `${yoc}%` : '—'}
+                                </td>
+                                <td className="py-2.5 px-3 text-right tabular-nums font-semibold text-emerald-400">
+                                  {annualIncome > 0 ? `$${annualIncome.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—'}
+                                </td>
+                                <td className="py-2.5 px-3 text-right text-gray-400">{d.exDividendDate ?? '—'}</td>
+                                <td className="py-2.5 px-3 text-right text-gray-500 tabular-nums">
+                                  {d.payoutRatio ? `${(d.payoutRatio * 100).toFixed(0)}%` : '—'}
+                                </td>
+                                <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">
+                                  {d.lastDividend ? `$${d.lastDividend}` : '—'}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              })()}
+            </section>
+          )}
+
+          {/* ── Correlation view ── */}
+          {viewMode === 'correlation' && (
+            <section>
+              <div className="text-gray-600 text-xs uppercase tracking-widest mb-4">90-Day Return Correlation</div>
+              {positions.length < 2 && (
+                <div className="py-16 text-center text-gray-600 text-sm">Add at least 2 positions to see correlation</div>
+              )}
+              {positions.length >= 2 && corrLoading && (
+                <div className="py-16 text-center text-gray-500 text-sm animate-pulse">Computing correlation matrix…</div>
+              )}
+              {positions.length >= 2 && !corrLoading && corrData && !corrData.error && (() => {
+                const syms = corrData.symbols
+                const mat  = corrData.matrix
+                const cellSize = Math.min(Math.floor(480 / syms.length), 64)
+                const W = cellSize * syms.length
+                const H = cellSize * syms.length
+                const PAD = 60
+
+                function corrColor(v) {
+                  if (v == null) return '#374151'
+                  if (v >= 0.9)  return '#064e3b'
+                  if (v >= 0.7)  return '#065f46'
+                  if (v >= 0.5)  return '#047857'
+                  if (v >= 0.3)  return '#059669'
+                  if (v >= 0.1)  return '#6b7280'
+                  if (v >= -0.1) return '#4b5563'
+                  if (v >= -0.3) return '#7f1d1d'
+                  if (v >= -0.5) return '#991b1b'
+                  return '#b91c1c'
+                }
+
+                return (
+                  <div className="space-y-4">
+                    <div className="text-gray-600 text-xs mb-2">
+                      Green = high positive correlation (move together) · Red = negative (move opposite) · Gray = low correlation
+                    </div>
+                    <div className="overflow-x-auto">
+                      <svg width={W + PAD} height={H + PAD} style={{ fontFamily: 'monospace' }}>
+                        {/* Column headers */}
+                        {syms.map((s, j) => (
+                          <text key={s} x={PAD + j * cellSize + cellSize / 2} y={PAD - 8}
+                            textAnchor="middle" fontSize="10" fill="#6b7280">{s}</text>
+                        ))}
+                        {/* Row headers */}
+                        {syms.map((s, i) => (
+                          <text key={s} x={PAD - 6} y={PAD + i * cellSize + cellSize / 2 + 4}
+                            textAnchor="end" fontSize="10" fill="#6b7280">{s}</text>
+                        ))}
+                        {/* Cells */}
+                        {mat.map((row, i) =>
+                          row.map((val, j) => (
+                            <g key={`${i}-${j}`}>
+                              <rect
+                                x={PAD + j * cellSize} y={PAD + i * cellSize}
+                                width={cellSize - 1} height={cellSize - 1}
+                                fill={corrColor(val)} rx="2"
+                              />
+                              <text
+                                x={PAD + j * cellSize + cellSize / 2}
+                                y={PAD + i * cellSize + cellSize / 2 + 4}
+                                textAnchor="middle" fontSize={cellSize > 48 ? 11 : 9}
+                                fill={val != null && Math.abs(val) > 0.3 ? '#e5e7eb' : '#9ca3af'}
+                              >
+                                {val != null ? val.toFixed(2) : '?'}
+                              </text>
+                            </g>
+                          ))
+                        )}
+                      </svg>
+                    </div>
+                    {/* Legend */}
+                    <div className="flex gap-2 flex-wrap text-xs text-gray-500">
+                      {[['≥ 0.7', '#065f46', 'Strong +'], ['0.3–0.7', '#059669', 'Moderate +'], ['−0.3–0.3', '#4b5563', 'Low'], ['−0.3 to −0.7', '#991b1b', 'Moderate −'], ['≤ −0.7', '#b91c1c', 'Strong −']].map(([range, clr, label]) => (
+                        <div key={range} className="flex items-center gap-1">
+                          <div className="w-3 h-3 rounded-sm" style={{ background: clr }} />
+                          <span>{label} ({range})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+              {positions.length >= 2 && !corrLoading && corrData?.error && (
+                <div className="py-8 text-center text-red-400 text-sm">Failed to compute correlation: {corrData.error}</div>
+              )}
             </section>
           )}
 

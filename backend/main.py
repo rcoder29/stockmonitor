@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 from typing import List
 import numpy as np
+import pandas as pd
 import yfinance as yf
 import yfinance.screener.screener as yf_screener
 import logging
@@ -18,7 +19,7 @@ load_dotenv()
 
 from database import (
     init_db, db_session, cache_get, cache_set,
-    WatchlistSymbol, PortfolioPosition, PriceAlert,
+    WatchlistSymbol, PortfolioPosition, PriceAlert, TradeJournalEntry,
 )
 
 # Corporate proxy uses a self-signed cert — reuse one session with SSL disabled
@@ -1555,6 +1556,323 @@ def get_premarket_movers():
               "losers":  [m for m in movers if m["changePercent"] < 0][:10]}
     cache_set(cache_key, result)
     return result
+
+
+# ── Options Chain ─────────────────────────────────────────────────────────────
+
+_OPTIONS_TTL     = timedelta(minutes=15)
+_DIVIDEND_TTL    = timedelta(hours=4)
+_CORRELATION_TTL = timedelta(minutes=30)
+
+
+@app.get("/api/options/{symbol}/expirations")
+def get_option_expirations(symbol: str):
+    sym = symbol.upper()
+    key = f"options:exps:{sym}"
+    cached = cache_get(key, _OPTIONS_TTL)
+    if cached is not None:
+        return cached
+    try:
+        dates = list(yf.Ticker(sym, session=_session).options)
+        result = {"symbol": sym, "expirations": dates}
+        cache_set(key, result)
+        return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/options/{symbol}")
+def get_option_chain(symbol: str, expiry: str | None = None):
+    sym = symbol.upper()
+    key = f"options:chain:{sym}:{expiry}"
+    cached = cache_get(key, _OPTIONS_TTL)
+    if cached is not None:
+        return cached
+    try:
+        ticker = yf.Ticker(sym, session=_session)
+        if not expiry:
+            exps = ticker.options
+            if not exps:
+                return {"calls": [], "puts": [], "putCallRatio": None, "expiry": None}
+            expiry = exps[0]
+        chain = ticker.option_chain(expiry)
+
+        def process_df(df, side):
+            rows = []
+            for _, row in df.iterrows():
+                vol = int(row.get("volume") or 0)
+                oi  = int(row.get("openInterest") or 0)
+                iv  = row.get("impliedVolatility")
+                rows.append({
+                    "strike":          round(float(row["strike"]), 2),
+                    "bid":             round(float(row.get("bid") or 0), 2),
+                    "ask":             round(float(row.get("ask") or 0), 2),
+                    "lastPrice":       round(float(row.get("lastPrice") or 0), 2),
+                    "volume":          vol,
+                    "openInterest":    oi,
+                    "impliedVolatility": round(float(iv) * 100, 1) if iv and not pd.isna(iv) else None,
+                    "inTheMoney":      bool(row.get("inTheMoney", False)),
+                    "unusual":         vol >= 500 and (oi == 0 or vol > oi * 2),
+                })
+            return rows
+
+        calls = process_df(chain.calls, "call")
+        puts  = process_df(chain.puts,  "put")
+        total_call_oi = sum(r["openInterest"] for r in calls)
+        total_put_oi  = sum(r["openInterest"] for r in puts)
+        result = {
+            "symbol": sym, "expiry": expiry,
+            "calls": calls, "puts": puts,
+            "putCallRatio": round(total_put_oi / total_call_oi, 2) if total_call_oi > 0 else None,
+            "totalCallOI": total_call_oi, "totalPutOI": total_put_oi,
+        }
+        cache_set(key, result)
+        return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ── Trade Journal ─────────────────────────────────────────────────────────────
+
+class JournalEntryIn(BaseModel):
+    symbol:     str
+    side:       str       # 'buy' | 'sell'
+    price:      float
+    shares:     float
+    strategy:   str | None = None
+    trade_date: str       # YYYY-MM-DD
+    notes:      str | None = None
+
+
+def _entry_dict(e) -> dict:
+    return {
+        "id": e.id, "symbol": e.symbol, "side": e.side,
+        "price": e.price, "shares": e.shares, "strategy": e.strategy,
+        "trade_date": e.trade_date, "notes": e.notes,
+    }
+
+
+@app.get("/api/journal")
+def list_journal():
+    with db_session() as db:
+        entries = (
+            db.query(TradeJournalEntry)
+            .order_by(TradeJournalEntry.trade_date.desc(), TradeJournalEntry.created_at.desc())
+            .all()
+        )
+        return [_entry_dict(e) for e in entries]
+
+
+@app.post("/api/journal", status_code=201)
+def add_journal_entry(body: JournalEntryIn):
+    with db_session() as db:
+        e = TradeJournalEntry(
+            symbol=body.symbol.upper(), side=body.side,
+            price=body.price, shares=body.shares,
+            strategy=body.strategy, trade_date=body.trade_date, notes=body.notes,
+        )
+        db.add(e)
+        db.flush()
+        return _entry_dict(e)
+
+
+@app.delete("/api/journal/{entry_id}", status_code=204)
+def delete_journal_entry(entry_id: int):
+    with db_session() as db:
+        e = db.query(TradeJournalEntry).filter(TradeJournalEntry.id == entry_id).first()
+        if not e:
+            raise HTTPException(404, "Not found")
+        db.delete(e)
+
+
+@app.get("/api/journal/stats")
+def get_journal_stats():
+    from collections import defaultdict
+    with db_session() as db:
+        entries = (
+            db.query(TradeJournalEntry)
+            .order_by(TradeJournalEntry.trade_date, TradeJournalEntry.created_at)
+            .all()
+        )
+    if not entries:
+        return {"totalPnl": 0, "winRate": None, "tradeCount": 0, "closedTrades": 0,
+                "wins": 0, "losses": 0, "byStrategy": {}}
+
+    buys = defaultdict(list)  # symbol -> [[price, remaining_shares]]
+    closed = []
+
+    for e in entries:
+        if e.side == "buy":
+            buys[e.symbol].append([e.price, e.shares])
+        elif e.side == "sell":
+            remaining = e.shares
+            realized  = 0.0
+            q = buys[e.symbol]
+            while remaining > 1e-9 and q:
+                bp, bq = q[0]
+                matched = min(remaining, bq)
+                realized  += matched * (e.price - bp)
+                q[0][1]   -= matched
+                remaining -= matched
+                if q[0][1] < 1e-9:
+                    q.pop(0)
+            closed.append({"strategy": e.strategy or "Other", "pnl": round(realized, 2)})
+
+    total_pnl = round(sum(t["pnl"] for t in closed), 2)
+    wins   = sum(1 for t in closed if t["pnl"] > 0)
+    losses = sum(1 for t in closed if t["pnl"] < 0)
+
+    by_strat = defaultdict(lambda: {"pnl": 0.0, "wins": 0, "losses": 0, "trades": 0})
+    for t in closed:
+        s = t["strategy"]
+        by_strat[s]["pnl"]    = round(by_strat[s]["pnl"] + t["pnl"], 2)
+        by_strat[s]["trades"] += 1
+        if t["pnl"] > 0: by_strat[s]["wins"]   += 1
+        elif t["pnl"] < 0: by_strat[s]["losses"] += 1
+
+    return {
+        "totalPnl": total_pnl,
+        "winRate":  round(wins / len(closed) * 100, 1) if closed else None,
+        "tradeCount": len(entries), "closedTrades": len(closed),
+        "wins": wins, "losses": losses,
+        "byStrategy": dict(by_strat),
+    }
+
+
+# ── Dividends ─────────────────────────────────────────────────────────────────
+
+class DividendRequest(BaseModel):
+    symbols: List[str]
+
+
+@app.post("/api/dividends")
+def get_dividends(body: DividendRequest):
+    key = f"dividends:{'|'.join(sorted(body.symbols))}"
+    cached = cache_get(key, _DIVIDEND_TTL)
+    if cached is not None:
+        return cached
+
+    def fetch_div(sym: str):
+        try:
+            ticker = yf.Ticker(sym, session=_session)
+            info   = ticker.info
+            divs   = ticker.dividends
+            history = []
+            if len(divs) > 0:
+                for ts, amt in divs.tail(8).items():
+                    history.append({"date": str(ts.date()), "amount": round(float(amt), 4)})
+            ex_ts = info.get("exDividendDate")
+            ex_date = None
+            if ex_ts:
+                try:
+                    ex_date = datetime.utcfromtimestamp(int(ex_ts)).strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+            return {
+                "symbol":        sym,
+                "dividendRate":  _safe_float(info.get("dividendRate")),
+                "dividendYield": round(float(info.get("dividendYield") or 0) * 100, 2),
+                "exDividendDate": ex_date,
+                "payoutRatio":   _safe_float(info.get("payoutRatio")),
+                "lastDividend":  round(float(divs.iloc[-1]), 4) if len(divs) > 0 else None,
+                "history":       history,
+                "paysDividend":  bool((info.get("dividendRate") or 0) > 0),
+            }
+        except Exception:
+            return {"symbol": sym, "error": True, "paysDividend": False, "history": []}
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(fetch_div, body.symbols))
+
+    cache_set(key, results)
+    return results
+
+
+# ── Correlation Matrix ────────────────────────────────────────────────────────
+
+class CorrRequest(BaseModel):
+    symbols: List[str]
+    period:  str = "3mo"
+
+
+@app.post("/api/portfolio/correlation")
+def get_correlation(body: CorrRequest):
+    if len(body.symbols) < 2:
+        raise HTTPException(400, "Need at least 2 symbols")
+    key = f"corr:{'|'.join(sorted(body.symbols))}:{body.period}"
+    cached = cache_get(key, _CORRELATION_TTL)
+    if cached is not None:
+        return cached
+    try:
+        raw = yf.download(body.symbols, period=body.period, auto_adjust=True, progress=False)["Close"]
+        closes = raw.to_frame(body.symbols[0]) if isinstance(raw, pd.Series) else raw
+        closes = closes.ffill().dropna(how="all")
+        returns = closes.pct_change().dropna()
+        syms = [s for s in body.symbols if s in returns.columns]
+        if len(syms) < 2:
+            raise HTTPException(400, "Insufficient price data")
+        corr = returns[syms].corr()
+        matrix = [
+            [round(float(corr.loc[s1, s2]), 3) if not np.isnan(corr.loc[s1, s2]) else None
+             for s2 in syms]
+            for s1 in syms
+        ]
+        result = {"symbols": syms, "matrix": matrix}
+        cache_set(key, result)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ── Economic Calendar ─────────────────────────────────────────────────────────
+
+_ECON_EVENTS = [
+    # FOMC decisions — 2026
+    {"date": "2026-06-17", "event": "FOMC Rate Decision",  "type": "fomc", "description": "Federal Reserve interest rate decision and press conference"},
+    {"date": "2026-07-29", "event": "FOMC Rate Decision",  "type": "fomc", "description": "Federal Reserve interest rate decision"},
+    {"date": "2026-09-16", "event": "FOMC Rate Decision",  "type": "fomc", "description": "Federal Reserve interest rate decision and press conference"},
+    {"date": "2026-10-28", "event": "FOMC Rate Decision",  "type": "fomc", "description": "Federal Reserve interest rate decision"},
+    {"date": "2026-12-09", "event": "FOMC Rate Decision",  "type": "fomc", "description": "Federal Reserve interest rate decision and press conference"},
+    # CPI — approximate BLS release schedule
+    {"date": "2026-06-10", "event": "CPI Release",          "type": "cpi",  "description": "Consumer Price Index — May 2026"},
+    {"date": "2026-07-14", "event": "CPI Release",          "type": "cpi",  "description": "Consumer Price Index — June 2026"},
+    {"date": "2026-08-12", "event": "CPI Release",          "type": "cpi",  "description": "Consumer Price Index — July 2026"},
+    {"date": "2026-09-10", "event": "CPI Release",          "type": "cpi",  "description": "Consumer Price Index — August 2026"},
+    {"date": "2026-10-13", "event": "CPI Release",          "type": "cpi",  "description": "Consumer Price Index — September 2026"},
+    # PPI
+    {"date": "2026-06-11", "event": "PPI Release",          "type": "ppi",  "description": "Producer Price Index — May 2026"},
+    {"date": "2026-07-15", "event": "PPI Release",          "type": "ppi",  "description": "Producer Price Index — June 2026"},
+    {"date": "2026-08-13", "event": "PPI Release",          "type": "ppi",  "description": "Producer Price Index — July 2026"},
+    {"date": "2026-09-11", "event": "PPI Release",          "type": "ppi",  "description": "Producer Price Index — August 2026"},
+    # Jobs reports — first Friday of month
+    {"date": "2026-06-05", "event": "Jobs Report",          "type": "jobs", "description": "Non-Farm Payrolls — May 2026"},
+    {"date": "2026-07-02", "event": "Jobs Report",          "type": "jobs", "description": "Non-Farm Payrolls — June 2026"},
+    {"date": "2026-08-07", "event": "Jobs Report",          "type": "jobs", "description": "Non-Farm Payrolls — July 2026"},
+    {"date": "2026-09-04", "event": "Jobs Report",          "type": "jobs", "description": "Non-Farm Payrolls — August 2026"},
+    {"date": "2026-10-02", "event": "Jobs Report",          "type": "jobs", "description": "Non-Farm Payrolls — September 2026"},
+    # PCE inflation
+    {"date": "2026-05-29", "event": "PCE Inflation",        "type": "pce",  "description": "Personal Consumption Expenditures — April 2026"},
+    {"date": "2026-06-26", "event": "PCE Inflation",        "type": "pce",  "description": "Personal Consumption Expenditures — May 2026"},
+    {"date": "2026-07-31", "event": "PCE Inflation",        "type": "pce",  "description": "Personal Consumption Expenditures — June 2026"},
+    {"date": "2026-08-28", "event": "PCE Inflation",        "type": "pce",  "description": "Personal Consumption Expenditures — July 2026"},
+    # GDP advance estimates
+    {"date": "2026-06-25", "event": "GDP (Advance)",        "type": "gdp",  "description": "Q1 2026 GDP advance estimate"},
+    {"date": "2026-09-25", "event": "GDP (Advance)",        "type": "gdp",  "description": "Q2 2026 GDP advance estimate"},
+]
+
+
+@app.get("/api/market/economic-calendar")
+def get_economic_calendar():
+    today = datetime.utcnow().date()
+    events = []
+    for e in _ECON_EVENTS:
+        ev_date = datetime.strptime(e["date"], "%Y-%m-%d").date()
+        days_until = (ev_date - today).days
+        if -7 <= days_until <= 120:
+            events.append({**e, "daysUntil": days_until})
+    return sorted(events, key=lambda x: x["daysUntil"])
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

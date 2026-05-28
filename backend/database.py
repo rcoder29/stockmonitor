@@ -34,6 +34,19 @@ class PortfolioPosition(Base):
     added_at = Column(DateTime, default=datetime.utcnow)
 
 
+class TradeJournalEntry(Base):
+    __tablename__ = "trade_journal"
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    symbol     = Column(String(20), nullable=False, index=True)
+    side       = Column(String(10), nullable=False)   # 'buy' | 'sell'
+    price      = Column(Float, nullable=False)
+    shares     = Column(Float, nullable=False)
+    strategy   = Column(String(50), nullable=True)
+    trade_date = Column(String(20), nullable=False)   # YYYY-MM-DD
+    notes      = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class PriceAlert(Base):
     __tablename__ = "price_alerts"
     id           = Column(Integer, primary_key=True, autoincrement=True)
