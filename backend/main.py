@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 import csv
@@ -4836,6 +4836,176 @@ async def get_transcript_summary(symbol: str):
         "filing_url":  filing_url,
         "summary":     summary,
     }
+    cache_set(cache_key, result)
+    return result
+
+
+# ── DCF Valuation ─────────────────────────────────────────────────────────────
+
+@app.get("/api/dcf/prefill/{symbol}")
+async def dcf_prefill(symbol: str):
+    """Return yfinance fundamentals to pre-fill the DCF form."""
+    sym = symbol.upper().strip()
+    cache_key = f"dcf_prefill:{sym}"
+    cached = cache_get(cache_key, timedelta(hours=2))
+    if cached: return cached
+
+    loop = asyncio.get_event_loop()
+    try:
+        ticker = yf.Ticker(sym)
+        info = await loop.run_in_executor(None, lambda: ticker.info)
+        result = {
+            "symbol": sym,
+            "eps_ttm":        _safe_float(info.get("trailingEps")),
+            "eps_forward":    _safe_float(info.get("forwardEps")),
+            "growth_rate":    _safe_float(info.get("earningsGrowth") or info.get("revenueGrowth")),
+            "beta":           _safe_float(info.get("beta")),
+            "price":          _safe_float(info.get("currentPrice") or info.get("regularMarketPrice")),
+            "shares_out":     _safe_float(info.get("sharesOutstanding")),
+            "name":           info.get("shortName", sym),
+        }
+    except Exception as e:
+        result = {"symbol": sym, "error": str(e)}
+
+    cache_set(cache_key, result)
+    return result
+
+
+# ── Yield Curve & Rates ───────────────────────────────────────────────────────
+
+_RATES_TTL = timedelta(minutes=30)
+
+@app.get("/api/market/rates")
+async def get_market_rates():
+    cached = cache_get("market:rates", _RATES_TTL)
+    if cached:
+        return cached
+
+    loop = asyncio.get_event_loop()
+    RATE_TICKERS = {"t13w": "^IRX", "t5y": "^FVX", "t10y": "^TNX", "t30y": "^TYX", "dxy": "DX-Y.NYB"}
+
+    async def fetch_one(key, ticker_sym):
+        try:
+            tk = yf.Ticker(ticker_sym)
+            fi = await loop.run_in_executor(None, lambda: tk.fast_info)
+            return key, _safe_float(getattr(fi, "last_price", None))
+        except Exception:
+            return key, None
+
+    import asyncio as _aio
+    tasks = [fetch_one(k, v) for k, v in RATE_TICKERS.items()]
+    values = dict(await _aio.gather(*tasks))
+
+    # 60-day history for 10Y and 13W for sparklines
+    def fetch_hist(sym):
+        try:
+            df = yf.download(sym, period="60d", interval="1d", progress=False, auto_adjust=True)
+            if df.empty:
+                return []
+            closes = df["Close"].dropna()
+            return [round(float(v), 3) for v in closes.values]
+        except Exception:
+            return []
+
+    hist_10y = await loop.run_in_executor(None, lambda: fetch_hist("^TNX"))
+    hist_13w = await loop.run_in_executor(None, lambda: fetch_hist("^IRX"))
+
+    t10y = values.get("t10y")
+    t13w = values.get("t13w")
+    spread_10y_13w = round(t10y - t13w, 3) if t10y and t13w else None
+
+    result = {
+        "yields": {
+            "t13w": values.get("t13w"),
+            "t5y":  values.get("t5y"),
+            "t10y": values.get("t10y"),
+            "t30y": values.get("t30y"),
+        },
+        "dxy": values.get("dxy"),
+        "spread_10y_13w": spread_10y_13w,
+        "inverted": spread_10y_13w is not None and spread_10y_13w < 0,
+        "hist_10y": hist_10y,
+        "hist_13w": hist_13w,
+    }
+    cache_set("market:rates", result)
+    return result
+
+
+_SCANNER_UOA_TTL = timedelta(minutes=30)
+
+@app.get("/api/options/unusual")
+async def unusual_options_activity(symbols: str = Query(...)):
+    """
+    Scan options chains for unusual activity.
+    symbols: comma-separated list (max 10)
+    Returns contracts where volume >= 2× open_interest OR volume > 500 AND volume > open_interest.
+    """
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()][:10]
+    cache_key = f"uoa:{','.join(sorted(syms))}"
+    cached = cache_get(cache_key, _SCANNER_UOA_TTL)
+    if cached: return cached
+
+    loop = asyncio.get_event_loop()
+    results = []
+
+    def fetch_uoa(sym):
+        try:
+            tk = yf.Ticker(sym)
+            expiries = tk.options
+            if not expiries:
+                return []
+            # Only scan nearest 3 expiries to keep it fast
+            hits = []
+            for exp in expiries[:3]:
+                try:
+                    chain = tk.option_chain(exp)
+                    for df, opt_type in [(chain.calls, "call"), (chain.puts, "put")]:
+                        for _, row in df.iterrows():
+                            vol = int(row.get("volume", 0) or 0)
+                            oi  = int(row.get("openInterest", 0) or 0)
+                            if vol < 100:
+                                continue
+                            if oi > 0 and vol >= 2 * oi:
+                                ratio = round(vol / max(oi, 1), 1)
+                            elif vol >= 1000 and oi == 0:
+                                ratio = None  # fresh contract
+                            else:
+                                continue
+                            bid  = _safe_float(row.get("bid"))
+                            ask  = _safe_float(row.get("ask"))
+                            iv   = _safe_float(row.get("impliedVolatility"))
+                            hits.append({
+                                "symbol":     sym,
+                                "type":       opt_type,
+                                "strike":     _safe_float(row.get("strike")),
+                                "expiry":     exp,
+                                "volume":     vol,
+                                "open_interest": oi,
+                                "vol_oi_ratio":  ratio,
+                                "bid":        bid,
+                                "ask":        ask,
+                                "mid":        round((bid + ask) / 2, 2) if bid and ask else None,
+                                "iv_pct":     round(iv * 100, 1) if iv else None,
+                                "in_the_money": bool(row.get("inTheMoney", False)),
+                            })
+                except Exception:
+                    continue
+            # Sort by volume desc, cap at 20 per symbol
+            hits.sort(key=lambda x: x["volume"], reverse=True)
+            return hits[:20]
+        except Exception:
+            return []
+
+    tasks = [loop.run_in_executor(None, fetch_uoa, sym) for sym in syms]
+    all_results = await asyncio.gather(*tasks)
+    for hits in all_results:
+        results.extend(hits)
+
+    # Global sort by volume, cap at 100
+    results.sort(key=lambda x: x["volume"], reverse=True)
+    results = results[:100]
+
+    result = {"items": results, "scanned": syms}
     cache_set(cache_key, result)
     return result
 

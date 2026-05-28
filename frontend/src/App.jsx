@@ -27,6 +27,9 @@ import SectorMomentum from './components/SectorMomentum'
 import MarketBreadth from './components/MarketBreadth'
 import FundamentalComparison from './components/FundamentalComparison'
 import PriceTargets from './components/PriceTargets'
+import DcfCalculator from './components/DcfCalculator'
+import YieldCurve from './components/YieldCurve'
+import UnusualOptions from './components/UnusualOptions'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -90,6 +93,7 @@ const NAV_GROUPS = [
       { id: 'recommendations', label: 'Recommendations' },
       { id: 'breadth',         label: 'Breadth' },
       { id: 'macro',           label: 'Macro Calendar' },
+      { id: 'rates',          label: 'Yield Curve' },
     ],
   },
   {
@@ -123,6 +127,8 @@ const NAV_GROUPS = [
       { id: 'compare',      label: 'Chart Compare' },
       { id: 'fundamentals', label: 'Fundamentals' },
       { id: 'backtest',     label: 'Backtester' },
+      { id: 'dcf',          label: 'DCF Valuation' },
+      { id: 'uoa',          label: 'Unusual Options' },
     ],
   },
   {
@@ -225,7 +231,7 @@ function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
-function Sidebar({ activeTab, onSelect }) {
+function Sidebar({ activeTab, onSelect, className }) {
   const [expanded, setExpanded] = useState(() => {
     const init = {}
     NAV_GROUPS.forEach(g => { init[g.id] = true })
@@ -237,7 +243,7 @@ function Sidebar({ activeTab, onSelect }) {
   }
 
   return (
-    <aside className="w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto">
+    <aside className={className ?? 'w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto'}>
       {NAV_GROUPS.map(group => {
         const isGroupActive = group.items.some(i => i.id === activeTab)
         const isOpen = expanded[group.id]
@@ -295,6 +301,7 @@ function Sidebar({ activeTab, onSelect }) {
 
 export default function App() {
   const [activeTab, setActiveTab]   = useState('market')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [watchlist, setWatchlist]   = useState([])
   const [quotes, setQuotes]         = useState({})
   const [refreshInterval, setRefreshInterval] = useState(30)
@@ -583,8 +590,41 @@ export default function App() {
         onRequestNotif={requestNotifPermission}
       />
 
+      {/* Mobile hamburger bar */}
+      <div className="md:hidden flex items-center px-4 py-2 border-b border-gray-800 bg-gray-900">
+        <button
+          onClick={() => setSidebarOpen(o => !o)}
+          className="text-gray-400 hover:text-white transition-colors text-xl leading-none p-1"
+          aria-label="Toggle navigation"
+        >
+          ☰
+        </button>
+      </div>
+
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar activeTab={activeTab} onSelect={setActiveTab} />
+        {/* Mobile backdrop */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-30 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Desktop sidebar */}
+        <Sidebar
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+          className="hidden md:flex md:flex-col w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto"
+        />
+
+        {/* Mobile sidebar drawer */}
+        {sidebarOpen && (
+          <Sidebar
+            activeTab={activeTab}
+            onSelect={(id) => { setActiveTab(id); setSidebarOpen(false) }}
+            className="fixed inset-y-0 left-0 z-40 w-64 bg-gray-900 border-r border-gray-800 overflow-y-auto flex flex-col"
+          />
+        )}
 
         <main className="flex-1 overflow-y-auto">
           {activeTab === 'watchlist' && (
@@ -630,8 +670,11 @@ export default function App() {
           {activeTab === 'optionstracker'  && <OptionsTracker />}
           {activeTab === 'sectormomentum'  && <SectorMomentum />}
           {activeTab === 'breadth'         && <MarketBreadth />}
+          {activeTab === 'rates'           && <YieldCurve />}
           {activeTab === 'fundamentals'    && <FundamentalComparison />}
           {activeTab === 'pricetargets'    && <PriceTargets />}
+          {activeTab === 'dcf'             && <DcfCalculator />}
+          {activeTab === 'uoa'             && <UnusualOptions symbols={watchlist} />}
         </main>
       </div>
 
