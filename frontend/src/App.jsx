@@ -11,6 +11,7 @@ import FinancialAdvisor from './components/FinancialAdvisor'
 import Screener from './components/Screener'
 import TradeJournal from './components/TradeJournal'
 import MacroCalendar from './components/MacroCalendar'
+import SectorDashboard from './components/SectorDashboard'
 import { AlertModal, AlertToast } from './components/PriceAlerts'
 import EarningsCalendar from './components/EarningsCalendar'
 
@@ -25,6 +26,7 @@ const TABS = [
   { id: 'screener',        label: 'Screener' },
   { id: 'journal',         label: 'Journal' },
   { id: 'macro',           label: 'Macro Calendar' },
+  { id: 'sectors',         label: 'Sector Rotation' },
   { id: 'aibot',           label: 'AI Advisor' },
   { id: 'advisor',         label: 'Financial Advisor' },
 ]
@@ -109,15 +111,8 @@ export default function App() {
       .finally(() => setEarningsLoading(false))
   }, [watchlist.join(','), portfolioSymbols.join(',')])
 
-  const addAlert = useCallback(async (symbol, targetPrice, condition, note) => {
-    const r = await fetch('/api/alerts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symbol, target_price: targetPrice, condition, note }),
-    })
-    if (!r.ok) throw new Error('Failed to create alert')
-    const created = await r.json()
-    setAlerts(prev => [created, ...prev])
+  const addAlert = useCallback((_symbol, _price, _condition, _note, _type, _tval, created) => {
+    if (created) setAlerts(prev => [created, ...prev])
   }, [])
 
   const deleteAlert = useCallback(async (id) => {
@@ -167,12 +162,29 @@ export default function App() {
       })
       setLastUpdated(new Date())
 
-      // Check active alerts against new prices
+      // Check active alerts against new prices (supports smart alert types)
       const activeAlerts = alertsRef.current.filter(a => a.status === 'active')
       const nowTriggered = activeAlerts.filter(a => {
-        const price = quoteMap[a.symbol]?.price
+        const q = quoteMap[a.symbol]
+        if (!q) return false
+        const { price, changePercent, week52High, week52Low, volume, avgVolume } = q
         if (price == null) return false
-        return a.condition === 'above' ? price >= a.target_price : price <= a.target_price
+        switch (a.alert_type || 'price') {
+          case 'price':
+            return a.condition === 'above' ? price >= a.target_price : price <= a.target_price
+          case 'pct_change': {
+            const pct = changePercent ?? 0
+            return a.condition === 'above' ? pct >= (a.trigger_value ?? 5) : pct <= -(a.trigger_value ?? 5)
+          }
+          case 'week52_break':
+            return a.condition === 'above'
+              ? (week52High != null && price >= week52High)
+              : (week52Low  != null && price <= week52Low)
+          case 'volume_spike':
+            return avgVolume != null && volume != null && volume >= (a.trigger_value ?? 2) * avgVolume
+          default:
+            return a.condition === 'above' ? price >= a.target_price : price <= a.target_price
+        }
       })
       if (nowTriggered.length > 0) {
         nowTriggered.forEach(a => fetch(`/api/alerts/${a.id}/trigger`, { method: 'PATCH' }))
@@ -287,6 +299,7 @@ export default function App() {
         {activeTab === 'screener'        && <Screener />}
         {activeTab === 'journal'         && <TradeJournal />}
         {activeTab === 'macro'           && <MacroCalendar />}
+        {activeTab === 'sectors'         && <SectorDashboard />}
         {activeTab === 'aibot'           && <AiBot />}
         {activeTab === 'advisor'         && <FinancialAdvisor />}
       </main>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 function urgencyClass(days) {
   if (days <= 3)  return { bg: 'bg-red-900/50',    border: 'border-red-700/60',   text: 'text-red-300',    badge: 'bg-red-600',    label: '🔴' }
@@ -43,10 +43,11 @@ export function EarningsBadge({ daysUntil }) {
 // ── Full earnings calendar widget ─────────────────────────────────────────────
 
 export default function EarningsCalendar({ earnings = [], loading = false }) {
+  const [open, setOpen] = useState(true)
 
   const upcoming = earnings.filter(e => e.daysUntil != null && e.daysUntil >= 0)
 
-  if (!loading && upcoming.length === 0 && !open) return null
+  if (!loading && upcoming.length === 0) return null
 
   return (
     <div className="mb-4 bg-gray-900/60 border border-gray-800 rounded-xl overflow-hidden">

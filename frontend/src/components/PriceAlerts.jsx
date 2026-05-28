@@ -35,12 +35,38 @@ export function AlertBellButton({ symbol, alerts, onClick }) {
 
 // ── Per-symbol alert modal ─────────────────────────────────────────────────
 
+const ALERT_TYPES = [
+  { id: 'price',        label: 'Price',        desc: 'Fixed $ price level' },
+  { id: 'pct_change',   label: '% Move',       desc: 'Daily % change threshold' },
+  { id: 'week52_break', label: '52-Wk Break',  desc: 'New 52-week high/low' },
+  { id: 'volume_spike', label: 'Volume Spike', desc: 'Volume × avg multiplier' },
+]
+
+function alertLabel(a) {
+  switch (a.alert_type) {
+    case 'pct_change':
+      return `${a.condition === 'above' ? '↑' : '↓'} ${a.trigger_value ?? 5}% daily move`
+    case 'week52_break':
+      return a.condition === 'above' ? '↑ 52-wk high break' : '↓ 52-wk low break'
+    case 'volume_spike':
+      return `Vol ≥ ${a.trigger_value ?? 2}× avg`
+    default:
+      return `${a.condition === 'above' ? '↑' : '↓'} $${a.target_price.toFixed(2)}`
+  }
+}
+
 export function AlertModal({ symbol, currentPrice, alerts, onClose, onAdd, onDelete, onDismiss }) {
+  const [alertType,   setAlertType]   = useState('price')
   const [condition,   setCondition]   = useState('above')
   const [targetPrice, setTargetPrice] = useState('')
+  const [triggerVal,  setTriggerVal]  = useState('')
   const [note,        setNote]        = useState('')
   const [adding,      setAdding]      = useState(false)
   const [err,         setErr]         = useState('')
+
+  const needsPrice   = alertType === 'price'
+  const needsTrigger = alertType === 'pct_change' || alertType === 'volume_spike'
+  const needsCondition = alertType !== 'volume_spike'
 
   const symAlerts = alerts
     .filter(a => a.symbol === symbol && a.status !== 'dismissed')
@@ -48,12 +74,30 @@ export function AlertModal({ symbol, currentPrice, alerts, onClose, onAdd, onDel
 
   async function handleAdd(e) {
     e.preventDefault()
-    const price = parseFloat(targetPrice)
-    if (isNaN(price) || price <= 0) { setErr('Enter a valid price'); return }
+    let price = parseFloat(targetPrice)
+    const tval = parseFloat(triggerVal) || null
+
+    if (needsPrice && (isNaN(price) || price <= 0)) { setErr('Enter a valid price'); return }
+    if (!needsPrice) price = 0
+
     setAdding(true); setErr('')
     try {
-      await onAdd(symbol, price, condition, note.trim())
-      setTargetPrice(''); setNote('')
+      const r = await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol,
+          target_price:  price,
+          condition:     needsCondition ? condition : 'above',
+          note:          note.trim(),
+          alert_type:    alertType,
+          trigger_value: needsTrigger ? tval : null,
+        }),
+      })
+      if (!r.ok) throw new Error('Failed to save')
+      const created = await r.json()
+      onAdd(symbol, price, needsCondition ? condition : 'above', note.trim(), alertType, tval, created)
+      setTargetPrice(''); setTriggerVal(''); setNote('')
     } catch { setErr('Failed to save alert') }
     finally { setAdding(false) }
   }
@@ -72,7 +116,7 @@ export function AlertModal({ symbol, currentPrice, alerts, onClose, onAdd, onDel
           <div>
             <div className="text-white font-bold text-lg">{symbol} — Price Alerts</div>
             {currentPrice != null && (
-              <div className="text-gray-400 text-sm mt-0.5">Current price: <span className="text-white font-medium">${currentPrice.toFixed(2)}</span></div>
+              <div className="text-gray-400 text-sm mt-0.5">Current: <span className="text-white font-medium">${currentPrice.toFixed(2)}</span></div>
             )}
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white text-2xl leading-none mt-0.5">×</button>
@@ -81,28 +125,72 @@ export function AlertModal({ symbol, currentPrice, alerts, onClose, onAdd, onDel
         {/* Add form */}
         <form onSubmit={handleAdd} className="space-y-2.5 mb-5">
           <div className="text-gray-500 text-xs uppercase tracking-widest">New Alert</div>
+
+          {/* Alert type selector */}
+          <div className="grid grid-cols-2 gap-1.5">
+            {ALERT_TYPES.map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setAlertType(t.id)}
+                className={`text-left px-3 py-2 rounded-lg border text-xs transition-colors ${
+                  alertType === t.id
+                    ? 'border-emerald-600 bg-emerald-900/30 text-emerald-300'
+                    : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
+                }`}
+              >
+                <div className="font-medium">{t.label}</div>
+                <div className="text-gray-600 text-[10px] mt-0.5">{t.desc}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Condition + value row */}
           <div className="flex gap-2">
-            <select
-              value={condition}
-              onChange={e => setCondition(e.target.value)}
-              className="bg-gray-800 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
-            >
-              <option value="above">↑ Above</option>
-              <option value="below">↓ Below</option>
-            </select>
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-              <input
-                type="number"
-                value={targetPrice}
-                onChange={e => setTargetPrice(e.target.value)}
-                placeholder="0.00"
-                step="0.01"
-                min="0.01"
-                required
-                className="w-full bg-gray-800 border border-gray-700 text-white pl-7 pr-3 py-2 text-sm rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
-              />
-            </div>
+            {needsCondition && (
+              <select
+                value={condition}
+                onChange={e => setCondition(e.target.value)}
+                className="bg-gray-800 border border-gray-700 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="above">↑ Above</option>
+                <option value="below">↓ Below</option>
+              </select>
+            )}
+
+            {needsPrice && (
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                <input
+                  type="number"
+                  value={targetPrice}
+                  onChange={e => setTargetPrice(e.target.value)}
+                  placeholder="0.00"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  className="w-full bg-gray-800 border border-gray-700 text-white pl-7 pr-3 py-2 text-sm rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+            )}
+
+            {needsTrigger && (
+              <div className="relative flex-1">
+                <input
+                  type="number"
+                  value={triggerVal}
+                  onChange={e => setTriggerVal(e.target.value)}
+                  placeholder={alertType === 'pct_change' ? '5 (%)' : '2 (×avg)'}
+                  step="0.1"
+                  min="0.1"
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">
+                  {alertType === 'pct_change' ? '%' : '×'}
+                </span>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={adding}
@@ -111,11 +199,12 @@ export function AlertModal({ symbol, currentPrice, alerts, onClose, onAdd, onDel
               {adding ? '…' : 'Add'}
             </button>
           </div>
+
           <input
             type="text"
             value={note}
             onChange={e => setNote(e.target.value)}
-            placeholder="Optional note (e.g. break above resistance)"
+            placeholder="Optional note"
             maxLength={120}
             className="w-full bg-gray-800 border border-gray-700 text-white placeholder-gray-600 px-3 py-2 text-sm rounded-lg focus:outline-none focus:border-emerald-500 transition-colors"
           />
@@ -140,11 +229,11 @@ export function AlertModal({ symbol, currentPrice, alerts, onClose, onAdd, onDel
                 }`}
               >
                 <span className={`shrink-0 text-xs px-2 py-0.5 rounded font-medium ${
-                  a.condition === 'above'
+                  (a.condition === 'above' || a.alert_type === 'volume_spike')
                     ? 'bg-emerald-900/60 text-emerald-400'
                     : 'bg-red-900/60 text-red-400'
                 }`}>
-                  {a.condition === 'above' ? '↑' : '↓'} ${a.target_price.toFixed(2)}
+                  {alertLabel(a)}
                 </span>
 
                 <span className="text-gray-500 text-xs flex-1 truncate min-w-0">{a.note}</span>

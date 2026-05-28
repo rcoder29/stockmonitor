@@ -49,14 +49,16 @@ class TradeJournalEntry(Base):
 
 class PriceAlert(Base):
     __tablename__ = "price_alerts"
-    id           = Column(Integer, primary_key=True, autoincrement=True)
-    symbol       = Column(String(20), nullable=False, index=True)
-    target_price = Column(Float, nullable=False)
-    condition    = Column(String(10), nullable=False)   # 'above' | 'below'
-    note         = Column(String(200), nullable=True)
-    status       = Column(String(20), default='active') # 'active' | 'triggered' | 'dismissed'
-    created_at   = Column(DateTime, default=datetime.utcnow)
-    triggered_at = Column(DateTime, nullable=True)
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    symbol        = Column(String(20), nullable=False, index=True)
+    target_price  = Column(Float, nullable=False)
+    condition     = Column(String(10), nullable=False)   # 'above' | 'below'
+    note          = Column(String(200), nullable=True)
+    status        = Column(String(20), default='active') # 'active' | 'triggered' | 'dismissed'
+    alert_type    = Column(String(30), default='price')  # 'price' | 'pct_change' | 'week52_break' | 'volume_spike'
+    trigger_value = Column(Float, nullable=True)         # threshold for pct_change/volume_spike
+    created_at    = Column(DateTime, default=datetime.utcnow)
+    triggered_at  = Column(DateTime, nullable=True)
 
 
 # ── Generic key-value cache ───────────────────────────────────────────────────
@@ -72,6 +74,22 @@ class CacheEntry(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+
+
+def migrate_db():
+    """Add new columns to existing tables without dropping data."""
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE price_alerts ADD COLUMN alert_type VARCHAR(30) DEFAULT 'price'",
+        "ALTER TABLE price_alerts ADD COLUMN trigger_value REAL",
+    ]
+    with engine.connect() as conn:
+        for stmt in migrations:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass  # Column already exists
 
 
 @contextmanager
