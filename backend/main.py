@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from database import (
-    init_db, db_session, cache_get, cache_set,
+    init_db, migrate_db, db_session, cache_get, cache_set,
     WatchlistSymbol, PortfolioPosition, PriceAlert, TradeJournalEntry,
 )
 
@@ -39,6 +39,7 @@ app.add_middleware(
 
 # Initialise DB tables on startup
 init_db()
+migrate_db()
 
 # ── TTLs ──────────────────────────────────────────────────────────────────────
 _FUND_TTL    = timedelta(minutes=5)
@@ -126,6 +127,7 @@ def _fetch_quote(sym: str) -> dict:
             "dayHigh":       _safe_float(fi.day_high),
             "dayLow":        _safe_float(fi.day_low),
             "volume":        _safe_float(fi.last_volume),
+            "avgVolume":     _safe_float(fi.three_month_average_volume),
             "week52High":    _safe_float(fi.year_high),
             "week52Low":     _safe_float(fi.year_low),
             "marketCap":     _safe_float(fi.market_cap),
@@ -944,14 +946,16 @@ def get_risk_data():
 
 def _alert_row(r):
     return {
-        "id":           r.id,
-        "symbol":       r.symbol,
-        "target_price": r.target_price,
-        "condition":    r.condition,
-        "note":         r.note or "",
-        "status":       r.status,
-        "created_at":   r.created_at.isoformat(),
-        "triggered_at": r.triggered_at.isoformat() if r.triggered_at else None,
+        "id":            r.id,
+        "symbol":        r.symbol,
+        "target_price":  r.target_price,
+        "condition":     r.condition,
+        "note":          r.note or "",
+        "status":        r.status,
+        "alert_type":    getattr(r, "alert_type", None) or "price",
+        "trigger_value": getattr(r, "trigger_value", None),
+        "created_at":    r.created_at.isoformat(),
+        "triggered_at":  r.triggered_at.isoformat() if r.triggered_at else None,
     }
 
 
@@ -963,10 +967,12 @@ def list_alerts():
 
 
 class AlertCreate(BaseModel):
-    symbol:       str
-    target_price: float
-    condition:    str   # 'above' | 'below'
-    note:         str = ""
+    symbol:        str
+    target_price:  float
+    condition:     str         # 'above' | 'below'
+    note:          str = ""
+    alert_type:    str = "price"   # 'price' | 'pct_change' | 'week52_break' | 'volume_spike'
+    trigger_value: float | None = None
 
 
 @app.post("/api/alerts", status_code=201)
@@ -974,12 +980,17 @@ def create_alert(body: AlertCreate):
     body.symbol = body.symbol.upper()
     if body.condition not in ("above", "below"):
         raise HTTPException(400, "condition must be 'above' or 'below'")
+    valid_types = {"price", "pct_change", "week52_break", "volume_spike"}
+    if body.alert_type not in valid_types:
+        body.alert_type = "price"
     with db_session() as db:
         row = PriceAlert(
             symbol=body.symbol,
             target_price=body.target_price,
             condition=body.condition,
             note=body.note,
+            alert_type=body.alert_type,
+            trigger_value=body.trigger_value,
         )
         db.add(row)
         db.flush()
@@ -2020,6 +2031,159 @@ def get_analyst_data(symbol: str):
         return result
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+# ── Sector Rotation ───────────────────────────────────────────────────────────
+
+_SECTOR_TTL = timedelta(minutes=15)
+
+_SECTOR_ETFS = [
+    {"symbol": "XLK",  "name": "Technology"},
+    {"symbol": "XLF",  "name": "Financials"},
+    {"symbol": "XLE",  "name": "Energy"},
+    {"symbol": "XLV",  "name": "Health Care"},
+    {"symbol": "XLI",  "name": "Industrials"},
+    {"symbol": "XLY",  "name": "Consumer Discr."},
+    {"symbol": "XLP",  "name": "Consumer Staples"},
+    {"symbol": "XLU",  "name": "Utilities"},
+    {"symbol": "XLB",  "name": "Materials"},
+    {"symbol": "XLRE", "name": "Real Estate"},
+    {"symbol": "XLC",  "name": "Comm. Services"},
+]
+
+
+def _fetch_sector_perf(info: dict) -> dict:
+    sym = info["symbol"]
+    cache_key = f"sector:{sym}"
+    cached = cache_get(cache_key, _SECTOR_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        t = yf.Ticker(sym, session=_session)
+        hist = t.history(period="3mo")
+        if hist.empty:
+            return {**info, "error": "no data"}
+        closes = hist["Close"]
+        fi = t.fast_info
+        price = _safe_float(fi.last_price) or float(closes.iloc[-1])
+        prev  = _safe_float(fi.previous_close) or (float(closes.iloc[-2]) if len(closes) > 1 else price)
+
+        def chg(n):
+            return round((float(closes.iloc[-1]) / float(closes.iloc[-1 - n]) - 1) * 100, 2) if len(closes) > n else None
+
+        result = {
+            **info,
+            "price": round(price, 2),
+            "chg1d": round((price - prev) / prev * 100, 2) if prev else None,
+            "chg1w": chg(5),
+            "chg1m": chg(21),
+            "chg3m": chg(63),
+        }
+    except Exception as e:
+        logger.warning("sector perf failed %s: %s", sym, e)
+        result = {**info, "error": str(e)}
+
+    cache_set(cache_key, result)
+    return result
+
+
+@app.get("/api/market/sectors")
+def get_sector_rotation():
+    cache_key = "market:sectors"
+    cached = cache_get(cache_key, _SECTOR_TTL)
+    if cached is not None:
+        return cached
+
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futures = {ex.submit(_fetch_sector_perf, s): s["symbol"] for s in _SECTOR_ETFS}
+        perf_map = {}
+        for f in as_completed(futures):
+            data = f.result()
+            perf_map[data["symbol"]] = data
+
+    results = [perf_map.get(s["symbol"], s) for s in _SECTOR_ETFS]
+    cache_set(cache_key, results)
+    return results
+
+
+# ── Institutional Ownership ───────────────────────────────────────────────────
+
+_INST_TTL = timedelta(hours=4)
+
+
+@app.get("/api/institutional/{symbol}")
+def get_institutional(symbol: str):
+    symbol = symbol.upper()
+    cache_key = f"institutional:{symbol}"
+    cached = cache_get(cache_key, _INST_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        t = yf.Ticker(symbol, session=_session)
+
+        major: dict = {}
+        try:
+            mh = t.major_holders
+            if mh is not None and not mh.empty:
+                for _, row in mh.iterrows():
+                    val = row.iloc[0]
+                    lbl = str(row.iloc[1]).lower()
+                    try:
+                        fval = float(str(val).strip("%")) / 100 if "%" in str(val) else float(val)
+                    except (ValueError, TypeError):
+                        fval = None
+                    if "insider" in lbl and "institution" not in lbl:
+                        major["insiderPct"] = fval
+                    elif "institution" in lbl and "float" not in lbl:
+                        major["institutionPct"] = fval
+                    elif "float" in lbl and "institution" in lbl:
+                        major["institutionFloatPct"] = fval
+        except Exception as e:
+            logger.warning("major holders failed %s: %s", symbol, e)
+
+        def parse_holders(df, limit):
+            rows = []
+            if df is None or df.empty:
+                return rows
+            for _, row in df.head(limit).iterrows():
+                shares = row.get("Shares")
+                value  = row.get("Value")
+                pct    = row.get("% Out")
+                date   = row.get("Date Reported")
+                rows.append({
+                    "holder":       str(row.get("Holder", "")),
+                    "shares":       int(shares) if pd.notna(shares) else None,
+                    "value":        int(value)  if pd.notna(value)  else None,
+                    "pctHeld":      round(float(pct) * 100, 2) if pd.notna(pct) else None,
+                    "dateReported": str(date.date()) if pd.notna(date) and hasattr(date, "date") else str(date) if pd.notna(date) else None,
+                })
+            return rows
+
+        inst_rows  = []
+        fund_rows  = []
+        try:
+            inst_rows = parse_holders(t.institutional_holders, 15)
+        except Exception as e:
+            logger.warning("inst holders failed %s: %s", symbol, e)
+        try:
+            fund_rows = parse_holders(t.mutualfund_holders, 10)
+        except Exception as e:
+            logger.warning("fund holders failed %s: %s", symbol, e)
+
+        result = {
+            "symbol":        symbol,
+            "major":         major,
+            "institutional": inst_rows,
+            "mutualFunds":   fund_rows,
+        }
+    except Exception as e:
+        logger.warning("institutional failed %s: %s", symbol, e)
+        result = {"symbol": symbol, "error": str(e), "major": {}, "institutional": [], "mutualFunds": []}
+
+    cache_set(cache_key, result)
+    return result
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
