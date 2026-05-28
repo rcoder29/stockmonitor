@@ -1,8 +1,67 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { createChart, CandlestickSeries, HistogramSeries, ColorType, CrosshairMode } from 'lightweight-charts'
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode } from 'lightweight-charts'
 import FundamentalsPanel from './FundamentalsPanel'
 import NewsPanel from './NewsPanel'
 import OptionsChain from './OptionsChain'
+import InsiderPanel from './InsiderPanel'
+import AnalystPanel from './AnalystPanel'
+
+// ── Technical indicator calculations ─────────────────────────────────────────
+
+function calcEMA(values, period) {
+  const k = 2 / (period + 1)
+  const result = new Array(values.length).fill(null)
+  let sum = 0
+  for (let i = 0; i < period; i++) sum += values[i]
+  result[period - 1] = sum / period
+  for (let i = period; i < values.length; i++)
+    result[i] = values[i] * k + result[i - 1] * (1 - k)
+  return result
+}
+
+function calcRSI(closes, period = 14) {
+  const result = new Array(closes.length).fill(null)
+  let avgGain = 0, avgLoss = 0
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1]
+    if (d > 0) avgGain += d; else avgLoss -= d
+  }
+  avgGain /= period; avgLoss /= period
+  result[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss)
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1]
+    avgGain = (avgGain * (period - 1) + Math.max(d, 0)) / period
+    avgLoss = (avgLoss * (period - 1) + Math.max(-d, 0)) / period
+    result[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss)
+  }
+  return result
+}
+
+function calcMACD(closes, fast = 12, slow = 26, signalPeriod = 9) {
+  const emaFast = calcEMA(closes, fast)
+  const emaSlow = calcEMA(closes, slow)
+  const macdLine = closes.map((_, i) =>
+    emaFast[i] != null && emaSlow[i] != null ? emaFast[i] - emaSlow[i] : null
+  )
+  const macdValues = macdLine.filter(v => v != null)
+  const sigRaw = calcEMA(macdValues, signalPeriod)
+  let si = 0
+  const sigLine = macdLine.map(v => v == null ? null : (sigRaw[si++] ?? null))
+  const hist = macdLine.map((v, i) => v != null && sigLine[i] != null ? v - sigLine[i] : null)
+  return { macdLine, sigLine, hist }
+}
+
+function calcBB(closes, period = 20, mult = 2) {
+  const upper = [], mid = [], lower = []
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) { upper.push(null); mid.push(null); lower.push(null); continue }
+    const slice = closes.slice(i - period + 1, i + 1)
+    const sma = slice.reduce((a, b) => a + b) / period
+    const std = Math.sqrt(slice.reduce((a, b) => a + (b - sma) ** 2, 0) / period)
+    upper.push(sma + mult * std); mid.push(sma); lower.push(sma - mult * std)
+  }
+  return { upper, mid, lower }
+}
 import { fmt } from '../utils/format'
 
 // ── Earnings history panel ────────────────────────────────────────────────────
@@ -161,12 +220,16 @@ const PERIODS = [
 ]
 
 export default function ChartModal({ symbol, quote, onClose }) {
-  const [period, setPeriod]       = useState('1d')
-  const [tab, setTab]             = useState('chart')
-  const [chartData, setChartData] = useState(null)
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState(null)
-  const chartContainerRef         = useRef(null)
+  const [period, setPeriod]         = useState('1d')
+  const [tab, setTab]               = useState('chart')
+  const [chartData, setChartData]   = useState(null)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState(null)
+  const [indicators, setIndicators] = useState({ bb: false, rsi: false, macd: false })
+  const chartContainerRef           = useRef(null)
+  const chartWrapperRef             = useRef(null)
+  const rsiContainerRef             = useRef(null)
+  const macdContainerRef            = useRef(null)
 
   const isPos = quote?.change == null || quote.change >= 0
 
@@ -192,79 +255,103 @@ export default function ChartModal({ symbol, quote, onClose }) {
     const el = chartContainerRef.current
     if (!el || !chartData || chartData.data.length === 0) return
 
+    const closes    = chartData.data.map(d => d.close)
     const isIntraday = chartData.period === '1d' || chartData.period === '5d'
 
-    const chart = createChart(el, {
-      layout: {
-        background: { type: ColorType.Solid, color: '#030712' },
-        textColor: '#6b7280',
-        fontSize: 11,
-      },
-      grid: {
-        vertLines: { color: '#111827' },
-        horzLines: { color: '#111827' },
-      },
-      timeScale: {
-        timeVisible: isIntraday,
-        secondsVisible: false,
-        borderColor: '#1f2937',
-        fixLeftEdge: true,
-        fixRightEdge: true,
-      },
-      rightPriceScale: {
-        borderColor: '#1f2937',
-        scaleMargins: { top: 0.08, bottom: 0.28 },
-      },
+    const baseOpts = {
+      layout: { background: { type: ColorType.Solid, color: '#030712' }, textColor: '#6b7280', fontSize: 11 },
+      grid:   { vertLines: { color: '#111827' }, horzLines: { color: '#111827' } },
+      timeScale: { timeVisible: isIntraday, secondsVisible: false, borderColor: '#1f2937', fixLeftEdge: true, fixRightEdge: true },
       crosshair: { mode: CrosshairMode.Normal },
-      width:  el.clientWidth,
-      height: el.clientHeight,
-    })
+      width: el.clientWidth,
+    }
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor:      '#10b981',
-      downColor:    '#ef4444',
-      borderVisible: false,
-      wickUpColor:   '#10b981',
-      wickDownColor: '#ef4444',
-    })
-    candleSeries.setData(
-      chartData.data.map(d => ({
-        time:  d.time,
-        open:  d.open,
-        high:  d.high,
-        low:   d.low,
-        close: d.close,
-      }))
-    )
+    // ── Main chart ──
+    const chart = createChart(el, { ...baseOpts, height: el.clientHeight,
+      rightPriceScale: { borderColor: '#1f2937', scaleMargins: { top: 0.08, bottom: 0.28 } } })
 
-    const volSeries = chart.addSeries(HistogramSeries, {
-      priceFormat:   { type: 'volume' },
-      priceScaleId:  'volume',
-    })
-    chart.priceScale('volume').applyOptions({
-      scaleMargins: { top: 0.78, bottom: 0 },
-    })
-    volSeries.setData(
-      chartData.data.map(d => ({
-        time:  d.time,
-        value: d.volume,
-        color: d.close >= d.open ? '#10b98155' : '#ef444455',
-      }))
-    )
+    chart.addSeries(CandlestickSeries, {
+      upColor: '#10b981', downColor: '#ef4444', borderVisible: false,
+      wickUpColor: '#10b981', wickDownColor: '#ef4444',
+    }).setData(chartData.data.map(d => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close })))
+
+    const volSeries = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'volume' })
+    chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } })
+    volSeries.setData(chartData.data.map(d => ({ time: d.time, value: d.volume, color: d.close >= d.open ? '#10b98155' : '#ef444455' })))
+
+    // ── Bollinger Bands overlay ──
+    if (indicators.bb) {
+      const bb = calcBB(closes)
+      const addBB = (vals, color) => {
+        const s = chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+        s.setData(chartData.data.map((d, i) => vals[i] != null ? { time: d.time, value: vals[i] } : null).filter(Boolean))
+      }
+      addBB(bb.upper, '#3b82f670')
+      addBB(bb.mid,   '#6b728060')
+      addBB(bb.lower, '#3b82f670')
+    }
 
     chart.timeScale().fitContent()
 
-    const observer = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect
-      chart.applyOptions({ width, height })
+    // ── RSI sub-chart ──
+    let rsiChart = null
+    if (indicators.rsi && rsiContainerRef.current) {
+      const rsiEl = rsiContainerRef.current
+      rsiChart = createChart(rsiEl, { ...baseOpts, height: rsiEl.clientHeight,
+        rightPriceScale: { borderColor: '#1f2937', scaleMargins: { top: 0.1, bottom: 0.1 } } })
+      const rsiVals = calcRSI(closes)
+      rsiChart.addSeries(LineSeries, { color: '#a78bfa', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true })
+        .setData(chartData.data.map((d, i) => rsiVals[i] != null ? { time: d.time, value: rsiVals[i] } : null).filter(Boolean))
+      rsiChart.addSeries(LineSeries, { color: '#ef444440', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+        .setData(chartData.data.map(d => ({ time: d.time, value: 70 })))
+      rsiChart.addSeries(LineSeries, { color: '#10b98140', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+        .setData(chartData.data.map(d => ({ time: d.time, value: 30 })))
+      rsiChart.timeScale().fitContent()
+    }
+
+    // ── MACD sub-chart ──
+    let macdChart = null
+    if (indicators.macd && macdContainerRef.current) {
+      const macdEl = macdContainerRef.current
+      macdChart = createChart(macdEl, { ...baseOpts, height: macdEl.clientHeight,
+        rightPriceScale: { borderColor: '#1f2937', scaleMargins: { top: 0.1, bottom: 0.1 } } })
+      const { macdLine, sigLine, hist } = calcMACD(closes)
+      macdChart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false })
+        .setData(chartData.data.map((d, i) => hist[i] != null ? { time: d.time, value: hist[i], color: hist[i] >= 0 ? '#10b98155' : '#ef444455' } : null).filter(Boolean))
+      macdChart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false })
+        .setData(chartData.data.map((d, i) => macdLine[i] != null ? { time: d.time, value: macdLine[i] } : null).filter(Boolean))
+      macdChart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+        .setData(chartData.data.map((d, i) => sigLine[i] != null ? { time: d.time, value: sigLine[i] } : null).filter(Boolean))
+      macdChart.timeScale().fitContent()
+    }
+
+    // ── Time scale sync ──
+    let syncing = false
+    chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      if (syncing || !range) return
+      syncing = true
+      rsiChart?.timeScale().setVisibleLogicalRange(range)
+      macdChart?.timeScale().setVisibleLogicalRange(range)
+      syncing = false
     })
-    observer.observe(el)
+
+    // ── Resize observer ──
+    const wrapper = chartWrapperRef.current
+    const observer = new ResizeObserver(entries => {
+      const { width } = entries[0].contentRect
+      chart.applyOptions({ width })
+      rsiChart?.applyOptions({ width })
+      macdChart?.applyOptions({ width })
+    })
+    if (wrapper) observer.observe(wrapper)
 
     return () => {
       observer.disconnect()
       chart.remove()
+      rsiChart?.remove()
+      macdChart?.remove()
     }
-  }, [chartData])
+  }, [chartData, indicators])
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -305,7 +392,7 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
         {/* Tabs */}
         <div className="flex border-b border-gray-800 px-6 shrink-0">
-          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals'], ['news', 'News'], ['earnings', 'Earnings'], ['options', 'Options']].map(([val, label]) => (
+          {[['chart', 'Chart'], ['fundamentals', 'Fundamentals'], ['news', 'News'], ['earnings', 'Earnings'], ['options', 'Options'], ['insider', 'Insider'], ['analyst', 'Analyst']].map(([val, label]) => (
             <button
               key={val}
               onClick={() => setTab(val)}
@@ -325,39 +412,62 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
           {tab === 'chart' && (
             <>
-              {/* Period selector */}
-              <div className="flex gap-1 mb-4">
-                {PERIODS.map(p => (
-                  <button
-                    key={p.value}
-                    onClick={() => setPeriod(p.value)}
-                    className={`px-3 py-1 rounded text-xs font-semibold tracking-wide transition-colors ${
-                      period === p.value
-                        ? 'bg-sky-600 text-white'
-                        : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+              {/* Period + indicator toolbar */}
+              <div className="flex flex-wrap items-center gap-3 mb-3">
+                <div className="flex gap-1">
+                  {PERIODS.map(p => (
+                    <button key={p.value} onClick={() => setPeriod(p.value)}
+                      className={`px-3 py-1 rounded text-xs font-semibold tracking-wide transition-colors ${
+                        period === p.value ? 'bg-sky-600 text-white' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+                      }`}>{p.label}</button>
+                  ))}
+                </div>
+                <div className="flex gap-1 ml-auto">
+                  {[['bb', 'BB'], ['rsi', 'RSI'], ['macd', 'MACD']].map(([key, label]) => (
+                    <button key={key}
+                      onClick={() => setIndicators(prev => ({ ...prev, [key]: !prev[key] }))}
+                      className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                        indicators[key] ? 'bg-purple-700 text-white' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+                      }`}>{label}</button>
+                  ))}
+                </div>
               </div>
 
-              {/* Chart container */}
-              <div className="relative rounded-lg overflow-hidden bg-gray-950" style={{ height: '400px' }}>
-                <div ref={chartContainerRef} className="w-full h-full" />
-                {loading && (
-                  <div className="absolute inset-0 bg-gray-950/80 flex items-center justify-center z-10">
-                    <span className="text-gray-400 text-sm animate-pulse">Loading chart…</span>
+              {/* Chart wrapper — main + optional indicator panels */}
+              <div ref={chartWrapperRef} className="rounded-lg overflow-hidden bg-gray-950">
+                {/* Main candlestick chart */}
+                <div className="relative" style={{ height: '360px' }}>
+                  <div ref={chartContainerRef} className="w-full h-full" />
+                  {loading && (
+                    <div className="absolute inset-0 bg-gray-950/80 flex items-center justify-center z-10">
+                      <span className="text-gray-400 text-sm animate-pulse">Loading chart…</span>
+                    </div>
+                  )}
+                  {!loading && error && (
+                    <div className="absolute inset-0 flex items-center justify-center z-10">
+                      <span className="text-red-400 text-sm">{error}</span>
+                    </div>
+                  )}
+                  {!loading && !error && chartData?.data?.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center z-10">
+                      <span className="text-gray-500 text-sm">No data available for this period</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* RSI panel */}
+                {indicators.rsi && (
+                  <div className="relative border-t border-gray-800" style={{ height: '100px' }}>
+                    <span className="absolute top-1 left-2 text-gray-600 text-[9px] uppercase tracking-wider z-10 pointer-events-none">RSI (14)</span>
+                    <div ref={rsiContainerRef} className="w-full h-full" />
                   </div>
                 )}
-                {!loading && error && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10">
-                    <span className="text-red-400 text-sm">{error}</span>
-                  </div>
-                )}
-                {!loading && !error && chartData?.data?.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center z-10">
-                    <span className="text-gray-500 text-sm">No data available for this period</span>
+
+                {/* MACD panel */}
+                {indicators.macd && (
+                  <div className="relative border-t border-gray-800" style={{ height: '110px' }}>
+                    <span className="absolute top-1 left-2 text-gray-600 text-[9px] uppercase tracking-wider z-10 pointer-events-none">MACD (12,26,9)</span>
+                    <div ref={macdContainerRef} className="w-full h-full" />
                   </div>
                 )}
               </div>
@@ -374,7 +484,11 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
           {tab === 'earnings' && <EarningsPanel symbol={symbol} />}
 
-          {tab === 'options' && <OptionsChain symbol={symbol} />}
+          {tab === 'options'  && <OptionsChain symbol={symbol} />}
+
+          {tab === 'insider'  && <InsiderPanel symbol={symbol} />}
+
+          {tab === 'analyst'  && <AnalystPanel symbol={symbol} currentPrice={quote?.price} />}
         </div>
       </div>
     </div>

@@ -88,9 +88,13 @@ def _fetch_fundamentals(sym: str) -> dict:
             "profitMargin":  _safe_float(info.get("profitMargins")),
             "roe":           _safe_float(info.get("returnOnEquity")),
             "debtToEquity":  _safe_float(info.get("debtToEquity")),
-            "priceToBook":   _safe_float(info.get("priceToBook")),
-            "sector":        info.get("sector") or None,
-            "industry":      info.get("industry") or None,
+            "priceToBook":        _safe_float(info.get("priceToBook")),
+            "sector":             info.get("sector") or None,
+            "industry":           info.get("industry") or None,
+            "shortRatio":         _safe_float(info.get("shortRatio")),
+            "shortPercentOfFloat":_safe_float(info.get("shortPercentOfFloat")),
+            "sharesShort":        _safe_float(info.get("sharesShort")),
+            "sharesShortPriorMonth": _safe_float(info.get("sharesShortPriorMonth")),
         }
     except Exception as exc:
         logger.warning("Fundamentals fetch failed for %s: %s", sym, exc)
@@ -1323,7 +1327,7 @@ def technical_screener(scan: str = "52w_high"):
     if cached is not None:
         return cached
 
-    valid_scans = {"52w_high", "golden_cross", "death_cross", "rsi_oversold", "rsi_overbought", "high_volume"}
+    valid_scans = {"52w_high", "golden_cross", "death_cross", "rsi_oversold", "rsi_overbought", "high_volume", "short_interest"}
     if scan not in valid_scans:
         raise HTTPException(400, f"scan must be one of {valid_scans}")
 
@@ -1393,6 +1397,34 @@ def technical_screener(scan: str = "52w_high"):
                 row.update({"avgVolume20d": int(avg_vol_20),
                             "volRatio": round(vol_today / avg_vol_20, 1)})
                 results.append(row)
+
+    if scan == "short_interest":
+        def _fetch_si(sym2):
+            f = _fetch_fundamentals(sym2)
+            si_pct = f.get("shortPercentOfFloat")
+            if si_pct is not None and si_pct > 0.10:
+                price2 = None
+                try:
+                    if sym2 in closes.columns:
+                        price2 = round(float(closes[sym2].dropna().iloc[-1]), 2)
+                except Exception:
+                    pass
+                return {
+                    "symbol": sym2,
+                    "price": price2,
+                    "shortPercentOfFloat": round(si_pct * 100, 1),
+                    "shortRatio": round(float(f["shortRatio"]), 1) if f.get("shortRatio") else None,
+                    "marketCap": f.get("marketCap"),
+                    "sector": f.get("sector"),
+                }
+            return None
+        with ThreadPoolExecutor(max_workers=10) as ex2:
+            for item in ex2.map(_fetch_si, SCREENER_UNIVERSE):
+                if item:
+                    results.append(item)
+        results.sort(key=lambda x: x.get("shortPercentOfFloat", 0), reverse=True)
+        cache_set(cache_key, results)
+        return results
 
     results.sort(key=lambda x: x.get("pctFromHigh", x.get("rsi", x.get("volRatio", 0))),
                  reverse=(scan not in ("rsi_oversold",)))
@@ -1873,6 +1905,121 @@ def get_economic_calendar():
         if -7 <= days_until <= 120:
             events.append({**e, "daysUntil": days_until})
     return sorted(events, key=lambda x: x["daysUntil"])
+
+
+# ── Insider Transactions ──────────────────────────────────────────────────────
+
+_INSIDER_TTL = timedelta(hours=4)
+_ANALYST_TTL = timedelta(hours=4)
+
+
+@app.get("/api/insider/{symbol}")
+def get_insider_transactions(symbol: str):
+    sym = symbol.upper()
+    key = f"insider:{sym}"
+    cached = cache_get(key, _INSIDER_TTL)
+    if cached is not None:
+        return cached
+    try:
+        df = yf.Ticker(sym, session=_session).insider_transactions
+        if df is None or len(df) == 0:
+            result = {"symbol": sym, "transactions": []}
+            cache_set(key, result)
+            return result
+
+        rows = []
+        for _, row in df.iterrows():
+            date_val = (row.get("Start Date") or row.get("startDate")
+                        or row.get("Date") or row.get("date"))
+            date_str = None
+            if date_val is not None:
+                try:
+                    date_str = str(pd.Timestamp(date_val).date())
+                except Exception:
+                    date_str = str(date_val)
+
+            shares = row.get("Shares") or row.get("shares")
+            value  = row.get("Value") or row.get("value")
+            text   = (row.get("Text") or row.get("Transaction")
+                      or row.get("transaction") or "")
+            insider   = row.get("Insider") or row.get("insider")
+            position  = row.get("Position") or row.get("Title") or ""
+
+            shares_v = int(shares) if shares is not None and not pd.isna(shares) else None
+            value_v  = round(float(value), 0) if value is not None and not pd.isna(value) else None
+
+            rows.append({
+                "date":     date_str,
+                "insider":  str(insider) if insider else None,
+                "position": str(position) if position else None,
+                "transaction": str(text),
+                "shares":   shares_v,
+                "value":    value_v,
+            })
+
+        result = {"symbol": sym, "transactions": rows[:40]}
+        cache_set(key, result)
+        return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ── Analyst Ratings ───────────────────────────────────────────────────────────
+
+@app.get("/api/analyst/{symbol}")
+def get_analyst_data(symbol: str):
+    sym = symbol.upper()
+    key = f"analyst:{sym}"
+    cached = cache_get(key, _ANALYST_TTL)
+    if cached is not None:
+        return cached
+    try:
+        ticker = yf.Ticker(sym, session=_session)
+        info   = ticker.info
+
+        # Recommendation history (monthly summary)
+        rec_hist = []
+        try:
+            recs = ticker.recommendations
+            if recs is not None and len(recs) > 0:
+                cols = list(recs.columns)
+                if "strongBuy" in cols or "strong_buy" in cols:
+                    for _, r in recs.tail(8).iterrows():
+                        rec_hist.append({
+                            "period":    str(r.get("period", r.name)),
+                            "strongBuy": int(r.get("strongBuy", r.get("strong_buy", 0)) or 0),
+                            "buy":       int(r.get("buy", 0) or 0),
+                            "hold":      int(r.get("hold", 0) or 0),
+                            "sell":      int(r.get("sell", 0) or 0),
+                            "strongSell":int(r.get("strongSell", r.get("strong_sell", 0)) or 0),
+                        })
+                else:
+                    for _, r in recs.tail(12).iterrows():
+                        rec_hist.append({
+                            "date":      str(pd.Timestamp(r.name).date()) if hasattr(r.name, "date") else str(r.name),
+                            "firm":      str(r.get("Firm", "")),
+                            "toGrade":   str(r.get("To Grade", r.get("toGrade", ""))),
+                            "fromGrade": str(r.get("From Grade", r.get("fromGrade", ""))),
+                            "action":    str(r.get("Action", r.get("action", ""))),
+                        })
+        except Exception:
+            pass
+
+        result = {
+            "symbol": sym,
+            "recommendationKey":       info.get("recommendationKey"),
+            "numberOfAnalystOpinions": info.get("numberOfAnalystOpinions"),
+            "targetMeanPrice":   _safe_float(info.get("targetMeanPrice")),
+            "targetHighPrice":   _safe_float(info.get("targetHighPrice")),
+            "targetLowPrice":    _safe_float(info.get("targetLowPrice")),
+            "targetMedianPrice": _safe_float(info.get("targetMedianPrice")),
+            "currentPrice":      _safe_float(info.get("currentPrice")),
+            "history": rec_hist,
+        }
+        cache_set(key, result)
+        return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

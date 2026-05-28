@@ -1005,6 +1005,7 @@ export default function PortfolioTracker() {
   const [dividendLoading, setDividendLoading] = useState(false)
   const [corrData,        setCorrData]        = useState(null)
   const [corrLoading,     setCorrLoading]     = useState(false)
+  const [targetWeights,   setTargetWeights]   = useState({})
 
   function handleSort(key) {
     if (!key) return
@@ -1194,7 +1195,7 @@ export default function PortfolioTracker() {
         <div className="flex items-center gap-3">
           {/* View toggle */}
           <div className="flex rounded overflow-hidden border border-gray-700">
-            {[['heatmap', 'Heatmap'], ['table', 'Table'], ['exposure', 'Exposure'], ['risk', 'Risk'], ['performance', 'Performance'], ['dividends', 'Dividends'], ['correlation', 'Correlation']].map(([id, label]) => (
+            {[['heatmap', 'Heatmap'], ['table', 'Table'], ['exposure', 'Exposure'], ['risk', 'Risk'], ['performance', 'Performance'], ['dividends', 'Dividends'], ['correlation', 'Correlation'], ['rebalance', 'Rebalancer']].map(([id, label]) => (
               <button
                 key={id}
                 onClick={() => setViewMode(id)}
@@ -1489,6 +1490,107 @@ export default function PortfolioTracker() {
               {positions.length >= 2 && !corrLoading && corrData?.error && (
                 <div className="py-8 text-center text-red-400 text-sm">Failed to compute correlation: {corrData.error}</div>
               )}
+            </section>
+          )}
+
+          {/* ── Rebalancer view ── */}
+          {viewMode === 'rebalance' && (
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-gray-600 text-xs uppercase tracking-widest">Portfolio Rebalancer</div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const n = withWeight.length
+                      const eq = n > 0 ? parseFloat((100 / n).toFixed(1)) : 0
+                      const tw = {}
+                      withWeight.forEach((p, i) => { tw[p.symbol] = i < n - 1 ? eq : parseFloat((100 - eq * (n - 1)).toFixed(1)) })
+                      setTargetWeights(tw)
+                    }}
+                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1.5 rounded transition-colors"
+                  >Equal Weight</button>
+                  <button
+                    onClick={() => setTargetWeights({})}
+                    className="bg-gray-800 hover:bg-gray-700 text-gray-500 text-xs px-3 py-1.5 rounded transition-colors"
+                  >Clear</button>
+                </div>
+              </div>
+
+              {withWeight.length === 0 ? (
+                <div className="py-16 text-center text-gray-600 text-sm">Add positions to use the rebalancer</div>
+              ) : (() => {
+                const totalTarget = Object.values(targetWeights).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+                const targetOk = Math.abs(totalTarget - 100) < 0.5
+
+                return (
+                  <div className="space-y-4">
+                    {!targetOk && totalTarget > 0 && (
+                      <div className="bg-amber-900/30 border border-amber-700/40 rounded-lg px-4 py-2.5 text-amber-300 text-xs">
+                        ⚠ Target weights sum to {totalTarget.toFixed(1)}% — adjust to 100% to see trade recommendations
+                      </div>
+                    )}
+
+                    <div className="overflow-x-auto rounded-lg border border-gray-800">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-gray-800 bg-gray-900">
+                            {['Symbol', 'Price', 'Shares', 'Value', 'Current %', 'Target %', 'Δ %', 'Δ Shares', 'Δ Value', 'Action'].map((h, i) => (
+                              <th key={h} className={`py-2.5 px-3 text-gray-500 font-medium tracking-wider uppercase ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {withWeight.map(p => {
+                            const tgt = parseFloat(targetWeights[p.symbol]) || 0
+                            const delta = tgt - p.weight
+                            const deltaVal = (delta / 100) * totalVal
+                            const deltaShares = p.price ? Math.round(deltaVal / p.price * 10) / 10 : null
+                            const action = !tgt ? null : Math.abs(delta) < 0.5 ? 'HOLD' : delta > 0 ? 'BUY' : 'SELL'
+                            const actionCls = action === 'BUY' ? 'text-emerald-400 bg-emerald-900/40' : action === 'SELL' ? 'text-red-400 bg-red-900/40' : 'text-gray-500 bg-gray-800/60'
+                            return (
+                              <tr key={p.symbol} className="border-b border-gray-800/40 hover:bg-gray-800/30">
+                                <td className="py-2.5 px-3 font-bold text-white">{p.symbol}</td>
+                                <td className="py-2.5 px-3 text-gray-300 tabular-nums">{fmt.price(p.price)}</td>
+                                <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{p.shares.toLocaleString()}</td>
+                                <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{fmt.marketCap(p.value)}</td>
+                                <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{p.weight.toFixed(1)}%</td>
+                                <td className="py-2.5 px-3 text-right">
+                                  <input
+                                    type="number" min="0" max="100" step="0.1"
+                                    value={targetWeights[p.symbol] ?? ''}
+                                    onChange={e => setTargetWeights(prev => ({ ...prev, [p.symbol]: e.target.value }))}
+                                    placeholder={p.weight.toFixed(1)}
+                                    className="w-16 bg-gray-800 border border-gray-700 text-white text-right text-xs rounded px-2 py-1 focus:outline-none focus:border-emerald-500 tabular-nums"
+                                  />
+                                </td>
+                                <td className={`py-2.5 px-3 text-right tabular-nums font-medium ${tgt ? (delta > 0.5 ? 'text-emerald-400' : delta < -0.5 ? 'text-red-400' : 'text-gray-500') : 'text-gray-700'}`}>
+                                  {tgt ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%` : '—'}
+                                </td>
+                                <td className={`py-2.5 px-3 text-right tabular-nums ${tgt ? (deltaShares > 0 ? 'text-emerald-400' : deltaShares < 0 ? 'text-red-400' : 'text-gray-500') : 'text-gray-700'}`}>
+                                  {tgt && deltaShares != null ? `${deltaShares > 0 ? '+' : ''}${deltaShares}` : '—'}
+                                </td>
+                                <td className={`py-2.5 px-3 text-right tabular-nums ${tgt ? (deltaVal > 0 ? 'text-emerald-400' : deltaVal < 0 ? 'text-red-400' : 'text-gray-500') : 'text-gray-700'}`}>
+                                  {tgt ? `${deltaVal >= 0 ? '+' : ''}$${Math.abs(deltaVal).toLocaleString('en-US',{maximumFractionDigits:0})}` : '—'}
+                                </td>
+                                <td className="py-2.5 px-3 text-right">
+                                  {action && <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${actionCls}`}>{action}</span>}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs text-gray-500 pt-1">
+                      <span>Total target: <span className={targetOk ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>{totalTarget.toFixed(1)}%</span></span>
+                      {targetOk && (
+                        <span>Enter target % for each position · Δ Shares = shares to buy (+) or sell (−)</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
             </section>
           )}
 
