@@ -7,7 +7,8 @@ const TECH_SCANS = [
   { id: 'death_cross',   label: 'Death Cross',   desc: '50-day MA crossed below 200-day MA (last 30 days)',       icon: '💀' },
   { id: 'rsi_oversold',  label: 'RSI Oversold',  desc: 'RSI(14) below 30 — potential reversal setup',            icon: '📉' },
   { id: 'rsi_overbought',label: 'RSI Overbought','desc': 'RSI(14) above 70 — potential pullback ahead',          icon: '📈' },
-  { id: 'high_volume',   label: 'High Volume',   desc: 'Today\'s volume ≥ 2× 20-day average — unusual activity', icon: '🔊' },
+  { id: 'high_volume',    label: 'High Volume',    desc: 'Today\'s volume ≥ 2× 20-day average — unusual activity', icon: '🔊' },
+  { id: 'short_interest', label: 'Short Interest', desc: 'Short float >10% — high short interest / potential squeeze', icon: '🩳' },
 ]
 
 const FUND_SCREENS = [
@@ -41,8 +42,11 @@ function TechResults({ data, loading, error, scan }) {
                                    { label: 'MA200', key: 'ma200', align: 'text-right' }] : []),
     ...(scan === 'rsi_oversold' || scan === 'rsi_overbought'
                                 ? [{ label: 'RSI(14)', key: 'rsi', align: 'text-right' }] : []),
-    ...(scan === 'high_volume'  ? [{ label: 'Volume',     key: 'volume',    align: 'text-right' },
-                                   { label: 'Vol Ratio',  key: 'volRatio',  align: 'text-right' }] : []),
+    ...(scan === 'high_volume'    ? [{ label: 'Volume',      key: 'volume',              align: 'text-right' },
+                                     { label: 'Vol Ratio',  key: 'volRatio',             align: 'text-right' }] : []),
+    ...(scan === 'short_interest' ? [{ label: 'Short Float %', key: 'shortPercentOfFloat', align: 'text-right' },
+                                     { label: 'Days to Cover', key: 'shortRatio',          align: 'text-right' },
+                                     { label: 'Sector',        key: 'sector',              align: 'text-left'  }] : []),
   ]
 
   const sorted = [...(data || [])].sort((a, b) => {
@@ -100,6 +104,15 @@ function TechResults({ data, loading, error, scan }) {
                 <td className={`py-2.5 px-3 text-right tabular-nums font-semibold ${row.volRatio >= 3 ? 'text-red-400' : 'text-amber-400'}`}>
                   {row.volRatio != null ? `${row.volRatio.toFixed(1)}×` : '—'}
                 </td>
+              </>}
+              {scan === 'short_interest' && <>
+                <td className={`py-2.5 px-3 text-right tabular-nums font-semibold ${row.shortPercentOfFloat >= 25 ? 'text-red-400' : row.shortPercentOfFloat >= 15 ? 'text-amber-400' : 'text-gray-300'}`}>
+                  {row.shortPercentOfFloat != null ? `${row.shortPercentOfFloat.toFixed(1)}%` : '—'}
+                </td>
+                <td className={`py-2.5 px-3 text-right tabular-nums ${row.shortRatio >= 10 ? 'text-red-400' : row.shortRatio >= 5 ? 'text-amber-400' : 'text-gray-400'}`}>
+                  {row.shortRatio != null ? `${row.shortRatio.toFixed(1)}d` : '—'}
+                </td>
+                <td className="py-2.5 px-3 text-left text-gray-500">{row.sector ?? '—'}</td>
               </>}
             </tr>
           ))}
