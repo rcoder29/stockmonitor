@@ -39,6 +39,7 @@ import SocialSecurity from './components/SocialSecurity'
 import EarlyRetirementHealth from './components/EarlyRetirementHealth'
 import RothConversionPlanner from './components/RothConversionPlanner'
 import CustomNews from './components/CustomNews'
+import TaxAdvisor from './components/TaxAdvisor'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -175,8 +176,9 @@ const NAV_GROUPS = [
     label: 'AI Tools',
     icon: Icons.ai,
     items: [
-      { id: 'advisor', label: 'Financial Advisor' },
-      { id: 'aibot',   label: 'AI Chat' },
+      { id: 'advisor',    label: 'Financial Advisor' },
+      { id: 'taxadvisor', label: 'Tax Advisor' },
+      { id: 'aibot',      label: 'AI Chat' },
     ],
   },
   {
@@ -283,50 +285,56 @@ function Sidebar({ activeTab, onSelect, className }) {
   }
 
   return (
-    <aside className={className ?? 'w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto'}>
+    <aside className={className ?? 'w-52 shrink-0 bg-slate-900 border-r border-slate-700/60 overflow-y-auto'}>
       <div className="flex flex-col min-h-full">
         {/* Nav groups */}
-        <div className="flex-1">
+        <div className="flex-1 py-1">
           {NAV_GROUPS.map(group => {
             const isGroupActive = group.items.some(i => i.id === activeTab)
             const isOpen = expanded[group.id]
             return (
-              <div key={group.id}>
+              <div key={group.id} className="mb-0.5">
                 <button
                   onClick={() => toggle(group.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors group ${
-                    isGroupActive ? 'bg-gray-800/70' : 'hover:bg-gray-800/40'
+                  className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors group rounded-none ${
+                    isGroupActive
+                      ? 'bg-slate-800 border-l-2 border-emerald-500'
+                      : 'hover:bg-slate-800/70 border-l-2 border-transparent'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className={`transition-colors ${isGroupActive ? 'text-emerald-400' : 'text-gray-600 group-hover:text-gray-400'}`}>
+                  <div className="flex items-center gap-2.5">
+                    <span className={`transition-colors ${
+                      isGroupActive ? 'text-emerald-400' : 'text-slate-400 group-hover:text-slate-200'
+                    }`}>
                       {group.icon}
                     </span>
-                    <span className={`text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                      isGroupActive ? 'text-emerald-400' : 'text-gray-500 group-hover:text-gray-300'
+                    <span className={`text-[11.5px] font-bold uppercase tracking-wider transition-colors ${
+                      isGroupActive ? 'text-white' : 'text-slate-300 group-hover:text-white'
                     }`}>
                       {group.label}
                     </span>
                   </div>
-                  <span className={`text-gray-600 transition-transform duration-150 ${isOpen ? '' : '-rotate-90'}`}>
+                  <span className={`text-xs transition-all duration-200 ${
+                    isGroupActive ? 'text-emerald-400' : 'text-slate-500 group-hover:text-slate-300'
+                  } ${isOpen ? '' : '-rotate-90'}`}>
                     ▾
                   </span>
                 </button>
 
                 {isOpen && (
-                  <div className="pb-0.5">
+                  <div className="bg-slate-950/40 pb-1">
                     {group.items.map(item => (
                       <button
                         key={item.id}
                         onClick={() => onSelect(item.id)}
-                        className={`w-full text-left text-[13px] pl-9 pr-3 py-1.5 transition-colors relative ${
+                        className={`w-full text-left text-[12.5px] pl-10 pr-3 py-2 transition-colors relative ${
                           activeTab === item.id
-                            ? 'text-emerald-400 bg-emerald-900/20'
-                            : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40'
+                            ? 'text-white font-semibold bg-emerald-900/25'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                         }`}
                       >
                         {activeTab === item.id && (
-                          <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-emerald-500 rounded-r" />
+                          <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-emerald-400 rounded-r" />
                         )}
                         {item.label}
                       </button>
@@ -339,13 +347,13 @@ function Sidebar({ activeTab, onSelect, className }) {
         </div>
 
         {/* Pinned User Guide button */}
-        <div className="border-t border-gray-800 p-2">
+        <div className="border-t border-slate-700/60 p-2">
           <button
             onClick={() => onSelect('guide')}
-            className={`w-full flex items-center gap-2 px-3 py-2 rounded text-xs transition-colors ${
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
               activeTab === 'guide'
-                ? 'text-emerald-400 bg-emerald-900/20'
-                : 'text-gray-600 hover:text-gray-300 hover:bg-gray-800/40'
+                ? 'text-white bg-emerald-900/30 border border-emerald-700/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
@@ -758,6 +766,7 @@ export default function App() {
           {activeTab === 'earlyretirementhealth'  && <EarlyRetirementHealth />}
           {activeTab === 'rothconversionplanner' && <RothConversionPlanner />}
           {activeTab === 'customnews'            && <CustomNews />}
+          {activeTab === 'taxadvisor'            && <TaxAdvisor />}
         </main>
       </div>
 
