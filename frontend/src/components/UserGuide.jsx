@@ -19,10 +19,10 @@ const GUIDE = [
       { type: 'h3', text: 'Navigation' },
       { type: 'p', text: 'The left sidebar organises all features into 7 groups. Click a group header to collapse or expand it. Click any item to load that view. On mobile, tap ☰ to open the sidebar drawer.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
-        ['Market', 'Overview, Recommendations, Breadth, Index Heatmap, Yield Curve, Macro Calendar'],
+        ['Market', 'Overview, Recommendations, Breadth, Index Heatmap, Macro Calendar, Yield Curve'],
         ['Watchlist', 'Watchlist, Price Targets, Earnings+, Sentiment'],
         ['Portfolio', 'Portfolio, Options P&L, Trade Journal'],
-        ['Research', 'Screener, Signals, Chart Compare, Fundamentals, DCF, Backtester, Unusual Options'],
+        ['Research', 'Screener, Signals, Chart Compare, Fundamentals, Backtester, DCF Valuation, Unusual Options'],
         ['Sectors', 'Sector Rotation, Momentum'],
         ['Trading', 'Day Trader, Trade Ideas, Smart Alerts, Position Sizer'],
         ['AI Tools', 'AI Chat, Financial Advisor'],
