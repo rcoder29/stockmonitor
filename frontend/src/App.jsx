@@ -38,6 +38,7 @@ import CoastFire from './components/CoastFire'
 import SocialSecurity from './components/SocialSecurity'
 import EarlyRetirementHealth from './components/EarlyRetirementHealth'
 import RothConversionPlanner from './components/RothConversionPlanner'
+import CustomNews from './components/CustomNews'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -80,6 +81,14 @@ const Icons = {
     <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
       <path d="M8 1l1.5 4.5L14 7l-4.5 1.5L8 13l-1.5-4.5L2 7l4.5-1.5z"/>
       <path d="M13 11l.75 2.25L16 14l-2.25.75L13 17l-.75-2.25L10 14l2.25-.75z" opacity="0.5"/>
+    </svg>
+  ),
+  news: (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+      <rect x="1" y="2" width="14" height="2" rx="0.5"/>
+      <rect x="1" y="6" width="9" height="1.5" rx="0.5"/>
+      <rect x="1" y="9" width="11" height="1.5" rx="0.5"/>
+      <rect x="1" y="12" width="7" height="1.5" rx="0.5"/>
     </svg>
   ),
   chevron: (
@@ -131,6 +140,14 @@ const NAV_GROUPS = [
       { id: 'richearnings',  label: 'Earnings+' },
       { id: 'newssentiment', label: 'News Sentiment' },
       { id: 'smartalerts',   label: 'Smart Alerts' },
+    ],
+  },
+  {
+    id: 'news',
+    label: 'News',
+    icon: Icons.news,
+    items: [
+      { id: 'customnews', label: 'My News Feed' },
     ],
   },
   {
@@ -740,6 +757,7 @@ export default function App() {
           {activeTab === 'socialsecurity'        && <SocialSecurity />}
           {activeTab === 'earlyretirementhealth'  && <EarlyRetirementHealth />}
           {activeTab === 'rothconversionplanner' && <RothConversionPlanner />}
+          {activeTab === 'customnews'            && <CustomNews />}
         </main>
       </div>
 

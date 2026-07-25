@@ -5514,6 +5514,61 @@ async def unusual_options_activity(symbols: str = Query(...)):
     return result
 
 
+# ── Custom news feed ─────────────────────────────────────────────────────────
+
+_TOPIC_SYMBOLS: dict[str, str] = {
+    "sp500":          "^GSPC",
+    "nasdaq":         "^IXIC",
+    "dowjones":       "^DJI",
+    "tech":           "QQQ",
+    "energy":         "XLE",
+    "healthcare":     "XLV",
+    "financials":     "XLF",
+    "consumer":       "XLY",
+    "industrials":    "XLI",
+    "materials":      "XLB",
+    "utilities":      "XLU",
+    "realestate":     "VNQ",
+    "communications": "XLC",
+    "rates":          "^TNX",
+    "gold":           "GC=F",
+    "oil":            "CL=F",
+    "crypto":         "BTC-USD",
+}
+
+@app.get("/api/news/feed")
+async def get_custom_news_feed(topics: str = Query(...)):
+    topic_list = [t.strip() for t in topics.split(",") if t.strip()]
+    if not topic_list:
+        return []
+
+    # Map preset keys to yfinance symbols; fall back to treating as ticker
+    def resolve(topic: str) -> str:
+        return _TOPIC_SYMBOLS.get(topic.lower(), topic.upper())
+
+    symbols = [resolve(t) for t in topic_list]
+
+    def fetch_with_tag(args: tuple) -> list:
+        sym, topic = args
+        arts = _fetch_feed(sym)
+        for a in arts:
+            a["topic"] = topic
+        return arts
+
+    all_articles: list[dict] = []
+    seen_links: set[str] = set()
+    pairs = list(zip(symbols, topic_list))
+    with ThreadPoolExecutor(max_workers=min(len(pairs), 10)) as pool:
+        for batch in pool.map(fetch_with_tag, pairs):
+            for a in batch:
+                if a["link"] not in seen_links:
+                    seen_links.add(a["link"])
+                    all_articles.append(a)
+
+    all_articles.sort(key=lambda a: a.get("publishedAt") or "", reverse=True)
+    return all_articles[:60]
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
