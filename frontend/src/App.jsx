@@ -31,6 +31,7 @@ import DcfCalculator from './components/DcfCalculator'
 import YieldCurve from './components/YieldCurve'
 import UnusualOptions from './components/UnusualOptions'
 import UserGuide from './components/UserGuide'
+import IndexHeatmap from './components/IndexHeatmap'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -93,6 +94,7 @@ const NAV_GROUPS = [
       { id: 'market',          label: 'Overview' },
       { id: 'recommendations', label: 'Recommendations' },
       { id: 'breadth',         label: 'Breadth' },
+      { id: 'indexheatmap',   label: 'Index Heatmap' },
       { id: 'macro',           label: 'Macro Calendar' },
       { id: 'rates',          label: 'Yield Curve' },
     ],
@@ -683,6 +685,7 @@ export default function App() {
           {activeTab === 'optionstracker'  && <OptionsTracker />}
           {activeTab === 'sectormomentum'  && <SectorMomentum />}
           {activeTab === 'breadth'         && <MarketBreadth />}
+          {activeTab === 'indexheatmap'   && <IndexHeatmap />}
           {activeTab === 'rates'           && <YieldCurve />}
           {activeTab === 'fundamentals'    && <FundamentalComparison />}
           {activeTab === 'pricetargets'    && <PriceTargets />}
