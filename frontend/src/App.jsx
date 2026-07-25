@@ -37,6 +37,7 @@ import MonteCarlo from './components/MonteCarlo'
 import CoastFire from './components/CoastFire'
 import SocialSecurity from './components/SocialSecurity'
 import EarlyRetirementHealth from './components/EarlyRetirementHealth'
+import RothConversionPlanner from './components/RothConversionPlanner'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -175,7 +176,8 @@ const NAV_GROUPS = [
       { id: 'montecarlo',    label: 'Monte Carlo' },
       { id: 'coastfire',     label: 'Coast FIRE & Roth' },
       { id: 'socialsecurity',        label: 'Social Security' },
-      { id: 'earlyretirementhealth', label: 'Early Retirement Health' },
+      { id: 'earlyretirementhealth',  label: 'Early Retirement Health' },
+      { id: 'rothconversionplanner', label: 'Roth Conversion Planner' },
     ],
   },
 ]
@@ -733,7 +735,8 @@ export default function App() {
           {activeTab === 'montecarlo'     && <MonteCarlo />}
           {activeTab === 'coastfire'      && <CoastFire />}
           {activeTab === 'socialsecurity'        && <SocialSecurity />}
-          {activeTab === 'earlyretirementhealth' && <EarlyRetirementHealth />}
+          {activeTab === 'earlyretirementhealth'  && <EarlyRetirementHealth />}
+          {activeTab === 'rothconversionplanner' && <RothConversionPlanner />}
         </main>
       </div>
 
