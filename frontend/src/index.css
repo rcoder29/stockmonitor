@@ -30,3 +30,172 @@
 .animate-slide-in {
   animation: slide-in 0.25s ease-out;
 }
+
+/* ── Light Theme ─────────────────────────────────────────────────────────────
+   Applied when <html class="light"> is set. Remaps the entire gray palette
+   and darkens accent colors for readability on white backgrounds.
+   No component changes needed — CSS specificity (html.light .class) wins
+   over Tailwind's plain utility classes (.class).
+   ────────────────────────────────────────────────────────────────────────── */
+
+html.light {
+  color-scheme: light;
+}
+
+/* Scrollbars */
+html.light * {
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+html.light *::-webkit-scrollbar-track { background: #f1f5f9; }
+html.light *::-webkit-scrollbar-thumb { background-color: #cbd5e1; }
+
+/* ── Backgrounds ── */
+html.light .bg-black          { background-color: #f1f5f9; }
+html.light .bg-gray-950       { background-color: #f1f5f9; }
+html.light .bg-gray-900       { background-color: #ffffff; }
+html.light .bg-gray-800       { background-color: #f1f5f9; }
+html.light .bg-gray-700       { background-color: #e2e8f0; }
+html.light .bg-gray-600       { background-color: #cbd5e1; }
+html.light .bg-gray-500       { background-color: #94a3b8; }
+
+/* Opacity variants — bg-gray-900/N */
+html.light .bg-gray-900\/10   { background-color: rgba(248,250,252,0.4) !important; }
+html.light .bg-gray-900\/20   { background-color: rgba(241,245,249,0.5) !important; }
+html.light .bg-gray-900\/25   { background-color: rgba(241,245,249,0.6) !important; }
+html.light .bg-gray-900\/40   { background-color: rgba(241,245,249,0.7) !important; }
+html.light .bg-gray-900\/60   { background-color: rgba(241,245,249,0.8) !important; }
+
+/* Opacity variants — bg-gray-800/N */
+html.light .bg-gray-800\/20   { background-color: rgba(241,245,249,0.4) !important; }
+html.light .bg-gray-800\/40   { background-color: rgba(241,245,249,0.6) !important; }
+html.light .bg-gray-800\/50   { background-color: rgba(241,245,249,0.7) !important; }
+
+/* Mobile overlay */
+html.light .bg-black\/50      { background-color: rgba(0,0,0,0.25) !important; }
+
+/* ── Text ── */
+html.light .text-white        { color: #0f172a; }
+html.light .text-gray-50      { color: #0f172a; }
+html.light .text-gray-100     { color: #1e293b; }
+html.light .text-gray-200     { color: #334155; }
+html.light .text-gray-300     { color: #475569; }
+html.light .text-gray-400     { color: #64748b; }
+html.light .text-gray-500     { color: #94a3b8; }
+html.light .text-gray-600     { color: #94a3b8; }
+html.light .text-gray-700     { color: #cbd5e1; }
+
+/* ── Borders ── */
+html.light .border-gray-900         { border-color: #e2e8f0; }
+html.light .border-gray-800         { border-color: #e2e8f0; }
+html.light .border-gray-700         { border-color: #cbd5e1; }
+html.light .border-gray-600         { border-color: #94a3b8; }
+
+/* Border opacity variants */
+html.light .border-gray-800\/40     { border-color: rgba(226,232,240,0.6) !important; }
+html.light .border-gray-800\/60     { border-color: rgba(226,232,240,0.8) !important; }
+
+/* ── Hover states ── */
+html.light .hover\:bg-gray-800:hover      { background-color: #f1f5f9; }
+html.light .hover\:bg-gray-800\/50:hover  { background-color: rgba(241,245,249,0.7); }
+html.light .hover\:bg-gray-700:hover      { background-color: #e2e8f0; }
+html.light .hover\:text-white:hover       { color: #0f172a; }
+html.light .hover\:text-gray-200:hover    { color: #334155; }
+html.light .hover\:text-gray-300:hover    { color: #475569; }
+html.light .hover\:border-gray-600:hover  { border-color: #94a3b8; }
+
+/* ── Inputs ── */
+html.light input[type="text"],
+html.light input[type="number"],
+html.light input[type="email"],
+html.light input[type="search"],
+html.light textarea,
+html.light select {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.light input::placeholder,
+html.light textarea::placeholder { color: #94a3b8 !important; }
+html.light .placeholder-gray-600::placeholder { color: #94a3b8 !important; }
+
+/* ── Accent text — darken for readability on white ── */
+html.light .text-emerald-400  { color: #059669; }
+html.light .text-emerald-300  { color: #10b981; }
+html.light .text-emerald-600  { color: #047857; }
+html.light .text-blue-400     { color: #2563eb; }
+html.light .text-blue-300     { color: #3b82f6; }
+html.light .text-sky-400      { color: #0284c7; }
+html.light .text-sky-500      { color: #0369a1; }
+html.light .text-amber-400    { color: #d97706; }
+html.light .text-amber-600    { color: #b45309; }
+html.light .text-red-400      { color: #dc2626; }
+html.light .text-red-300      { color: #ef4444; }
+html.light .text-red-500      { color: #dc2626; }
+html.light .text-yellow-600   { color: #ca8a04; }
+html.light .text-purple-400   { color: #9333ea; }
+html.light .text-cyan-400     { color: #0891b2; }
+html.light .text-pink-400     { color: #db2777; }
+html.light .text-orange-400   { color: #ea580c; }
+html.light .text-green-400    { color: #16a34a; }
+html.light .text-teal-400     { color: #0d9488; }
+html.light .text-indigo-400   { color: #4f46e5; }
+html.light .text-rose-400     { color: #e11d48; }
+html.light .text-violet-400   { color: #7c3aed; }
+html.light .text-fuchsia-400  { color: #c026d3; }
+html.light .text-lime-400     { color: #65a30d; }
+
+/* ── Accent backgrounds — lighten dark tones ── */
+html.light .bg-emerald-900\/10  { background-color: rgba(209,250,229,0.35) !important; }
+html.light .bg-emerald-900\/20  { background-color: rgba(209,250,229,0.5) !important; }
+html.light .bg-emerald-900\/25  { background-color: rgba(209,250,229,0.55) !important; }
+html.light .bg-emerald-900\/30  { background-color: rgba(209,250,229,0.65) !important; }
+html.light .bg-emerald-900\/40  { background-color: rgba(209,250,229,0.75) !important; }
+html.light .bg-emerald-900\/50  { background-color: rgba(209,250,229,0.85) !important; }
+html.light .bg-emerald-700\/60  { background-color: rgba(6,95,70,0.12) !important; }
+
+html.light .bg-red-900\/20    { background-color: rgba(254,202,202,0.4) !important; }
+html.light .bg-red-900\/25    { background-color: rgba(254,202,202,0.5) !important; }
+html.light .bg-red-900\/30    { background-color: rgba(254,202,202,0.55) !important; }
+html.light .bg-red-900\/40    { background-color: rgba(254,202,202,0.65) !important; }
+
+html.light .bg-amber-900\/30  { background-color: rgba(254,243,199,0.6) !important; }
+html.light .bg-amber-900\/50  { background-color: rgba(254,243,199,0.8) !important; }
+
+html.light .bg-blue-900\/10   { background-color: rgba(219,234,254,0.35) !important; }
+html.light .bg-blue-900\/20   { background-color: rgba(219,234,254,0.5) !important; }
+html.light .bg-blue-900\/30   { background-color: rgba(219,234,254,0.6) !important; }
+
+html.light .bg-sky-900\/20    { background-color: rgba(224,242,254,0.5) !important; }
+html.light .bg-purple-900\/20 { background-color: rgba(233,213,255,0.45) !important; }
+html.light .bg-indigo-900\/20 { background-color: rgba(224,231,255,0.45) !important; }
+html.light .bg-orange-900\/20 { background-color: rgba(255,237,213,0.5) !important; }
+html.light .bg-teal-900\/20   { background-color: rgba(204,251,241,0.5) !important; }
+html.light .bg-pink-900\/20   { background-color: rgba(252,231,243,0.5) !important; }
+
+/* Emerald solid bg (buttons, active states) — keep but slightly adjust */
+html.light .bg-emerald-800    { background-color: #059669; }
+html.light .hover\:bg-emerald-700:hover { background-color: #047857; }
+html.light .bg-emerald-600    { background-color: #059669; }
+
+/* ── Accent borders ── */
+html.light .border-emerald-700        { border-color: #34d399; }
+html.light .border-emerald-700\/50    { border-color: rgba(52,211,153,0.35); }
+html.light .border-emerald-600\/50    { border-color: rgba(16,185,129,0.4); }
+html.light .border-red-700\/50        { border-color: rgba(239,68,68,0.35); }
+html.light .border-amber-700\/50      { border-color: rgba(217,119,6,0.35); }
+html.light .border-blue-700\/40       { border-color: rgba(37,99,235,0.3); }
+
+/* ── Active / selected states ── */
+html.light .bg-emerald-700    { background-color: #059669; }
+html.light .bg-emerald-600    { background-color: #10b981; }
+
+/* ── Divide (table rows) ── */
+html.light .divide-gray-800 > * + * { border-color: #e2e8f0; }
+html.light .divide-gray-700 > * + * { border-color: #cbd5e1; }
+
+/* ── Ring colors ── */
+html.light .focus\:ring-emerald-500:focus { --tw-ring-color: #10b981; }
+
+/* ── Animate pulse color fix ── */
+html.light .animate-pulse.bg-gray-700  { background-color: #e2e8f0; }
+html.light .animate-pulse.bg-gray-600  { background-color: #cbd5e1; }

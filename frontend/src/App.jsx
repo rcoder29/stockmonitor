@@ -353,6 +353,16 @@ export default function App() {
   const [alertSymbol,     setAlertSymbol]     = useState(null)
   const [toasts,          setToasts]          = useState([])
   const [portfolioSymbols,  setPortfolioSymbols]  = useState([])
+
+  // ── Theme ──────────────────────────────────────────────────────────────
+  const [theme, setTheme] = useState(() => localStorage.getItem('sm-theme') || 'dark')
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.remove('dark', 'light')
+    root.classList.add(theme)
+    localStorage.setItem('sm-theme', theme)
+  }, [theme])
+  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
   const [earnings,          setEarnings]          = useState([])
   const [earningsLoading,   setEarningsLoading]   = useState(false)
   const [activeList,        setActiveList]        = useState('default')
@@ -626,6 +636,8 @@ export default function App() {
         wsConnected={wsConnected}
         notifPermission={notifPermission}
         onRequestNotif={requestNotifPermission}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Mobile hamburger bar */}

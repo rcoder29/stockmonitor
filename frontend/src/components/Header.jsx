@@ -20,6 +20,8 @@ export default function Header({
   wsConnected,
   notifPermission,
   onRequestNotif,
+  theme,
+  onToggleTheme,
 }) {
   const [input, setInput] = useState('')
 
@@ -120,6 +122,23 @@ export default function Header({
             className="bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-400 hover:text-white px-3 py-1 text-xs rounded transition-colors"
           >
             ↻
+          </button>
+
+          {/* Theme toggle */}
+          <button
+            onClick={onToggleTheme}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            className="bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white w-7 h-7 flex items-center justify-center rounded transition-colors shrink-0"
+          >
+            {theme === 'dark' ? (
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+                <path d="M8 11a3 3 0 100-6 3 3 0 000 6zm0 1a4 4 0 110-8 4 4 0 010 8zM8 0a.5.5 0 01.5.5v1a.5.5 0 01-1 0v-1A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v1a.5.5 0 01-1 0v-1A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-1a.5.5 0 010-1h1a.5.5 0 01.5.5zM2 8a.5.5 0 01-.5.5h-1a.5.5 0 010-1h1A.5.5 0 012 8zm10.657-5.657a.5.5 0 010 .707l-.707.707a.5.5 0 11-.707-.707l.707-.707a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707l-.707.707a.5.5 0 01-.707-.707l.707-.707a.5.5 0 01.707 0zm9.193.707a.5.5 0 01-.707 0l-.707-.707a.5.5 0 01.707-.707l.707.707a.5.5 0 010 .707zM3.464 3.464a.5.5 0 01.707 0l.707.707a.5.5 0 01-.707.707l-.707-.707a.5.5 0 010-.707z"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+                <path d="M6 .278a.768.768 0 01.08.858 7.208 7.208 0 00-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 01.81.316.733.733 0 01-.031.893A8.349 8.349 0 018.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 016 .278z"/>
+              </svg>
+            )}
           </button>
         </div>
       </div>
