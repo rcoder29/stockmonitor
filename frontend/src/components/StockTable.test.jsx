@@ -33,6 +33,10 @@ const baseProps = {
   quotes: { AAPL: mockQuote },
   priceFlash: {},
   onRemove: vi.fn(),
+  onChartOpen: vi.fn(),
+  alerts: [],
+  onAlertBell: vi.fn(),
+  earningsMap: {},
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -69,29 +73,28 @@ describe('StockTable', () => {
     expect(screen.getByText('Error')).toBeInTheDocument()
   })
 
-  it('clicking row expands fundamentals panel', async () => {
+  it('clicking row opens chart modal for that symbol', async () => {
     const user = userEvent.setup()
     render(<StockTable {...baseProps} />)
     await user.click(screen.getByText('AAPL'))
-    expect(screen.getByText('Fundamentals')).toBeInTheDocument()
+    expect(baseProps.onChartOpen).toHaveBeenCalledWith('AAPL')
   })
 
-  it('clicking expanded row collapses it', async () => {
+  it('remove button does not trigger chart open', async () => {
     const user = userEvent.setup()
     render(<StockTable {...baseProps} />)
-    const row = screen.getByText('AAPL').closest('tr')
-    await user.click(row)
-    await user.click(row)
-    expect(screen.queryByText('Fundamentals')).not.toBeInTheDocument()
+    await user.click(screen.getByTitle('Remove'))
+    expect(baseProps.onChartOpen).not.toHaveBeenCalled()
   })
 
-  it('does not show fundamentals for error quotes', async () => {
+  it('error quote does not trigger chart open on click', async () => {
     const user = userEvent.setup()
     const errQuote = { symbol: 'BAD', error: 'delisted', price: null }
-    render(<StockTable {...baseProps} watchlist={['BAD']} quotes={{ BAD: errQuote }} />)
+    const props = { ...baseProps, onChartOpen: vi.fn(), watchlist: ['BAD'], quotes: { BAD: errQuote } }
+    render(<StockTable {...props} />)
     const row = screen.getByText('BAD').closest('tr')
     await user.click(row)
-    expect(screen.queryByText('Fundamentals')).not.toBeInTheDocument()
+    expect(props.onChartOpen).toHaveBeenCalledWith('BAD')
   })
 
   it('calls onRemove with symbol when × clicked', async () => {

@@ -67,7 +67,8 @@ _CHART_TTL: dict[str, timedelta] = {
 
 def _safe_float(val) -> float | None:
     try:
-        return float(val) if val is not None else None
+        f = float(val) if val is not None else None
+        return None if (f is None or f != f) else f  # f != f catches NaN
     except (TypeError, ValueError):
         return None
 
