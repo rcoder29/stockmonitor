@@ -2,21 +2,32 @@ import { useState, useEffect, useCallback } from 'react'
 import ChartModal from './ChartModal'
 
 const INDICES = [
-  { id: 'DOW30',     label: 'Dow Jones 30',    etf: 'DIA' },
-  { id: 'NASDAQ100', label: 'Nasdaq 100',       etf: 'QQQ' },
-  { id: 'SP100',     label: 'S&P Top 100',      etf: 'SPY' },
-  { id: 'ARKK',      label: 'ARK Innovation',   etf: 'ARKK' },
+  { id: 'DOW30',     label: 'Dow Jones 30',   etf: 'DIA' },
+  { id: 'NASDAQ100', label: 'Nasdaq 100',      etf: 'QQQ' },
+  { id: 'SP100',     label: 'S&P Top 100',     etf: 'SPY' },
+  { id: 'ARKK',      label: 'ARK Innovation',  etf: 'ARKK' },
 ]
 
 const PERIODS = ['1d', '5d', '1m', '3m', '6m', '1y', 'ytd']
 const PERIOD_LABELS = { '1d': '1D', '5d': '5D', '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1Y', 'ytd': 'YTD' }
 
-// GICS sector display order for the heatmap
 const SECTOR_ORDER = [
   'Technology', 'Communication Services', 'Consumer Discretionary',
   'Consumer Staples', 'Financials', 'Health Care', 'Industrials',
   'Energy', 'Materials', 'Real Estate', 'Utilities',
 ]
+
+// effective weight: prefer live market-cap weight, fall back to hardcoded
+function effectiveWeight(row) {
+  return row.actualWeight ?? row.indexWeight ?? 1
+}
+
+function fmtCap(v) {
+  if (v == null) return '—'
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`
+  if (v >= 1e9)  return `$${(v / 1e9).toFixed(1)}B`
+  return `$${(v / 1e6).toFixed(0)}M`
+}
 
 function pctBg(pct) {
   if (pct == null) return '#1f2937'
@@ -40,10 +51,10 @@ function pctFg(pct) {
   return Math.abs(pct) < 0.3 ? '#d1d5db' : '#ffffff'
 }
 
-function PctCell({ v }) {
+function PctCell({ v, bold }) {
   if (v == null) return <span className="text-gray-700 tabular-nums">—</span>
   const cls = v > 0 ? 'text-emerald-400' : v < 0 ? 'text-red-400' : 'text-gray-400'
-  return <span className={`tabular-nums font-medium ${cls}`}>{v > 0 ? '+' : ''}{v.toFixed(2)}%</span>
+  return <span className={`tabular-nums ${bold ? 'font-semibold' : 'font-medium'} ${cls}`}>{v > 0 ? '+' : ''}{v.toFixed(2)}%</span>
 }
 
 function SortArrow({ active, dir }) {
@@ -57,7 +68,7 @@ function SortArrow({ active, dir }) {
 // ── Table view ────────────────────────────────────────────────────────────────
 
 function TableView({ data, period, onSymbolClick }) {
-  const [sortKey, setSortKey] = useState(period)
+  const [sortKey, setSortKey] = useState('actualWeight')
   const [sortDir, setSortDir] = useState('desc')
 
   function handleSort(key) {
@@ -66,7 +77,8 @@ function TableView({ data, period, onSymbolClick }) {
   }
 
   const sorted = [...data].sort((a, b) => {
-    const av = a[sortKey], bv = b[sortKey]
+    const av = sortKey === 'weight' ? effectiveWeight(a) : a[sortKey]
+    const bv = sortKey === 'weight' ? effectiveWeight(b) : b[sortKey]
     if (av == null && bv == null) return 0
     if (av == null) return 1
     if (bv == null) return -1
@@ -75,12 +87,15 @@ function TableView({ data, period, onSymbolClick }) {
   })
 
   const cols = [
-    { key: 'symbol', label: 'Symbol',  align: 'text-left',  cls: 'w-20' },
-    { key: 'name',   label: 'Name',    align: 'text-left',  cls: 'min-w-[140px]' },
-    { key: 'sector', label: 'Sector',  align: 'text-left',  cls: 'min-w-[160px]' },
-    { key: 'weight', label: 'Wt%',     align: 'text-right', cls: 'w-14' },
-    { key: 'price',  label: 'Price',   align: 'text-right', cls: 'w-20' },
-    ...PERIODS.map(p => ({ key: p, label: PERIOD_LABELS[p], align: 'text-right', cls: 'w-16' })),
+    { key: 'symbol',        label: 'Symbol',    align: 'text-left',  cls: 'w-20' },
+    { key: 'name',          label: 'Name',      align: 'text-left',  cls: 'min-w-[140px]' },
+    { key: 'sector',        label: 'Sector',    align: 'text-left',  cls: 'min-w-[150px]' },
+    { key: 'weight',        label: 'Wt %',      align: 'text-right', cls: 'w-16' },
+    { key: 'marketCap',     label: 'Mkt Cap',   align: 'text-right', cls: 'w-20' },
+    { key: 'price',         label: 'Price',     align: 'text-right', cls: 'w-20' },
+    { key: '1d',            label: '1D',        align: 'text-right', cls: 'w-16' },
+    { key: 'wtContribution',label: '1D Contrib',align: 'text-right', cls: 'w-20' },
+    ...PERIODS.slice(1).map(p => ({ key: p, label: PERIOD_LABELS[p], align: 'text-right', cls: 'w-16' })),
   ]
 
   return (
@@ -100,24 +115,39 @@ function TableView({ data, period, onSymbolClick }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map(row => (
-            <tr
-              key={row.symbol}
-              className="border-b border-gray-800/50 hover:bg-gray-800/40 cursor-pointer transition-colors"
-              onClick={() => onSymbolClick(row)}
-            >
-              <td className="py-1.5 px-2 font-bold text-emerald-400">{row.symbol}</td>
-              <td className="py-1.5 px-2 text-gray-300 truncate max-w-[160px]">{row.name}</td>
-              <td className="py-1.5 px-2 text-gray-500">{row.sector}</td>
-              <td className="py-1.5 px-2 text-right text-gray-500">{row.weight?.toFixed(1)}</td>
-              <td className="py-1.5 px-2 text-right text-gray-300 tabular-nums">
-                {row.price != null ? `$${row.price.toFixed(2)}` : '—'}
-              </td>
-              {PERIODS.map(p => (
-                <td key={p} className="py-1.5 px-2 text-right"><PctCell v={row[p]} /></td>
-              ))}
-            </tr>
-          ))}
+          {sorted.map(row => {
+            const wt = effectiveWeight(row)
+            return (
+              <tr
+                key={row.symbol}
+                className="border-b border-gray-800/50 hover:bg-gray-800/40 cursor-pointer transition-colors"
+                onClick={() => onSymbolClick(row)}
+              >
+                <td className="py-1.5 px-2 font-bold text-emerald-400">{row.symbol}</td>
+                <td className="py-1.5 px-2 text-gray-300 truncate max-w-[160px]">{row.name}</td>
+                <td className="py-1.5 px-2 text-gray-500">{row.sector}</td>
+                <td className="py-1.5 px-2 text-right">
+                  <span className="text-gray-200 font-medium tabular-nums">{wt.toFixed(2)}%</span>
+                  {row.actualWeight == null && <span className="text-gray-700 text-[9px] ml-1">est</span>}
+                </td>
+                <td className="py-1.5 px-2 text-right text-gray-500 tabular-nums">{fmtCap(row.marketCap)}</td>
+                <td className="py-1.5 px-2 text-right text-gray-300 tabular-nums">
+                  {row.price != null ? `$${row.price.toFixed(2)}` : '—'}
+                </td>
+                <td className="py-1.5 px-2 text-right"><PctCell v={row['1d']} bold /></td>
+                <td className="py-1.5 px-2 text-right">
+                  {row.wtContribution != null
+                    ? <span className={`tabular-nums text-[11px] ${row.wtContribution >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {row.wtContribution > 0 ? '+' : ''}{row.wtContribution.toFixed(3)}%
+                      </span>
+                    : <span className="text-gray-700">—</span>}
+                </td>
+                {PERIODS.slice(1).map(p => (
+                  <td key={p} className="py-1.5 px-2 text-right"><PctCell v={row[p]} /></td>
+                ))}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>
@@ -128,21 +158,35 @@ function TableView({ data, period, onSymbolClick }) {
 
 function HeatTile({ row, onSymbolClick }) {
   const pct = row['1d']
+  const wt  = effectiveWeight(row)
   const bg  = pctBg(pct)
   const fg  = pctFg(pct)
 
-  // Size: proportional to weight, clamped to a readable range
-  const flexBasis = `${Math.max(60, Math.min(220, row.weight * 18))}px`
+  // Tile width strictly proportional to index weight (clamped for readability)
+  const px = Math.max(58, Math.min(280, wt * 22))
+
+  const tooltip = [
+    `${row.name}`,
+    `Sector: ${row.sector}`,
+    `Weight: ${wt.toFixed(2)}%${row.actualWeight != null ? ' (live)' : ' (est)'}`,
+    `Market Cap: ${fmtCap(row.marketCap)}`,
+    `Price: $${row.price?.toFixed(2) ?? '—'}`,
+    `1D: ${pct != null ? (pct > 0 ? '+' : '') + pct.toFixed(2) + '%' : '—'}`,
+    row.wtContribution != null
+      ? `1D Contrib: ${row.wtContribution > 0 ? '+' : ''}${row.wtContribution.toFixed(3)}%`
+      : '',
+  ].filter(Boolean).join('\n')
 
   return (
     <div
-      title={`${row.name}\n${row.sector}\nWeight: ${row.weight?.toFixed(1)}%\nPrice: $${row.price?.toFixed(2) ?? '—'}\n1D: ${pct != null ? (pct > 0 ? '+' : '') + pct.toFixed(2) + '%' : '—'}`}
+      title={tooltip}
       onClick={() => onSymbolClick(row)}
-      style={{ backgroundColor: bg, color: fg, flexBasis, minWidth: flexBasis }}
-      className="m-0.5 rounded p-1.5 cursor-pointer hover:brightness-125 transition-all flex-shrink-0 flex-grow"
+      style={{ backgroundColor: bg, color: fg, flexBasis: `${px}px`, minWidth: `${px}px` }}
+      className="m-0.5 rounded p-1.5 cursor-pointer hover:brightness-125 hover:z-10 hover:scale-105 transition-all flex-shrink-0 flex-grow"
     >
       <div className="font-bold text-[11px] leading-tight truncate">{row.symbol}</div>
-      <div className="text-[10px] font-medium mt-0.5 tabular-nums">
+      <div className="text-[9px] opacity-80 tabular-nums mt-0.5">{wt.toFixed(2)}%</div>
+      <div className="text-[10px] font-semibold mt-0.5 tabular-nums">
         {pct != null ? `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%` : '—'}
       </div>
     </div>
@@ -152,7 +196,6 @@ function HeatTile({ row, onSymbolClick }) {
 // ── Heatmap view ──────────────────────────────────────────────────────────────
 
 function HeatmapView({ data, onSymbolClick }) {
-  // Group by sector, ordered by SECTOR_ORDER then alphabetically for unlisted
   const bySector = {}
   for (const row of data) {
     const sec = row.sector || 'Other'
@@ -165,51 +208,94 @@ function HeatmapView({ data, onSymbolClick }) {
     ...Object.keys(bySector).filter(s => !SECTOR_ORDER.includes(s)).sort(),
   ]
 
-  // Summary stats
-  const withData = data.filter(r => r['1d'] != null)
-  const advancing = withData.filter(r => r['1d'] > 0).length
-  const declining = withData.filter(r => r['1d'] < 0).length
-  const unchanged = withData.filter(r => r['1d'] === 0).length
-  const avgChg = withData.length
-    ? (withData.reduce((s, r) => s + r['1d'], 0) / withData.length).toFixed(2)
-    : null
+  const withData   = data.filter(r => r['1d'] != null)
+  const advancing  = withData.filter(r => r['1d'] > 0).length
+  const declining  = withData.filter(r => r['1d'] < 0).length
+
+  // Weighted index return = Σ(actualWeight × 1D) / 100
+  const wtReturn = data.reduce((sum, r) => {
+    const w = r.actualWeight ?? r.indexWeight
+    return (w != null && r['1d'] != null) ? sum + (w * r['1d'] / 100) : sum
+  }, 0)
+
+  // Largest positive and negative contributors
+  const byContrib = [...data]
+    .filter(r => r.wtContribution != null)
+    .sort((a, b) => Math.abs(b.wtContribution) - Math.abs(a.wtContribution))
+  const topAdder   = byContrib.find(r => r.wtContribution > 0)
+  const topDragger = byContrib.find(r => r.wtContribution < 0)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Summary bar */}
-      <div className="flex items-center gap-4 flex-wrap text-xs">
-        <span className="text-emerald-400 font-medium">▲ {advancing} advancing</span>
-        <span className="text-red-400 font-medium">▼ {declining} declining</span>
-        {unchanged > 0 && <span className="text-gray-500">{unchanged} unchanged</span>}
-        {avgChg != null && (
-          <span className={`font-medium ${Number(avgChg) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            Avg {Number(avgChg) >= 0 ? '+' : ''}{avgChg}%
-          </span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="bg-gray-800/60 border border-gray-700/40 rounded-lg p-2.5 text-center">
+          <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-0.5">Index 1D Return</div>
+          <div className={`text-lg font-bold tabular-nums ${wtReturn >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {wtReturn >= 0 ? '+' : ''}{wtReturn.toFixed(3)}%
+          </div>
+          <div className="text-gray-600 text-[10px]">market-cap weighted</div>
+        </div>
+        <div className="bg-gray-800/60 border border-gray-700/40 rounded-lg p-2.5 text-center">
+          <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-0.5">Advancing / Declining</div>
+          <div className="text-sm font-bold">
+            <span className="text-emerald-400">{advancing}</span>
+            <span className="text-gray-600"> / </span>
+            <span className="text-red-400">{declining}</span>
+          </div>
+          <div className="text-gray-600 text-[10px]">of {withData.length} with data</div>
+        </div>
+        {topAdder && (
+          <div className="bg-gray-800/60 border border-gray-700/40 rounded-lg p-2.5 text-center">
+            <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-0.5">Top Contributor</div>
+            <div className="text-emerald-400 font-bold text-sm">{topAdder.symbol}</div>
+            <div className="text-emerald-600 text-[10px] tabular-nums">+{topAdder.wtContribution.toFixed(3)}%</div>
+          </div>
         )}
-        <span className="text-gray-600 ml-auto text-[10px]">Tile size = index weight · Color = 1D change</span>
+        {topDragger && (
+          <div className="bg-gray-800/60 border border-gray-700/40 rounded-lg p-2.5 text-center">
+            <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-0.5">Top Drag</div>
+            <div className="text-red-400 font-bold text-sm">{topDragger.symbol}</div>
+            <div className="text-red-600 text-[10px] tabular-nums">{topDragger.wtContribution.toFixed(3)}%</div>
+          </div>
+        )}
       </div>
 
-      {/* Color scale legend */}
+      {/* Color legend */}
       <div className="flex items-center gap-1 flex-wrap">
+        <span className="text-gray-600 text-[10px] mr-1">1D return:</span>
         {[
           ['≤−5%', '#7f1d1d'], ['−3%', '#991b1b'], ['−2%', '#b91c1c'],
-          ['−1%', '#dc2626'], ['−0.5%', '#ef4444'], ['~0%', '#374151'],
-          ['+0.5%', '#34d399'], ['+1%', '#10b981'], ['+2%', '#059669'],
-          ['+3%', '#047857'], ['≥+5%', '#065f46'],
+          ['−1%', '#dc2626'],  ['~0%', '#374151'],  ['+1%', '#10b981'],
+          ['+2%', '#059669'],  ['+3%', '#047857'],  ['≥+5%', '#065f46'],
         ].map(([lbl, bg]) => (
-          <div key={lbl} className="flex items-center gap-1">
-            <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: bg }} />
+          <div key={lbl} className="flex items-center gap-0.5">
+            <div className="w-4 h-3 rounded-sm" style={{ backgroundColor: bg }} />
             <span className="text-[10px] text-gray-600">{lbl}</span>
           </div>
         ))}
+        <span className="text-gray-700 text-[10px] ml-3">Tile size = % weight in index · Hover for detail</span>
       </div>
 
       {/* Sectors */}
       {sectors.map(sec => {
-        const rows = bySector[sec].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
+        const rows = bySector[sec].sort((a, b) => effectiveWeight(b) - effectiveWeight(a))
+        const secWt = rows.reduce((s, r) => s + effectiveWeight(r), 0)
+        const secRet = rows.reduce((s, r) => {
+          const w = r.actualWeight ?? r.indexWeight
+          return (w != null && r['1d'] != null) ? s + (w * r['1d'] / 100) : s
+        }, 0)
         return (
           <div key={sec}>
-            <div className="text-[10px] uppercase tracking-widest text-gray-600 mb-1 px-0.5">{sec}</div>
+            <div className="flex items-center gap-2 mb-0.5 px-0.5">
+              <span className="text-[10px] uppercase tracking-widest text-gray-600">{sec}</span>
+              <span className="text-[10px] text-gray-700">{secWt.toFixed(1)}%</span>
+              {secRet !== 0 && (
+                <span className={`text-[10px] tabular-nums ${secRet >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {secRet >= 0 ? '+' : ''}{secRet.toFixed(3)}%
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap">
               {rows.map(row => (
                 <HeatTile key={row.symbol} row={row} onSymbolClick={onSymbolClick} />
@@ -226,7 +312,7 @@ function HeatmapView({ data, onSymbolClick }) {
 
 export default function IndexHeatmap() {
   const [index,      setIndex]      = useState('DOW30')
-  const [view,       setView]       = useState('heatmap')   // 'heatmap' | 'table'
+  const [view,       setView]       = useState('heatmap')
   const [period,     setPeriod]     = useState('1d')
   const [data,       setData]       = useState([])
   const [loading,    setLoading]    = useState(false)
@@ -234,11 +320,11 @@ export default function IndexHeatmap() {
   const [lastFetch,  setLastFetch]  = useState(null)
   const [chartStock, setChartStock] = useState(null)
 
-  const fetch = useCallback(async () => {
+  const doFetch = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await window.fetch(`/api/index-constituents?index=${index}`)
+      const res  = await window.fetch(`/api/index-constituents?index=${index}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
       setData(json)
@@ -250,9 +336,10 @@ export default function IndexHeatmap() {
     }
   }, [index])
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => { doFetch() }, [doFetch])
 
-  const selected = INDICES.find(i => i.id === index)
+  const selected    = INDICES.find(i => i.id === index)
+  const liveWeights = data.some(r => r.actualWeight != null)
 
   return (
     <div className="p-4 space-y-4">
@@ -260,10 +347,9 @@ export default function IndexHeatmap() {
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <h2 className="text-sm font-semibold text-gray-200">Index Heatmap</h2>
-          <p className="text-xs text-gray-600 mt-0.5">Constituent performance by period</p>
+          <p className="text-xs text-gray-600 mt-0.5">Constituent weight &amp; performance</p>
         </div>
 
-        {/* Index selector */}
         <select
           value={index}
           onChange={e => setIndex(e.target.value)}
@@ -274,16 +360,13 @@ export default function IndexHeatmap() {
           ))}
         </select>
 
-        {/* View toggle */}
         <div className="flex rounded border border-gray-700 overflow-hidden">
           {['heatmap', 'table'].map(v => (
             <button
               key={v}
               onClick={() => setView(v)}
               className={`px-3 py-1.5 text-xs capitalize transition-colors ${
-                view === v
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                view === v ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
               }`}
             >
               {v === 'heatmap' ? '⬛ Heatmap' : '≡ Table'}
@@ -291,7 +374,6 @@ export default function IndexHeatmap() {
           ))}
         </div>
 
-        {/* Period selector — only in table view */}
         {view === 'table' && (
           <div className="flex rounded border border-gray-700 overflow-hidden">
             {PERIODS.map(p => (
@@ -299,9 +381,7 @@ export default function IndexHeatmap() {
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={`px-2.5 py-1.5 text-xs transition-colors ${
-                  period === p
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                  period === p ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
                 }`}
               >
                 {PERIOD_LABELS[p]}
@@ -310,9 +390,8 @@ export default function IndexHeatmap() {
           </div>
         )}
 
-        {/* Refresh */}
         <button
-          onClick={fetch}
+          onClick={doFetch}
           disabled={loading}
           className="px-3 py-1.5 text-xs bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 rounded transition-colors disabled:opacity-40"
         >
@@ -320,37 +399,35 @@ export default function IndexHeatmap() {
         </button>
       </div>
 
-      {/* Meta info */}
-      <div className="flex items-center gap-4 text-xs text-gray-600">
+      {/* Meta */}
+      <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
         <span>{selected?.label} · {data.length} constituents</span>
         {lastFetch && <span>Updated {lastFetch.toLocaleTimeString()}</span>}
-        <span className="text-gray-700">Weights are approximate index weights (%).</span>
+        <span className={liveWeights ? 'text-emerald-700' : 'text-gray-700'}>
+          {liveWeights ? '● Live market-cap weights' : '○ Estimated weights (loading…)'}
+        </span>
       </div>
 
-      {/* Error state */}
       {error && (
         <div className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded p-3">
-          Failed to load data: {error}
+          Failed to load: {error}
         </div>
       )}
 
-      {/* Loading skeleton */}
       {loading && data.length === 0 && (
         <div className="flex flex-wrap gap-1">
           {Array.from({ length: 30 }).map((_, i) => (
-            <div key={i} className="rounded bg-gray-800 animate-pulse" style={{ width: 80, height: 48 }} />
+            <div key={i} className="rounded bg-gray-800 animate-pulse" style={{ width: 80, height: 56 }} />
           ))}
         </div>
       )}
 
-      {/* Content */}
-      {data.length > 0 && !loading && (
+      {data.length > 0 && (
         view === 'heatmap'
           ? <HeatmapView data={data} onSymbolClick={setChartStock} />
           : <TableView   data={data} period={period} onSymbolClick={setChartStock} />
       )}
 
-      {/* Chart modal */}
       {chartStock && (
         <ChartModal
           symbol={chartStock.symbol}

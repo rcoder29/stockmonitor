@@ -652,6 +652,14 @@ _INDEX_LABELS = {
 }
 
 
+def _fetch_market_cap(sym: str) -> tuple[str, float | None]:
+    try:
+        fi = yf.Ticker(sym, session=_session).fast_info
+        return sym, _safe_float(fi.market_cap)
+    except Exception:
+        return sym, None
+
+
 @app.get("/api/index-constituents")
 def get_index_constituents(index: str = "DOW30"):
     index = index.upper()
@@ -668,28 +676,49 @@ def get_index_constituents(index: str = "DOW30"):
     meta_map = {c["symbol"]: c for c in meta}
 
     perfs: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=15) as pool:
-        for fut in as_completed({pool.submit(_fetch_perf_one, s): s for s in symbols}):
-            d = fut.result()
-            perfs[d["symbol"]] = d
+    market_caps: dict[str, float | None] = {}
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        perf_futs  = {pool.submit(_fetch_perf_one,    s): ("perf", s) for s in symbols}
+        cap_futs   = {pool.submit(_fetch_market_cap,  s): ("cap",  s) for s in symbols}
+        all_futs   = {**perf_futs, **cap_futs}
+        for fut in as_completed(all_futs):
+            kind, _ = all_futs[fut]
+            if kind == "perf":
+                d = fut.result()
+                perfs[d["symbol"]] = d
+            else:
+                sym, cap = fut.result()
+                market_caps[sym] = cap
+
+    # Compute actual market-cap weights as % of the index universe
+    total_cap = sum(v for v in market_caps.values() if v)
 
     result = []
     for sym in symbols:
-        d = perfs.get(sym, {"symbol": sym})
-        m = meta_map[sym]
+        d   = perfs.get(sym, {"symbol": sym})
+        m   = meta_map[sym]
+        cap = market_caps.get(sym)
+        actual_weight = round(cap / total_cap * 100, 2) if cap and total_cap else None
+        ret_1d        = d.get("1d")
+        # Weighted contribution to the index's 1D return (weight × return / 100)
+        wt_contribution = round(actual_weight * ret_1d / 100, 4) if actual_weight and ret_1d is not None else None
         result.append({
-            "symbol": sym,
-            "name":   m["name"],
-            "sector": m["sector"],
-            "weight": m["weight"],
-            "price":  d.get("price"),
-            "1d":     d.get("1d"),
-            "5d":     d.get("5d"),
-            "1m":     d.get("1m"),
-            "3m":     d.get("3m"),
-            "6m":     d.get("6m"),
-            "1y":     d.get("1y"),
-            "ytd":    d.get("ytd"),
+            "symbol":        sym,
+            "name":          m["name"],
+            "sector":        m["sector"],
+            "indexWeight":   m["weight"],        # hardcoded approx (fallback)
+            "actualWeight":  actual_weight,      # live market-cap weight
+            "marketCap":     cap,
+            "wtContribution": wt_contribution,   # weight × 1D return (basis pts style)
+            "price":         d.get("price"),
+            "1d":            ret_1d,
+            "5d":            d.get("5d"),
+            "1m":            d.get("1m"),
+            "3m":            d.get("3m"),
+            "6m":            d.get("6m"),
+            "1y":            d.get("1y"),
+            "ytd":           d.get("ytd"),
         })
 
     cache_set(cache_key, result)
