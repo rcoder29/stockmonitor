@@ -98,13 +98,27 @@ const NAV_GROUPS = [
     icon: Icons.market,
     items: [
       { id: 'market',          label: 'Overview' },
-      { id: 'recommendations', label: 'Analyst Picks' },
-      { id: 'breadth',         label: 'Breadth' },
       { id: 'indexheatmap',    label: 'Index Heatmap' },
+      { id: 'breadth',         label: 'Breadth' },
       { id: 'sectors',         label: 'Sector Rotation' },
       { id: 'sectormomentum',  label: 'Sector Momentum' },
-      { id: 'macro',           label: 'Macro Calendar' },
       { id: 'rates',           label: 'Yield Curve' },
+      { id: 'macro',           label: 'Macro Calendar' },
+      { id: 'recommendations', label: 'Analyst Picks' },
+    ],
+  },
+  {
+    id: 'research',
+    label: 'Research',
+    icon: Icons.research,
+    items: [
+      { id: 'screener',     label: 'Screener' },
+      { id: 'fundamentals', label: 'Fundamentals' },
+      { id: 'dcf',          label: 'DCF Valuation' },
+      { id: 'compare',      label: 'Chart Compare' },
+      { id: 'backtest',     label: 'Backtester' },
+      { id: 'signals',      label: 'Signals' },
+      { id: 'uoa',          label: 'Unusual Options' },
     ],
   },
   {
@@ -120,6 +134,16 @@ const NAV_GROUPS = [
     ],
   },
   {
+    id: 'trading',
+    label: 'Trading',
+    icon: Icons.trading,
+    items: [
+      { id: 'tradeideas',   label: 'Trade Ideas' },
+      { id: 'positionsize', label: 'Position Sizer' },
+      { id: 'daytrader',    label: 'Day Trader' },
+    ],
+  },
+  {
     id: 'portfolio',
     label: 'Portfolio',
     icon: Icons.portfolio,
@@ -130,36 +154,12 @@ const NAV_GROUPS = [
     ],
   },
   {
-    id: 'research',
-    label: 'Research',
-    icon: Icons.research,
-    items: [
-      { id: 'screener',     label: 'Screener' },
-      { id: 'signals',      label: 'Signals' },
-      { id: 'compare',      label: 'Chart Compare' },
-      { id: 'fundamentals', label: 'Fundamentals' },
-      { id: 'backtest',     label: 'Backtester' },
-      { id: 'dcf',          label: 'DCF Valuation' },
-      { id: 'uoa',          label: 'Unusual Options' },
-    ],
-  },
-  {
-    id: 'trading',
-    label: 'Trading',
-    icon: Icons.trading,
-    items: [
-      { id: 'daytrader',    label: 'Day Trader' },
-      { id: 'tradeideas',   label: 'Trade Ideas' },
-      { id: 'positionsize', label: 'Position Sizer' },
-    ],
-  },
-  {
     id: 'ai',
     label: 'AI Tools',
     icon: Icons.ai,
     items: [
-      { id: 'aibot',   label: 'AI Chat' },
       { id: 'advisor', label: 'Financial Advisor' },
+      { id: 'aibot',   label: 'AI Chat' },
     ],
   },
   {
@@ -172,12 +172,12 @@ const NAV_GROUPS = [
       </svg>
     ),
     items: [
-      { id: 'fire',          label: 'FIRE Calculator' },
-      { id: 'montecarlo',    label: 'Monte Carlo' },
-      { id: 'coastfire',     label: 'Coast FIRE & Roth' },
-      { id: 'socialsecurity',        label: 'Social Security' },
+      { id: 'fire',                   label: 'FIRE Calculator' },
+      { id: 'coastfire',              label: 'Coast FIRE & Roth' },
+      { id: 'montecarlo',             label: 'Monte Carlo' },
+      { id: 'socialsecurity',         label: 'Social Security' },
       { id: 'earlyretirementhealth',  label: 'Early Retirement Health' },
-      { id: 'rothconversionplanner', label: 'Roth Conversion Planner' },
+      { id: 'rothconversionplanner',  label: 'Roth Conversion Planner' },
     ],
   },
 ]
@@ -254,7 +254,10 @@ function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
 function Sidebar({ activeTab, onSelect, className }) {
   const [expanded, setExpanded] = useState(() => {
     const init = {}
-    NAV_GROUPS.forEach(g => { init[g.id] = true })
+    NAV_GROUPS.forEach(g => { init[g.id] = false })
+    // Open only the group that contains the current active tab
+    const activeGroup = NAV_GROUPS.find(g => g.items.some(i => i.id === activeTab))
+    if (activeGroup) init[activeGroup.id] = true
     return init
   })
 
