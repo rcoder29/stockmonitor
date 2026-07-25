@@ -725,6 +725,130 @@ def get_index_constituents(index: str = "DOW30"):
     return result
 
 
+@app.get("/api/search-etf")
+def search_etf(q: str):
+    """Search Yahoo Finance for ETFs/indices matching a query string."""
+    q = q.strip()
+    if len(q) < 1:
+        return []
+    try:
+        url = "https://query1.finance.yahoo.com/v1/finance/search"
+        params = {
+            "q": q,
+            "quotesCount": 20,
+            "enableFuzzyQuery": True,
+            "quotesQueryId": "tss_match_phrase_query",
+        }
+        resp = _session.get(url, params=params, timeout=6)
+        data = resp.json()
+        quotes = data.get("quotes", [])
+        results = []
+        for item in quotes:
+            qt = item.get("quoteType", "")
+            if qt not in ("ETF", "INDEX", "MUTUALFUND"):
+                continue
+            results.append({
+                "symbol":   item.get("symbol", ""),
+                "name":     item.get("longname") or item.get("shortname") or "",
+                "type":     qt,
+                "exchange": item.get("exchange", ""),
+            })
+        return results[:12]
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/etf-holdings")
+def get_etf_holdings(etf: str):
+    """Fetch constituent holdings for any ETF/fund via yfinance funds_data."""
+    etf = etf.upper().strip()
+    cache_key = f"etf:holdings:{etf}"
+    cached = cache_get(cache_key, _INDEX_TTL)
+    if cached is not None:
+        return cached
+
+    try:
+        ticker = yf.Ticker(etf, session=_session)
+        fd = ticker.funds_data
+        holdings_df = fd.top_holdings
+    except Exception as e:
+        raise HTTPException(400, f"Could not fetch holdings for '{etf}': {e}")
+
+    if holdings_df is None or holdings_df.empty:
+        raise HTTPException(404, f"No holdings data found for '{etf}'")
+
+    # top_holdings index = symbol; columns include holdingName, holdingPercent
+    symbols = [s for s in holdings_df.index.tolist() if isinstance(s, str) and s]
+    name_map   = {}
+    weight_map = {}
+    for sym in symbols:
+        row = holdings_df.loc[sym]
+        name_map[sym]   = row.get("holdingName", sym) if hasattr(row, "get") else sym
+        pct = row.get("holdingPercent") if hasattr(row, "get") else None
+        weight_map[sym] = float(pct) * 100 if pct is not None else None
+
+    if not symbols:
+        raise HTTPException(404, f"No holdings data found for '{etf}'")
+
+    perfs: dict[str, dict] = {}
+    market_caps: dict[str, float | None] = {}
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        perf_futs = {pool.submit(_fetch_perf_one,   s): ("perf", s) for s in symbols}
+        cap_futs  = {pool.submit(_fetch_market_cap, s): ("cap",  s) for s in symbols}
+        all_futs  = {**perf_futs, **cap_futs}
+        for fut in as_completed(all_futs):
+            kind, _ = all_futs[fut]
+            if kind == "perf":
+                d = fut.result()
+                perfs[d["symbol"]] = d
+            else:
+                sym, cap = fut.result()
+                market_caps[sym] = cap
+
+    total_cap = sum(v for v in market_caps.values() if v)
+    # Prefer reported fund weight; fall back to market-cap weight
+    total_reported = sum(v for v in weight_map.values() if v is not None)
+
+    result = []
+    for sym in symbols:
+        d   = perfs.get(sym, {"symbol": sym})
+        cap = market_caps.get(sym)
+
+        # Actual weight: use fund-reported percent if available, else derive from mkt cap
+        reported_wt = weight_map.get(sym)
+        if reported_wt is not None:
+            actual_weight = round(reported_wt, 2)
+        elif cap and total_cap:
+            actual_weight = round(cap / total_cap * 100, 2)
+        else:
+            actual_weight = None
+
+        ret_1d = d.get("1d")
+        wt_contribution = round(actual_weight * ret_1d / 100, 4) if actual_weight and ret_1d is not None else None
+
+        result.append({
+            "symbol":         sym,
+            "name":           name_map.get(sym, sym),
+            "sector":         d.get("sector", ""),
+            "indexWeight":    actual_weight,   # reported fund weight %
+            "actualWeight":   actual_weight,
+            "marketCap":      cap,
+            "wtContribution": wt_contribution,
+            "price":          d.get("price"),
+            "1d":             ret_1d,
+            "5d":             d.get("5d"),
+            "1m":             d.get("1m"),
+            "3m":             d.get("3m"),
+            "6m":             d.get("6m"),
+            "1y":             d.get("1y"),
+            "ytd":            d.get("ytd"),
+        })
+
+    cache_set(cache_key, result)
+    return result
+
+
 # ── Market summary ────────────────────────────────────────────────────────────
 
 _NEWS_FEEDS   = ["^GSPC", "^FTSE", "^N225", "^GDAXI", "GC=F", "CL=F"]

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import ChartModal from './ChartModal'
 
 const INDICES = [
@@ -10,12 +10,6 @@ const INDICES = [
 
 const PERIODS = ['1d', '5d', '1m', '3m', '6m', '1y', 'ytd']
 const PERIOD_LABELS = { '1d': '1D', '5d': '5D', '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1Y', 'ytd': 'YTD' }
-
-const SECTOR_ORDER = [
-  'Technology', 'Communication Services', 'Consumer Discretionary',
-  'Consumer Staples', 'Financials', 'Health Care', 'Industrials',
-  'Energy', 'Materials', 'Real Estate', 'Utilities',
-]
 
 // effective weight: prefer live market-cap weight, fall back to hardcoded
 function effectiveWeight(row) {
@@ -196,18 +190,6 @@ function HeatTile({ row, onSymbolClick }) {
 // ── Heatmap view ──────────────────────────────────────────────────────────────
 
 function HeatmapView({ data, onSymbolClick }) {
-  const bySector = {}
-  for (const row of data) {
-    const sec = row.sector || 'Other'
-    if (!bySector[sec]) bySector[sec] = []
-    bySector[sec].push(row)
-  }
-
-  const sectors = [
-    ...SECTOR_ORDER.filter(s => bySector[s]),
-    ...Object.keys(bySector).filter(s => !SECTOR_ORDER.includes(s)).sort(),
-  ]
-
   const withData   = data.filter(r => r['1d'] != null)
   const advancing  = withData.filter(r => r['1d'] > 0).length
   const declining  = withData.filter(r => r['1d'] < 0).length
@@ -277,33 +259,114 @@ function HeatmapView({ data, onSymbolClick }) {
         <span className="text-gray-700 text-[10px] ml-3">Tile size = % weight in index · Hover for detail</span>
       </div>
 
-      {/* Sectors */}
-      {sectors.map(sec => {
-        const rows = bySector[sec].sort((a, b) => effectiveWeight(b) - effectiveWeight(a))
-        const secWt = rows.reduce((s, r) => s + effectiveWeight(r), 0)
-        const secRet = rows.reduce((s, r) => {
-          const w = r.actualWeight ?? r.indexWeight
-          return (w != null && r['1d'] != null) ? s + (w * r['1d'] / 100) : s
-        }, 0)
-        return (
-          <div key={sec}>
-            <div className="flex items-center gap-2 mb-0.5 px-0.5">
-              <span className="text-[10px] uppercase tracking-widest text-gray-600">{sec}</span>
-              <span className="text-[10px] text-gray-700">{secWt.toFixed(1)}%</span>
-              {secRet !== 0 && (
-                <span className={`text-[10px] tabular-nums ${secRet >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                  {secRet >= 0 ? '+' : ''}{secRet.toFixed(3)}%
-                </span>
-              )}
+      {/* All tiles, largest weight first */}
+      <div className="flex flex-wrap">
+        {[...data]
+          .sort((a, b) => effectiveWeight(b) - effectiveWeight(a))
+          .map(row => (
+            <HeatTile key={row.symbol} row={row} onSymbolClick={onSymbolClick} />
+          ))}
+      </div>
+    </div>
+  )
+}
+
+// ── ETF search autocomplete ───────────────────────────────────────────────────
+
+function EtfSearch({ onSelect }) {
+  const [query,       setQuery]       = useState('')
+  const [results,     setResults]     = useState([])
+  const [searching,   setSearching]   = useState(false)
+  const [open,        setOpen]        = useState(false)
+  const [highlighted, setHighlighted] = useState(0)
+  const inputRef  = useRef(null)
+  const timerRef  = useRef(null)
+  const wrapperRef = useRef(null)
+
+  // Debounced search
+  useEffect(() => {
+    clearTimeout(timerRef.current)
+    if (query.length < 1) { setResults([]); setOpen(false); return }
+    timerRef.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res  = await window.fetch(`/api/search-etf?q=${encodeURIComponent(query)}`)
+        const json = await res.json()
+        setResults(json)
+        setOpen(json.length > 0)
+        setHighlighted(0)
+      } catch { setResults([]) }
+      finally { setSearching(false) }
+    }, 300)
+    return () => clearTimeout(timerRef.current)
+  }, [query])
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  function select(item) {
+    onSelect(item)
+    setQuery('')
+    setResults([])
+    setOpen(false)
+  }
+
+  function onKeyDown(e) {
+    if (!open) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted(h => Math.min(h + 1, results.length - 1)) }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)) }
+    if (e.key === 'Enter')     { e.preventDefault(); if (results[highlighted]) select(results[highlighted]) }
+    if (e.key === 'Escape')    { setOpen(false) }
+  }
+
+  const TYPE_BADGE = { ETF: 'bg-blue-900/60 text-blue-300', INDEX: 'bg-purple-900/60 text-purple-300', MUTUALFUND: 'bg-amber-900/40 text-amber-300' }
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <div className="flex items-center bg-gray-800 border border-gray-700 rounded overflow-hidden focus-within:border-emerald-500 transition-colors">
+        <span className="pl-2.5 text-gray-600 text-xs">⌕</span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={onKeyDown}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          placeholder="Search ETF / Index…"
+          className="bg-transparent text-gray-200 text-xs px-2 py-1.5 w-44 outline-none placeholder-gray-600"
+        />
+        {searching && <span className="pr-2 text-gray-600 text-[10px] animate-pulse">…</span>}
+        {query && !searching && (
+          <button onClick={() => { setQuery(''); setResults([]); setOpen(false) }} className="pr-2 text-gray-600 hover:text-gray-300 text-xs">✕</button>
+        )}
+      </div>
+
+      {open && (
+        <div className="absolute z-50 top-full left-0 mt-1 w-80 bg-gray-900 border border-gray-700 rounded shadow-xl overflow-hidden">
+          {results.map((item, i) => (
+            <div
+              key={item.symbol}
+              onMouseEnter={() => setHighlighted(i)}
+              onMouseDown={() => select(item)}
+              className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-xs transition-colors ${
+                i === highlighted ? 'bg-gray-700' : 'hover:bg-gray-800'
+              }`}
+            >
+              <span className="font-bold text-emerald-400 w-14 shrink-0">{item.symbol}</span>
+              <span className="text-gray-300 truncate flex-1">{item.name}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${TYPE_BADGE[item.type] ?? 'bg-gray-800 text-gray-400'}`}>
+                {item.type}
+              </span>
             </div>
-            <div className="flex flex-wrap">
-              {rows.map(row => (
-                <HeatTile key={row.symbol} row={row} onSymbolClick={onSymbolClick} />
-              ))}
-            </div>
-          </div>
-        )
-      })}
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -311,7 +374,8 @@ function HeatmapView({ data, onSymbolClick }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function IndexHeatmap() {
-  const [index,      setIndex]      = useState('DOW30')
+  // selection: { mode: 'predefined'|'dynamic', id, label, symbol }
+  const [selection,  setSelection]  = useState({ mode: 'predefined', id: 'DOW30', label: 'Dow Jones 30', symbol: 'DOW30' })
   const [view,       setView]       = useState('heatmap')
   const [period,     setPeriod]     = useState('1d')
   const [data,       setData]       = useState([])
@@ -324,8 +388,17 @@ export default function IndexHeatmap() {
     setLoading(true)
     setError(null)
     try {
-      const res  = await window.fetch(`/api/index-constituents?index=${index}`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      let url
+      if (selection.mode === 'predefined') {
+        url = `/api/index-constituents?index=${selection.id}`
+      } else {
+        url = `/api/etf-holdings?etf=${selection.symbol}`
+      }
+      const res  = await window.fetch(url)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.detail ?? `HTTP ${res.status}`)
+      }
       const json = await res.json()
       setData(json)
       setLastFetch(new Date())
@@ -334,11 +407,21 @@ export default function IndexHeatmap() {
     } finally {
       setLoading(false)
     }
-  }, [index])
+  }, [selection])
 
   useEffect(() => { doFetch() }, [doFetch])
 
-  const selected    = INDICES.find(i => i.id === index)
+  function selectPredefined(id) {
+    const found = INDICES.find(i => i.id === id)
+    setSelection({ mode: 'predefined', id, label: found?.label ?? id, symbol: id })
+    setData([])
+  }
+
+  function selectDynamic(item) {
+    setSelection({ mode: 'dynamic', id: item.symbol, label: item.name || item.symbol, symbol: item.symbol })
+    setData([])
+  }
+
   const liveWeights = data.some(r => r.actualWeight != null)
 
   return (
@@ -346,26 +429,37 @@ export default function IndexHeatmap() {
       {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-gray-200">Index Heatmap</h2>
+          <h2 className="text-sm font-semibold text-gray-200">Index / ETF Heatmap</h2>
           <p className="text-xs text-gray-600 mt-0.5">Constituent weight &amp; performance</p>
         </div>
 
-        <select
-          value={index}
-          onChange={e => setIndex(e.target.value)}
-          className="ml-auto bg-gray-800 border border-gray-700 text-gray-200 text-xs rounded px-3 py-1.5 focus:outline-none focus:border-emerald-500 cursor-pointer"
-        >
+        {/* Predefined quick-select */}
+        <div className="ml-auto flex rounded border border-gray-700 overflow-hidden">
           {INDICES.map(i => (
-            <option key={i.id} value={i.id}>{i.label} ({i.etf})</option>
+            <button
+              key={i.id}
+              onClick={() => selectPredefined(i.id)}
+              className={`px-3 py-1.5 text-xs transition-colors whitespace-nowrap ${
+                selection.id === i.id && selection.mode === 'predefined'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              {i.etf}
+            </button>
           ))}
-        </select>
+        </div>
 
+        {/* Dynamic search */}
+        <EtfSearch onSelect={selectDynamic} />
+
+        {/* View toggle */}
         <div className="flex rounded border border-gray-700 overflow-hidden">
           {['heatmap', 'table'].map(v => (
             <button
               key={v}
               onClick={() => setView(v)}
-              className={`px-3 py-1.5 text-xs capitalize transition-colors ${
+              className={`px-3 py-1.5 text-xs transition-colors ${
                 view === v ? 'bg-emerald-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
               }`}
             >
@@ -399,18 +493,36 @@ export default function IndexHeatmap() {
         </button>
       </div>
 
-      {/* Meta */}
+      {/* Active selection badge + meta */}
       <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
-        <span>{selected?.label} · {data.length} constituents</span>
-        {lastFetch && <span>Updated {lastFetch.toLocaleTimeString()}</span>}
+        <div className="flex items-center gap-1.5">
+          {selection.mode === 'dynamic' && (
+            <span className="bg-blue-900/50 text-blue-300 text-[10px] px-1.5 py-0.5 rounded">ETF</span>
+          )}
+          <span className="text-gray-400 font-medium">{selection.label}</span>
+          {selection.mode === 'dynamic' && (
+            <span className="text-gray-700">({selection.symbol})</span>
+          )}
+        </div>
+        <span>·</span>
+        <span>{data.length} constituents</span>
+        {lastFetch && <span>· Updated {lastFetch.toLocaleTimeString()}</span>}
         <span className={liveWeights ? 'text-emerald-700' : 'text-gray-700'}>
-          {liveWeights ? '● Live market-cap weights' : '○ Estimated weights (loading…)'}
+          {liveWeights ? '● Live weights' : ''}
         </span>
+        {selection.mode === 'dynamic' && (
+          <button
+            onClick={() => selectPredefined('DOW30')}
+            className="text-gray-700 hover:text-gray-400 text-[10px] underline"
+          >
+            ← back to presets
+          </button>
+        )}
       </div>
 
       {error && (
         <div className="text-red-400 text-sm bg-red-900/20 border border-red-800/40 rounded p-3">
-          Failed to load: {error}
+          {error}
         </div>
       )}
 
