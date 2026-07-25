@@ -20,6 +20,12 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 load_dotenv()
 
+try:
+    from google import genai as _genai_module
+    _genai_available = True
+except ImportError:
+    _genai_available = False
+
 from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
     WatchlistSymbol, WatchlistGroup, PortfolioPosition, PortfolioSnapshot,
@@ -1681,7 +1687,36 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/ai-chat")
 def ai_chat(body: ChatRequest):
-    def generate():
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    use_gemini = bool(gemini_key) and _genai_available
+
+    def generate_gemini():
+        try:
+            gc = _genai_module.Client(api_key=gemini_key)
+            # Build contents list: map "assistant" → "model" role
+            contents = []
+            for m in body.messages:
+                role = "model" if m.role == "assistant" else "user"
+                contents.append({"role": role, "parts": [{"text": m.content}]})
+            from google.genai import types as _genai_types
+            cfg = _genai_types.GenerateContentConfig(
+                system_instruction=_FINANCE_SYSTEM,
+                max_output_tokens=2048,
+            )
+            response = gc.models.generate_content_stream(
+                model="gemini-2.0-flash",
+                contents=contents,
+                config=cfg,
+            )
+            for chunk in response:
+                if chunk.text:
+                    yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as exc:
+            logger.error("AI chat (Gemini) error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+
+    def generate_anthropic():
         try:
             client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
             with client.messages.stream(
@@ -1695,11 +1730,11 @@ def ai_chat(body: ChatRequest):
                     yield f"data: {json.dumps({'text': text})}\n\n"
             yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as exc:
-            logger.error("AI chat error: %s", exc)
+            logger.error("AI chat (Anthropic) error: %s", exc)
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"
 
     return StreamingResponse(
-        generate(),
+        generate_gemini() if use_gemini else generate_anthropic(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
