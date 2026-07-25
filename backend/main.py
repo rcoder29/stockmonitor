@@ -5762,6 +5762,316 @@ Now provide a comprehensive, specific, dollar-quantified tax savings plan. Follo
     )
 
 
+# ── Short Squeeze Scanner ─────────────────────────────────────────────────────
+
+_SQUEEZE_TTL = timedelta(minutes=30)
+
+_SQUEEZE_UNIVERSE = [
+    # Meme / high retail interest
+    "GME","AMC","BBBY","MVIS","CLOV","WKHS","GOEV","NKLA","SPCE","SDC",
+    # EV / clean energy
+    "RIVN","LCID","NKLA","GOEV","FFIE","PSNY","ARVL","SOLO","CIIC","EVGO",
+    "PLUG","FCEL","BE","BLDP","RUN","NOVA","ENPH","ARRY","SPWR","STEM",
+    # Biotech volatility
+    "NVAX","SAVA","VKTX","ACAD","SAGE","SRPT","MDGL","RVNC","ARWR","KRYS",
+    # High-growth tech
+    "COIN","HOOD","SOFI","AFRM","UPST","LC","OPEN","RDFN","CPNG","DDOG",
+    "SNAP","PINS","RDDT","LYFT","DASH","ABNB","RBLX","MTTR","AI","PATH",
+    # Retail / consumer
+    "CVNA","M","KSS","JWN","GPS","EXPR","ANF","BBWI","PRTY","CATO",
+    # Crypto / blockchain
+    "MARA","RIOT","HUT","CLSK","BTBT","CIFR","IREN","WULF","SMLR","MSTR",
+    # Cannabis
+    "SNDL","ACB","TLRY","CGC","CRON","HEXO","OGI","GRWG","IIPR","APHA",
+    # China ADR
+    "BABA","NIO","XPEV","LI","FUTU","TIGR","GRAB","SE","BILI","PDD",
+    # Speculative / special situation
+    "BYND","PTON","HTZ","PARA","WBD","DISH","AMC","VTRS","MP","UWMC",
+    "DKNG","PENN","RDFN","WYNN","MGM","CZR","NCLH","CCL","RCL","UAL",
+]
+_SQUEEZE_UNIVERSE = list(dict.fromkeys(_SQUEEZE_UNIVERSE))  # dedupe, preserve order
+
+
+def _fetch_squeeze_data(sym: str) -> dict | None:
+    try:
+        info = yf.Ticker(sym, session=_session).info
+        short_pct = _safe_float(info.get("shortPercentOfFloat"))
+        short_ratio = _safe_float(info.get("shortRatio"))       # days to cover
+        shares_short = _safe_float(info.get("sharesShort"))
+        shares_short_prior = _safe_float(info.get("sharesShortPriorMonth"))
+        price = _safe_float(info.get("regularMarketPrice"))
+        chg_pct = _safe_float(info.get("regularMarketChangePercent"))
+        w52_chg = _safe_float(info.get("52WeekChange"))
+        name = info.get("shortName") or info.get("longName") or sym
+        mkt_cap = _safe_float(info.get("marketCap"))
+
+        if not short_pct or short_pct < 0.05:   # skip < 5% short interest
+            return None
+
+        # Short interest change (MoM)
+        si_change = None
+        if shares_short and shares_short_prior and shares_short_prior > 0:
+            si_change = (shares_short - shares_short_prior) / shares_short_prior * 100
+
+        # Squeeze score (0–100)
+        score_si   = min(short_pct / 0.40, 1.0) * 40   # 40 pts: short % of float (capped at 40%)
+        score_dtc  = min((short_ratio or 0) / 10.0, 1.0) * 30  # 30 pts: days to cover (capped at 10)
+        score_mom  = max(0, min((chg_pct or 0) / 20.0, 1.0)) * 20  # 20 pts: positive momentum
+        score_acc  = max(0, min((si_change or 0) / 50.0, 1.0)) * 10  # 10 pts: SI increasing
+        score = round(score_si + score_dtc + score_mom + score_acc, 1)
+
+        if score < 10:
+            return None
+
+        if score >= 70:
+            level = "EXTREME"
+        elif score >= 50:
+            level = "HIGH"
+        elif score >= 30:
+            level = "MEDIUM"
+        else:
+            level = "LOW"
+
+        return {
+            "symbol":          sym,
+            "name":            name,
+            "price":           price,
+            "changePercent":   chg_pct,
+            "shortPctFloat":   round(short_pct * 100, 1) if short_pct else None,
+            "daysToCover":     round(short_ratio, 1) if short_ratio else None,
+            "siChangePct":     round(si_change, 1) if si_change is not None else None,
+            "w52Change":       round((w52_chg or 0) * 100, 1),
+            "marketCap":       mkt_cap,
+            "squeezeScore":    score,
+            "squeezeLevel":    level,
+        }
+    except Exception as exc:
+        logger.debug("Squeeze fetch %s: %s", sym, exc)
+        return None
+
+
+@app.get("/api/market/short-squeeze")
+async def short_squeeze(extra: str = ""):
+    cache_key = "market:short-squeeze"
+    cached = cache_get(cache_key, _SQUEEZE_TTL)
+    if cached is not None:
+        return cached
+
+    universe = list(_SQUEEZE_UNIVERSE)
+    if extra:
+        universe = list(dict.fromkeys([s.strip().upper() for s in extra.split(",") if s.strip()] + universe))
+
+    results = []
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        futures = {pool.submit(_fetch_squeeze_data, sym): sym for sym in universe}
+        for fut in as_completed(futures):
+            r = fut.result()
+            if r:
+                results.append(r)
+
+    results.sort(key=lambda x: x["squeezeScore"], reverse=True)
+    results = results[:50]
+    cache_set(cache_key, results)
+    return results
+
+
+# ── IPO & Lockup Calendar ─────────────────────────────────────────────────────
+
+_IPO_TTL = timedelta(hours=1)
+
+# (symbol, company, ipo_date, ipo_price, lockup_days, sector)
+_IPO_LIST = [
+    ("RDDT",  "Reddit",            "2024-03-21", 34.00,  180, "Technology"),
+    ("ALAB",  "Astera Labs",        "2024-03-20", 36.00,  180, "Semiconductors"),
+    ("RBRK",  "Rubrik",             "2024-04-25", 32.00,  180, "Cybersecurity"),
+    ("VIK",   "Viking Holdings",    "2024-05-01", 24.00,  180, "Leisure"),
+    ("WAY",   "Waystar",            "2024-06-06", 21.50,  180, "Healthcare IT"),
+    ("TEM",   "Tempus AI",          "2024-06-14", 37.00,  180, "AI / Healthcare"),
+    ("OS",    "OneStream",          "2024-07-25", 20.00,  180, "Enterprise SaaS"),
+    ("LINE",  "Lineage",            "2024-07-25", 78.00,  180, "REITs"),
+    ("TTAN",  "ServiceTitan",       "2024-12-12", 71.00,  180, "Field Service SaaS"),
+    ("SEZL",  "Sezzle",             "2024-01-10", 8.00,   180, "Fintech"),
+    ("MDGL",  "Madrigal Pharma",    "2023-06-01", 100.00, 180, "Biotech"),
+    ("KVYO",  "Klaviyo",            "2023-09-20", 30.00,  180, "MarTech SaaS"),
+    ("ARM",   "Arm Holdings",       "2023-09-14", 51.00,  180, "Semiconductors"),
+    ("BIRK",  "Birkenstock",        "2023-10-11", 46.00,  180, "Consumer"),
+    ("CART",  "Instacart (Maplebear)","2023-09-19",30.00, 180, "E-commerce"),
+    ("KKWB",  "Kenvue",             "2023-05-04", 22.00,  180, "Consumer Health"),
+]
+
+
+@app.get("/api/market/ipo-calendar")
+async def ipo_calendar():
+    cache_key = "market:ipo-calendar"
+    cached = cache_get(cache_key, _IPO_TTL)
+    if cached is not None:
+        return cached
+
+    today = datetime.utcnow().date()
+    syms = [row[0] for row in _IPO_LIST]
+
+    def fetch_price(sym: str) -> tuple[str, float | None]:
+        try:
+            info = yf.Ticker(sym, session=_session).info
+            return sym, _safe_float(info.get("regularMarketPrice"))
+        except Exception:
+            return sym, None
+
+    prices: dict[str, float | None] = {}
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        for sym, price in pool.map(fetch_price, syms):
+            prices[sym] = price
+
+    results = []
+    for sym, company, ipo_date_str, ipo_price, lockup_days, sector in _IPO_LIST:
+        ipo_date = datetime.strptime(ipo_date_str, "%Y-%m-%d").date()
+        lockup_date = ipo_date + timedelta(days=lockup_days)
+        days_since_ipo = (today - ipo_date).days
+        days_to_lockup = (lockup_date - today).days
+        current_price = prices.get(sym)
+        perf_pct = None
+        if current_price and ipo_price:
+            perf_pct = round((current_price - ipo_price) / ipo_price * 100, 1)
+
+        results.append({
+            "symbol":          sym,
+            "company":         company,
+            "sector":          sector,
+            "ipoDate":         ipo_date_str,
+            "ipoPrice":        ipo_price,
+            "currentPrice":    current_price,
+            "perfPct":         perf_pct,
+            "lockupDate":      lockup_date.isoformat(),
+            "daysSinceIpo":    days_since_ipo,
+            "daysToLockup":    days_to_lockup,
+            "lockupExpired":   days_to_lockup < 0,
+        })
+
+    results.sort(key=lambda x: x["daysToLockup"] if x["daysToLockup"] >= 0 else 999999)
+    cache_set(cache_key, results)
+    return results
+
+
+# ── Fed Watch ─────────────────────────────────────────────────────────────────
+
+_FEDWATCH_TTL = timedelta(minutes=30)
+
+# 2025 FOMC meeting dates (decision day)
+_FOMC_MEETINGS = [
+    {"date": "2025-01-29", "nickname": "Jan"},
+    {"date": "2025-03-19", "nickname": "Mar"},
+    {"date": "2025-05-07", "nickname": "May"},
+    {"date": "2025-06-18", "nickname": "Jun"},
+    {"date": "2025-07-30", "nickname": "Jul"},
+    {"date": "2025-09-17", "nickname": "Sep"},
+    {"date": "2025-10-29", "nickname": "Oct"},
+    {"date": "2025-12-10", "nickname": "Dec"},
+]
+
+# 30-day Fed Funds futures (ZQ) — month code map
+_ZQ_MONTHS = {
+    1:"F",2:"G",3:"H",4:"J",5:"K",6:"M",7:"N",8:"Q",9:"U",10:"V",11:"X",12:"Z"
+}
+
+# Current Fed Funds target (midpoint) — update when Fed changes rate
+_FED_TARGET_MID = 4.375   # 4.25–4.50% range as of early 2025
+_FED_TARGET_LOW = 4.25
+_FED_TARGET_HIGH = 4.50
+
+
+def _zq_ticker(year: int, month: int) -> str:
+    return f"ZQ{_ZQ_MONTHS[month]}{str(year)[-2:]}.CBT"
+
+
+def _fetch_zq_rate(year: int, month: int) -> float | None:
+    ticker = _zq_ticker(year, month)
+    try:
+        data = yf.Ticker(ticker, session=_session).history(period="5d")
+        if data.empty:
+            return None
+        price = float(data["Close"].iloc[-1])
+        return round(100.0 - price, 4)   # implied rate %
+    except Exception:
+        return None
+
+
+@app.get("/api/market/fed-watch")
+async def fed_watch():
+    cache_key = "market:fed-watch"
+    cached = cache_get(cache_key, _FEDWATCH_TTL)
+    if cached is not None:
+        return cached
+
+    today = datetime.utcnow().date()
+
+    # Fetch 30-day futures for next 8 months
+    futures_data: dict[str, float | None] = {}
+    month_keys = []
+    for i in range(9):
+        dt = today.replace(day=1)
+        month = (dt.month - 1 + i) % 12 + 1
+        year = dt.year + (dt.month - 1 + i) // 12
+        key = f"{year}-{month:02d}"
+        month_keys.append((year, month, key))
+
+    with ThreadPoolExecutor(max_workers=9) as pool:
+        futures_map = {pool.submit(_fetch_zq_rate, y, m): k for y, m, k in month_keys}
+        for fut, key in futures_map.items():
+            futures_data[key] = fut.result()
+
+    # Build meeting-level probabilities
+    meetings = []
+    for mtg in _FOMC_MEETINGS:
+        mtg_date = datetime.strptime(mtg["date"], "%Y-%m-%d").date()
+        days_to = (mtg_date - today).days
+        status = "past" if days_to < 0 else ("upcoming" if days_to <= 90 else "future")
+
+        # Find the futures month that best captures this meeting
+        key = f"{mtg_date.year}-{mtg_date.month:02d}"
+        implied_rate = futures_data.get(key)
+
+        cut_prob = hold_prob = hike_prob = None
+        if implied_rate is not None:
+            diff = _FED_TARGET_MID - implied_rate    # positive = market pricing cuts
+            cut_prob  = max(0, min(100, round(diff / 0.25 * 100)))
+            hike_prob = max(0, min(100, round(-diff / 0.25 * 100)))
+            hold_prob = max(0, 100 - cut_prob - hike_prob)
+
+        meetings.append({
+            **mtg,
+            "daysTo":      days_to,
+            "status":      status,
+            "impliedRate": implied_rate,
+            "cutProb":     cut_prob,
+            "holdProb":    hold_prob,
+            "hikeProb":    hike_prob,
+        })
+
+    # Rate history — fetch EFFR proxy (^IRX = 13-week T-bill annualised / 100 * some scaling)
+    rate_history = []
+    try:
+        hist = yf.Ticker("^IRX", session=_session).history(period="1y")
+        if not hist.empty:
+            hist = hist.resample("W").last().dropna()
+            rate_history = [
+                {"date": str(d.date()), "rate": round(float(v), 3)}
+                for d, v in zip(hist.index, hist["Close"])
+            ]
+    except Exception:
+        pass
+
+    result = {
+        "currentTarget":    f"{_FED_TARGET_LOW}%–{_FED_TARGET_HIGH}%",
+        "currentMidpoint":  _FED_TARGET_MID,
+        "meetings":         meetings,
+        "rateHistory":      rate_history,
+        "futuresData":      futures_data,
+        "asOf":             today.isoformat(),
+    }
+    cache_set(cache_key, result)
+    return result
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")

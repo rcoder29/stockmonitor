@@ -40,6 +40,9 @@ import EarlyRetirementHealth from './components/EarlyRetirementHealth'
 import RothConversionPlanner from './components/RothConversionPlanner'
 import CustomNews from './components/CustomNews'
 import TaxAdvisor from './components/TaxAdvisor'
+import ShortSqueeze from './components/ShortSqueeze'
+import IpoCalendar from './components/IpoCalendar'
+import FedWatch from './components/FedWatch'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -113,8 +116,11 @@ const NAV_GROUPS = [
       { id: 'sectors',         label: 'Sector Rotation' },
       { id: 'sectormomentum',  label: 'Sector Momentum' },
       { id: 'rates',           label: 'Yield Curve' },
+      { id: 'fedwatch',        label: 'Fed Watch' },
       { id: 'macro',           label: 'Macro Calendar' },
       { id: 'recommendations', label: 'Analyst Picks' },
+      { id: 'shortsqueeze',    label: 'Short Squeeze' },
+      { id: 'ipocalendar',     label: 'IPO & Lockups' },
     ],
   },
   {
@@ -767,6 +773,9 @@ export default function App() {
           {activeTab === 'rothconversionplanner' && <RothConversionPlanner />}
           {activeTab === 'customnews'            && <CustomNews />}
           {activeTab === 'taxadvisor'            && <TaxAdvisor />}
+          {activeTab === 'shortsqueeze'          && <ShortSqueeze />}
+          {activeTab === 'ipocalendar'           && <IpoCalendar />}
+          {activeTab === 'fedwatch'              && <FedWatch />}
         </main>
       </div>
 
