@@ -32,6 +32,10 @@ import YieldCurve from './components/YieldCurve'
 import UnusualOptions from './components/UnusualOptions'
 import UserGuide from './components/UserGuide'
 import IndexHeatmap from './components/IndexHeatmap'
+import FireCalculator from './components/FireCalculator'
+import MonteCarlo from './components/MonteCarlo'
+import CoastFire from './components/CoastFire'
+import SocialSecurity from './components/SocialSecurity'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -154,6 +158,22 @@ const NAV_GROUPS = [
     items: [
       { id: 'aibot',   label: 'AI Chat' },
       { id: 'advisor', label: 'Financial Advisor' },
+    ],
+  },
+  {
+    id: 'retirement',
+    label: 'Retirement',
+    icon: (
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+        <circle cx="8" cy="8" r="6.5" fillOpacity="0" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M8 4.5v3.75l2.5 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+      </svg>
+    ),
+    items: [
+      { id: 'fire',          label: 'FIRE Calculator' },
+      { id: 'montecarlo',    label: 'Monte Carlo' },
+      { id: 'coastfire',     label: 'Coast FIRE & Roth' },
+      { id: 'socialsecurity', label: 'Social Security' },
     ],
   },
 ]
@@ -695,6 +715,10 @@ export default function App() {
           {activeTab === 'dcf'             && <DcfCalculator />}
           {activeTab === 'uoa'             && <UnusualOptions symbols={watchlist} />}
           {activeTab === 'guide'           && <UserGuide />}
+          {activeTab === 'fire'           && <FireCalculator />}
+          {activeTab === 'montecarlo'     && <MonteCarlo />}
+          {activeTab === 'coastfire'      && <CoastFire />}
+          {activeTab === 'socialsecurity' && <SocialSecurity />}
         </main>
       </div>
 

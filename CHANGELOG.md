@@ -4,6 +4,17 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-07-25 — Retirement Planning Module
+
+New **Retirement** nav group with 4 tools:
+
+- **FIRE Calculator** — FIRE number (expenses ÷ SWR), progress bar, years-to-FIRE, projection chart, retirement-age comparison table. Presets for age 55/60/65.
+- **Monte Carlo Simulator** — 1,000 simulations with Box-Muller normal random returns. Fan chart (10th/25th/50th/75th/90th percentile paths), survival rate %, scenario table.
+- **Coast FIRE & Roth Conversion Ladder** — Coast FIRE number by retirement age. Roth ladder: suggested annual conversion, marginal tax bracket impact, 10-year conversion schedule with 5-year access dates.
+- **Social Security Optimizer** — Benefit at each claiming age 62–70. Breakeven analysis (62 vs FRA vs 70). Cumulative lifetime chart. Combined SS + portfolio income column.
+
+---
+
 ## 2026-07-25 — Navigation Restructure (8 groups → 6)
 
 ### Changes
