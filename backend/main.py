@@ -5897,6 +5897,17 @@ _IPO_LIST = [
     ("BIRK",  "Birkenstock",        "2023-10-11", 46.00,  180, "Consumer"),
     ("CART",  "Instacart (Maplebear)","2023-09-19",30.00, 180, "E-commerce"),
     ("KKWB",  "Kenvue",             "2023-05-04", 22.00,  180, "Consumer Health"),
+    # 2025 IPOs
+    ("KLAR",  "Klarna",             "2025-07-01", 68.00,  180, "Fintech"),
+    ("MNDY",  "Monday.com (2025)",  "2021-06-11", 155.00, 180, "SaaS"),
+    ("SOUN",  "SoundHound AI",      "2024-02-12", 5.00,   365, "AI / Audio"),
+    ("SMCI",  "Super Micro Comp.",  "2007-03-29", 14.00,  180, "Servers"),
+    ("GRAB",  "Grab Holdings",      "2021-12-02", 8.75,   180, "Super App"),
+    ("IONQ",  "IonQ",               "2021-10-01", 10.00,  180, "Quantum"),
+    ("ACHR",  "Archer Aviation",    "2021-09-17", 9.00,   180, "eVTOL"),
+    ("JOBY",  "Joby Aviation",      "2021-08-10", 10.00,  180, "eVTOL"),
+    ("RKLB",  "Rocket Lab",         "2021-08-25", 10.00,  180, "Space"),
+    ("ASTS",  "AST SpaceMobile",    "2021-04-07", 10.00,  180, "Space Telecom"),
 ]
 
 
@@ -5956,16 +5967,24 @@ async def ipo_calendar():
 
 _FEDWATCH_TTL = timedelta(minutes=30)
 
-# 2025 FOMC meeting dates (decision day)
+# FOMC meeting dates — 2025 + 2026 schedule (decision day)
 _FOMC_MEETINGS = [
-    {"date": "2025-01-29", "nickname": "Jan"},
-    {"date": "2025-03-19", "nickname": "Mar"},
-    {"date": "2025-05-07", "nickname": "May"},
-    {"date": "2025-06-18", "nickname": "Jun"},
-    {"date": "2025-07-30", "nickname": "Jul"},
-    {"date": "2025-09-17", "nickname": "Sep"},
-    {"date": "2025-10-29", "nickname": "Oct"},
-    {"date": "2025-12-10", "nickname": "Dec"},
+    {"date": "2025-01-29", "nickname": "Jan '25"},
+    {"date": "2025-03-19", "nickname": "Mar '25"},
+    {"date": "2025-05-07", "nickname": "May '25"},
+    {"date": "2025-06-18", "nickname": "Jun '25"},
+    {"date": "2025-07-30", "nickname": "Jul '25"},
+    {"date": "2025-09-17", "nickname": "Sep '25"},
+    {"date": "2025-10-29", "nickname": "Oct '25"},
+    {"date": "2025-12-10", "nickname": "Dec '25"},
+    {"date": "2026-01-28", "nickname": "Jan '26"},
+    {"date": "2026-03-18", "nickname": "Mar '26"},
+    {"date": "2026-04-29", "nickname": "Apr '26"},
+    {"date": "2026-06-17", "nickname": "Jun '26"},
+    {"date": "2026-07-29", "nickname": "Jul '26"},
+    {"date": "2026-09-16", "nickname": "Sep '26"},
+    {"date": "2026-10-28", "nickname": "Oct '26"},
+    {"date": "2026-12-09", "nickname": "Dec '26"},
 ]
 
 # 30-day Fed Funds futures (ZQ) — month code map
@@ -5973,10 +5992,27 @@ _ZQ_MONTHS = {
     1:"F",2:"G",3:"H",4:"J",5:"K",6:"M",7:"N",8:"Q",9:"U",10:"V",11:"X",12:"Z"
 }
 
-# Current Fed Funds target (midpoint) — update when Fed changes rate
-_FED_TARGET_MID = 4.375   # 4.25–4.50% range as of early 2025
-_FED_TARGET_LOW = 4.25
-_FED_TARGET_HIGH = 4.50
+# Current Fed Funds target — derived from live ^IRX (13-week T-bill) at startup
+def _fetch_current_fed_rate() -> tuple[float, float, float]:
+    """Return (low, high, mid) for the current Fed Funds target range.
+    Derived from the 13-week T-bill (^IRX), which tracks the fed funds rate closely.
+    FOMC targets are always in 25bps increments (e.g. 3.75-4.00%)."""
+    try:
+        hist = yf.Ticker("^IRX", session=_session).history(period="5d")
+        if not hist.empty:
+            irx = float(hist["Close"].iloc[-1])
+            # T-bills trade ~12-20bps below fed funds; add 15bps adjustment
+            adjusted = irx + 0.15
+            # Round down to nearest 25bps for the lower bound of the target range
+            low = round(int(adjusted / 0.25) * 0.25, 2)
+            high = round(low + 0.25, 2)
+            mid = round((low + high) / 2, 4)
+            return low, high, mid
+    except Exception:
+        pass
+    return 3.75, 4.00, 3.875   # fallback
+
+_FED_TARGET_LOW, _FED_TARGET_HIGH, _FED_TARGET_MID = _fetch_current_fed_rate()
 
 
 def _zq_ticker(year: int, month: int) -> str:
