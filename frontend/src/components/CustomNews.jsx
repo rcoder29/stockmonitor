@@ -60,7 +60,7 @@ export default function CustomNews() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/news/feed?topics=${selectedTopics.join(',')}`)
+      const res = await fetch(`/api/news-feed?topics=${selectedTopics.join(',')}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setArticles(data)

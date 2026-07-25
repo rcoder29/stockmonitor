@@ -5536,7 +5536,7 @@ _TOPIC_SYMBOLS: dict[str, str] = {
     "crypto":         "BTC-USD",
 }
 
-@app.get("/api/news/feed")
+@app.get("/api/news-feed")
 async def get_custom_news_feed(topics: str = Query(...)):
     topic_list = [t.strip() for t in topics.split(",") if t.strip()]
     if not topic_list:
