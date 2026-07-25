@@ -88,15 +88,17 @@ const Icons = {
 const NAV_GROUPS = [
   {
     id: 'market',
-    label: 'Market',
+    label: 'Markets',
     icon: Icons.market,
     items: [
       { id: 'market',          label: 'Overview' },
-      { id: 'recommendations', label: 'Recommendations' },
+      { id: 'recommendations', label: 'Analyst Picks' },
       { id: 'breadth',         label: 'Breadth' },
-      { id: 'indexheatmap',   label: 'Index Heatmap' },
+      { id: 'indexheatmap',    label: 'Index Heatmap' },
+      { id: 'sectors',         label: 'Sector Rotation' },
+      { id: 'sectormomentum',  label: 'Sector Momentum' },
       { id: 'macro',           label: 'Macro Calendar' },
-      { id: 'rates',          label: 'Yield Curve' },
+      { id: 'rates',           label: 'Yield Curve' },
     ],
   },
   {
@@ -107,7 +109,8 @@ const NAV_GROUPS = [
       { id: 'watchlist',     label: 'Watchlist' },
       { id: 'pricetargets',  label: 'Price Targets' },
       { id: 'richearnings',  label: 'Earnings+' },
-      { id: 'newssentiment', label: 'Sentiment' },
+      { id: 'newssentiment', label: 'News Sentiment' },
+      { id: 'smartalerts',   label: 'Smart Alerts' },
     ],
   },
   {
@@ -135,22 +138,12 @@ const NAV_GROUPS = [
     ],
   },
   {
-    id: 'sectors',
-    label: 'Sectors',
-    icon: Icons.sectors,
-    items: [
-      { id: 'sectors',        label: 'Sector Rotation' },
-      { id: 'sectormomentum', label: 'Momentum' },
-    ],
-  },
-  {
     id: 'trading',
     label: 'Trading',
     icon: Icons.trading,
     items: [
       { id: 'daytrader',    label: 'Day Trader' },
       { id: 'tradeideas',   label: 'Trade Ideas' },
-      { id: 'smartalerts',  label: 'Smart Alerts' },
       { id: 'positionsize', label: 'Position Sizer' },
     ],
   },
@@ -161,18 +154,6 @@ const NAV_GROUPS = [
     items: [
       { id: 'aibot',   label: 'AI Chat' },
       { id: 'advisor', label: 'Financial Advisor' },
-    ],
-  },
-  {
-    id: 'help',
-    label: 'Help',
-    icon: (
-      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
-        <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 11a1 1 0 110-2 1 1 0 010 2zm1-3.5c0 .28-.22.5-.5.5h-1a.5.5 0 01-.5-.5v-.25C7 7.01 8.5 6.5 8.5 5.5c0-.55-.45-1-1-1s-1 .45-1 1H5c0-1.65 1.35-3 3-3s3 1.35 3 3c0 1.5-1.5 2-1.5 3.5H9z"/>
-      </svg>
-    ),
-    items: [
-      { id: 'guide', label: 'User Guide' },
     ],
   },
 ]
@@ -259,55 +240,77 @@ function Sidebar({ activeTab, onSelect, className }) {
 
   return (
     <aside className={className ?? 'w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto'}>
-      {NAV_GROUPS.map(group => {
-        const isGroupActive = group.items.some(i => i.id === activeTab)
-        const isOpen = expanded[group.id]
-        return (
-          <div key={group.id}>
-            <button
-              onClick={() => toggle(group.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors group ${
-                isGroupActive ? 'bg-gray-800/70' : 'hover:bg-gray-800/40'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className={`transition-colors ${isGroupActive ? 'text-emerald-400' : 'text-gray-600 group-hover:text-gray-400'}`}>
-                  {group.icon}
-                </span>
-                <span className={`text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-                  isGroupActive ? 'text-emerald-400' : 'text-gray-500 group-hover:text-gray-300'
-                }`}>
-                  {group.label}
-                </span>
-              </div>
-              <span className={`text-gray-600 transition-transform duration-150 ${isOpen ? '' : '-rotate-90'}`}>
-                ▾
-              </span>
-            </button>
+      <div className="flex flex-col min-h-full">
+        {/* Nav groups */}
+        <div className="flex-1">
+          {NAV_GROUPS.map(group => {
+            const isGroupActive = group.items.some(i => i.id === activeTab)
+            const isOpen = expanded[group.id]
+            return (
+              <div key={group.id}>
+                <button
+                  onClick={() => toggle(group.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors group ${
+                    isGroupActive ? 'bg-gray-800/70' : 'hover:bg-gray-800/40'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`transition-colors ${isGroupActive ? 'text-emerald-400' : 'text-gray-600 group-hover:text-gray-400'}`}>
+                      {group.icon}
+                    </span>
+                    <span className={`text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                      isGroupActive ? 'text-emerald-400' : 'text-gray-500 group-hover:text-gray-300'
+                    }`}>
+                      {group.label}
+                    </span>
+                  </div>
+                  <span className={`text-gray-600 transition-transform duration-150 ${isOpen ? '' : '-rotate-90'}`}>
+                    ▾
+                  </span>
+                </button>
 
-            {isOpen && (
-              <div className="pb-0.5">
-                {group.items.map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => onSelect(item.id)}
-                    className={`w-full text-left text-[13px] pl-9 pr-3 py-1.5 transition-colors relative ${
-                      activeTab === item.id
-                        ? 'text-emerald-400 bg-emerald-900/20'
-                        : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40'
-                    }`}
-                  >
-                    {activeTab === item.id && (
-                      <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-emerald-500 rounded-r" />
-                    )}
-                    {item.label}
-                  </button>
-                ))}
+                {isOpen && (
+                  <div className="pb-0.5">
+                    {group.items.map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => onSelect(item.id)}
+                        className={`w-full text-left text-[13px] pl-9 pr-3 py-1.5 transition-colors relative ${
+                          activeTab === item.id
+                            ? 'text-emerald-400 bg-emerald-900/20'
+                            : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800/40'
+                        }`}
+                      >
+                        {activeTab === item.id && (
+                          <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-emerald-500 rounded-r" />
+                        )}
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        )
-      })}
+            )
+          })}
+        </div>
+
+        {/* Pinned User Guide button */}
+        <div className="border-t border-gray-800 p-2">
+          <button
+            onClick={() => onSelect('guide')}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded text-xs transition-colors ${
+              activeTab === 'guide'
+                ? 'text-emerald-400 bg-emerald-900/20'
+                : 'text-gray-600 hover:text-gray-300 hover:bg-gray-800/40'
+            }`}
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+              <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 11a1 1 0 110-2 1 1 0 010 2zm1-3.5c0 .28-.22.5-.5.5h-1a.5.5 0 01-.5-.5v-.25C7 7.01 8.5 6.5 8.5 5.5c0-.55-.45-1-1-1s-1 .45-1 1H5c0-1.65 1.35-3 3-3s3 1.35 3 3c0 1.5-1.5 2-1.5 3.5H9z"/>
+            </svg>
+            User Guide
+          </button>
+        </div>
+      </div>
     </aside>
   )
 }

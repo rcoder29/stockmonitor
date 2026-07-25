@@ -4,6 +4,23 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-07-25 — Navigation Restructure (8 groups → 6)
+
+### Changes
+- **Markets** (was "Market") expanded to 8 items: absorbed Sector Rotation + Sector Momentum from the eliminated Sectors group. Now the single hub for all market-wide views.
+- **Sectors group eliminated** — its two views merged into Markets.
+- **Smart Alerts moved** from Trading → Watchlist. It monitors watchlist symbols under conditions, which is Watchlist's job. Watchlist now has 5 items.
+- **Trading trimmed** to 3 execution-focused items: Day Trader, Trade Ideas, Position Sizer.
+- **"Recommendations" → "Analyst Picks"** — clearer label for analyst actions + AI Growth Watch List.
+- **"Sentiment" → "News Sentiment"** — clearer label.
+- **Help group eliminated** — User Guide replaced with a `?` button pinned to the bottom of the sidebar; always visible without occupying a collapsible group.
+
+### Files changed
+- `frontend/src/App.jsx` — NAV_GROUPS restructured, Sidebar component updated with pinned guide button
+- `frontend/src/components/UserGuide.jsx` — nav table updated, Sectors section merged into Markets, Smart Alerts moved to Watchlist section, Trading section updated, workflows updated, Changelog entry added
+
+---
+
 ## 2026-07-25 — Index / ETF Heatmap v2: Dynamic Search + Live Weights
 
 ### New
