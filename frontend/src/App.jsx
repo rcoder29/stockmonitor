@@ -43,6 +43,7 @@ import TaxAdvisor from './components/TaxAdvisor'
 import ShortSqueeze from './components/ShortSqueeze'
 import IpoCalendar from './components/IpoCalendar'
 import FedWatch from './components/FedWatch'
+import MorningBriefing from './components/MorningBriefing'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -182,9 +183,10 @@ const NAV_GROUPS = [
     label: 'AI Tools',
     icon: Icons.ai,
     items: [
-      { id: 'advisor',    label: 'Financial Advisor' },
-      { id: 'taxadvisor', label: 'Tax Advisor' },
-      { id: 'aibot',      label: 'AI Chat' },
+      { id: 'morningbriefing', label: 'Morning Briefing' },
+      { id: 'advisor',         label: 'Financial Advisor' },
+      { id: 'taxadvisor',      label: 'Tax Advisor' },
+      { id: 'aibot',           label: 'AI Chat' },
     ],
   },
   {
@@ -772,6 +774,7 @@ export default function App() {
           {activeTab === 'earlyretirementhealth'  && <EarlyRetirementHealth />}
           {activeTab === 'rothconversionplanner' && <RothConversionPlanner />}
           {activeTab === 'customnews'            && <CustomNews />}
+          {activeTab === 'morningbriefing'        && <MorningBriefing />}
           {activeTab === 'taxadvisor'            && <TaxAdvisor />}
           {activeTab === 'shortsqueeze'          && <ShortSqueeze />}
           {activeTab === 'ipocalendar'           && <IpoCalendar />}
