@@ -52,6 +52,7 @@ import InsiderFeed from './components/InsiderFeed'
 import CryptoDashboard from './components/CryptoDashboard'
 import PortfolioReview from './components/PortfolioReview'
 import EconomicDashboard from './components/EconomicDashboard'
+import StockAnalyzer from './components/StockAnalyzer'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -197,6 +198,7 @@ const NAV_GROUPS = [
     icon: Icons.ai,
     items: [
       { id: 'morningbriefing',  label: 'Morning Briefing' },
+      { id: 'stockanalyzer',    label: 'Stock Analyzer' },
       { id: 'portfolioreview',  label: 'Portfolio Review' },
       { id: 'advisor',          label: 'Financial Advisor' },
       { id: 'taxadvisor',       label: 'Tax Advisor' },
@@ -803,6 +805,7 @@ export default function App() {
           {activeTab === 'crypto'               && <CryptoDashboard />}
           {activeTab === 'portfolioreview'      && <PortfolioReview />}
           {activeTab === 'economic'             && <EconomicDashboard />}
+          {activeTab === 'stockanalyzer'        && <StockAnalyzer />}
         </main>
       </div>
 
