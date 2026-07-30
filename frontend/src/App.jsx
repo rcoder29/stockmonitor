@@ -53,6 +53,7 @@ import CryptoDashboard from './components/CryptoDashboard'
 import PortfolioReview from './components/PortfolioReview'
 import EconomicDashboard from './components/EconomicDashboard'
 import StockAnalyzer from './components/StockAnalyzer'
+import DividendTracker from './components/DividendTracker'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -186,9 +187,10 @@ const NAV_GROUPS = [
     label: 'Portfolio',
     icon: Icons.portfolio,
     items: [
-      { id: 'portfolio',      label: 'Portfolio' },
+      { id: 'portfolio',       label: 'Portfolio' },
       { id: 'optionstracker', label: 'Options P&L' },
       { id: 'taxlots',        label: 'Tax Lots' },
+      { id: 'dividendtracker',label: 'Dividend Tracker' },
       { id: 'journal',        label: 'Trade Journal' },
     ],
   },
@@ -806,6 +808,7 @@ export default function App() {
           {activeTab === 'portfolioreview'      && <PortfolioReview />}
           {activeTab === 'economic'             && <EconomicDashboard />}
           {activeTab === 'stockanalyzer'        && <StockAnalyzer />}
+          {activeTab === 'dividendtracker'      && <DividendTracker />}
         </main>
       </div>
 
