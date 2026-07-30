@@ -21,7 +21,7 @@ const GUIDE = [
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
         ['Markets', 'Overview, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
         ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Signals, Unusual Options'],
-        ['Watchlist', 'Watchlist, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
+        ['Watchlist', 'Watchlist, Heatmap, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
         ['News', 'My News Feed'],
         ['Trading', 'Trade Ideas, Position Sizer, Wheel Tracker, Day Trader'],
         ['Portfolio', 'Portfolio, Options P&L, Tax Lots, Dividend Tracker, Trade Journal'],
@@ -264,6 +264,22 @@ const GUIDE = [
     title: 'Watchlist',
     icon: '◎',
     blocks: [
+      { type: 'h3', text: 'Watchlist Heatmap' },
+      { type: 'p', text: 'A treemap of all your watchlist symbols, sized by market cap and coloured by return. Found under Watchlist → Heatmap. The 1D view is instant and live (no extra fetch needed — it uses the same real-time data as the Watchlist table). Extended periods (5D/1M/3M) are fetched on demand and cached for 5 minutes.' },
+      { type: 'table', headers: ['Control', 'What it does'], rows: [
+        ['Period (1D/5D/1M/3M)', '1D is live. Selecting 5D/1M/3M triggers a backend fetch for the selected symbols\' historical returns. The first load takes a few seconds; subsequent loads within 5 minutes are instant.'],
+        ['Mkt Cap / Equal sizing', 'Mkt Cap: tile size is proportional to each company\'s market capitalisation — Apple and Microsoft will be the largest tiles. Equal: all tiles the same size, making it easier to compare smaller positions.'],
+        ['Heatmap / Table view', 'Heatmap shows the visual treemap. Table shows a sortable spreadsheet with all period columns side by side. Click any column header in Table view to sort.'],
+      ]},
+      { type: 'p', text: 'Colour scale: dark red ≤ −5% → light red −1% → grey 0 → light green +1% → dark green ≥ +5%. Hover any tile to see a full tooltip with name, price, market cap, sector, and all available period returns.' },
+      { type: 'bullets', items: [
+        'Summary cards show total symbols, advancing count, declining count, top gainer, and biggest loser for the selected period.',
+        'Tiles are sorted largest-first (top-left) so the most market-cap-significant stocks are always prominent.',
+        'A green dot next to the 1D button confirms live data is active.',
+        'The Table view shows 5D/1M/3M columns only once extended data is loaded — columns appear automatically after the first non-1D period is selected.',
+        'A coloured sidebar stripe in each table row matches the heatmap colour for that stock\'s return.',
+      ]},
+      { type: 'tip', text: 'Tip: use the heatmap at the start of the trading day to immediately see which of your watchlist stocks are moving — red concentration in one area (e.g. all your tech names red) signals sector-wide weakness, while isolated red tiles suggest stock-specific news.' },
       { type: 'h3', text: 'Managing Your Watchlist' },
       { type: 'p', text: 'The watchlist is the core of the app. All features that reference "your symbols" (Signals, Sentiment, Earnings+, Trade Ideas) draw from it.' },
       { type: 'steps', items: [
@@ -951,6 +967,17 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-07-30 — Watchlist Heatmap' },
+      { type: 'bullets', items: [
+        'New Watchlist Heatmap under Watchlist → Heatmap: treemap of personal watchlist symbols sized by market cap and coloured by return.',
+        '1D view is instant and live — uses the existing real-time WebSocket quote data with no extra fetch.',
+        'Extended periods (5D/1M/3M) fetched on demand from a new backend endpoint /api/market/watchlist-heatmap using yfinance 3-month history; 5-min SQLite cache per symbol.',
+        'Tile sizing: proportional to market cap (default) or equal weight toggle for easier comparison of small positions.',
+        'Rich hover tooltip per tile: full name, price, market cap, sector, and all available period returns.',
+        'Summary bar: advancing/declining counts, top gainer and biggest loser for the selected period.',
+        'Table view with sortable columns (Symbol, Price, 1D, 5D, 1M, 3M, Mkt Cap, Sector); coloured sidebar stripe per row matches heatmap colour.',
+        'Colour scale: dark red ≤−5% through grey at 0% to dark green ≥+5%.',
+      ]},
       { type: 'h3', text: '2026-07-30 — Dividend Tracker' },
       { type: 'bullets', items: [
         'New Dividend Tracker under Portfolio → Dividend Tracker: track dividend income, yield on cost, ex-dividend dates, and DRIP projections for income portfolios.',

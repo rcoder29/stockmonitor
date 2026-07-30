@@ -54,6 +54,7 @@ import PortfolioReview from './components/PortfolioReview'
 import EconomicDashboard from './components/EconomicDashboard'
 import StockAnalyzer from './components/StockAnalyzer'
 import DividendTracker from './components/DividendTracker'
+import WatchlistHeatmap from './components/WatchlistHeatmap'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -156,8 +157,9 @@ const NAV_GROUPS = [
     label: 'Watchlist',
     icon: Icons.watchlist,
     items: [
-      { id: 'watchlist',     label: 'Watchlist' },
-      { id: 'pricetargets',  label: 'Price Targets' },
+      { id: 'watchlist',        label: 'Watchlist' },
+      { id: 'watchlistheatmap', label: 'Heatmap' },
+      { id: 'pricetargets',     label: 'Price Targets' },
       { id: 'richearnings',  label: 'Earnings+' },
       { id: 'newssentiment', label: 'News Sentiment' },
       { id: 'smartalerts',   label: 'Smart Alerts' },
@@ -809,6 +811,7 @@ export default function App() {
           {activeTab === 'economic'             && <EconomicDashboard />}
           {activeTab === 'stockanalyzer'        && <StockAnalyzer />}
           {activeTab === 'dividendtracker'      && <DividendTracker />}
+          {activeTab === 'watchlistheatmap'    && <WatchlistHeatmap watchlist={watchlist} quotes={quotes} />}
         </main>
       </div>
 
