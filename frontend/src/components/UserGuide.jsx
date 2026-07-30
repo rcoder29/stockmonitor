@@ -19,7 +19,7 @@ const GUIDE = [
       { type: 'h3', text: 'Navigation' },
       { type: 'p', text: 'The left sidebar organises all features into 8 groups. All groups start collapsed — click a group header to expand it. Only the group containing your current view opens automatically. Click any item to load that view. The ? User Guide button is always pinned to the bottom of the sidebar. On mobile, tap ☰ to open the sidebar drawer.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
-        ['Markets', 'Overview, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups'],
+        ['Markets', 'Overview, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading'],
         ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Signals, Unusual Options'],
         ['Watchlist', 'Watchlist, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
         ['News', 'My News Feed'],
@@ -184,6 +184,36 @@ const GUIDE = [
         'Stocks with strong post-IPO gains and an imminent lockup carry the highest insider-selling risk.',
       ]},
       { type: 'tip', text: 'Tip: combine IPO & Lockup Calendar with the Short Squeeze Scanner. A stock with high short interest and an imminent lockup expiry faces two opposing forces — shorts betting on post-lockup selling vs bulls expecting momentum to continue.' },
+      { type: 'h3', text: 'Insider Trading Feed' },
+      { type: 'p', text: 'A market-wide scanner of SEC Form 4 filings showing open-market purchases and sales by corporate insiders across ~150 large and mid-cap companies. Found under Markets → Insider Trading.' },
+      { type: 'steps', items: [
+        'Select a time window (7d / 14d / 30d / 60d) — the feed shows all filings within that period.',
+        'Use the filter tabs to focus: Buys Only (most actionable), C-Suite (highest-conviction insiders), $500k+ (significant dollar size), Cluster Buys (multiple insiders at the same stock).',
+        'Search by ticker, insider name, or company name using the search box.',
+        'Click any column header to sort — sorting by Value descending surfaces the largest purchases first.',
+        'Hit ↻ Refresh to reload fresh data (results are cached for 4 hours per time window).',
+      ]},
+      { type: 'table', headers: ['Badge', 'Meaning'], rows: [
+        ['[C]', 'C-Suite insider — CEO, CFO, COO, President, CTO, or Chairman. Their purchases carry more weight than director purchases.'],
+        ['×N', 'Cluster buy — N different insiders have bought this stock in the selected window. Cluster buys are historically the strongest bullish signal.'],
+        ['▲ Buy (green)', 'Open-market purchase: insider spent their own cash to buy shares. The most discretionary and bullish signal.'],
+        ['▼ Sale (red)', 'Insider sale. Less informative — executives sell for many reasons (diversification, liquidity, taxes). Only significant if unusually large or widespread.'],
+      ]},
+      { type: 'table', headers: ['Filter', 'When to use it'], rows: [
+        ['Buys Only', 'Default for signal hunting — removes sales noise and shows only purchases.'],
+        ['C-Suite', 'Highest-conviction filter: CEOs and CFOs buying is a strong vote of confidence in the business.'],
+        ['$500k+', 'Filters for meaningful dollar size — small $5k purchases by directors are common but less significant than a CFO buying $2M.'],
+        ['Cluster Buys', 'The strongest signal: when multiple insiders independently buy the same stock in a short window, it suggests the company may be meaningfully undervalued.'],
+      ]},
+      { type: 'bullets', items: [
+        'Excluded from the feed: stock grants, option exercises, gifts, and automatic 10b5-1 plan transactions. Only discretionary open-market trades are shown.',
+        'The Largest Buy callout card highlights the single largest open-market purchase in the selected window.',
+        'Summary cards show total buy count, sale count, total buy value, and number of cluster buy stocks.',
+        'Coverage spans ~150 companies across all major sectors — not a complete market scan of all 8,000+ public companies.',
+        'First load takes 20–30 seconds while the backend fetches from ~150 tickers in parallel; subsequent loads within 4 hours are instant.',
+      ]},
+      { type: 'tip', text: 'Tip: the strongest insider buy signals combine cluster (×2 or more), C-Suite status, and $500k+ dollar size — use all three filters together for the highest-conviction opportunities. Cross-reference with Fundamentals and the Short Squeeze Scanner for a fuller picture.' },
+      { type: 'tip', text: 'Disclaimer: insider transactions are reported retrospectively (often with a 2-business-day delay after the trade) and do not guarantee future stock performance. This feed is for informational and educational purposes only — not investment advice.' },
     ],
   },
   {
@@ -802,6 +832,17 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-07-30 — Insider Trading Feed' },
+      { type: 'bullets', items: [
+        'New Insider Trading Feed under Markets: SEC Form 4 scanner covering ~150 large and mid-cap companies.',
+        'Classifies open-market purchases vs sales from the yfinance Text field; excludes grants, option exercises, gifts, and automatic 10b5-1 plan transactions.',
+        'Cluster buy detection: counts how many insiders bought the same stock in the selected window — cluster count ×N badge shown on each transaction.',
+        'C-Suite badge [C] for CEO, CFO, COO, President, CTO, and Chairman transactions.',
+        'Time windows: 7d / 14d / 30d / 60d, each cached separately for 4 hours.',
+        'Filter tabs: All / Buys Only / C-Suite / $500k+ / Cluster Buys, each with live counts.',
+        'Summary cards: buy count, sale count, total buy value, cluster buy stock count; largest-buy callout card.',
+        'Sortable table with search by ticker, insider name, or company name.',
+      ]},
       { type: 'h3', text: '2026-07-30 — Wheel Tracker, Tax Lot Manager, Medicare Estimator, Estate & RMD Projector' },
       { type: 'bullets', items: [
         'Wheel Strategy Tracker (Trading group): track cash-secured puts and covered calls through the options wheel cycle. Calculates annualised yield per position, shows expiry countdown badges (green/yellow/red), premium totals, and a 3-step wheel explainer. localStorage-persisted.',
