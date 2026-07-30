@@ -55,6 +55,7 @@ import EconomicDashboard from './components/EconomicDashboard'
 import StockAnalyzer from './components/StockAnalyzer'
 import DividendTracker from './components/DividendTracker'
 import WatchlistHeatmap from './components/WatchlistHeatmap'
+import EarningsSurpriseTracker from './components/EarningsSurpriseTracker'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -147,8 +148,9 @@ const NAV_GROUPS = [
       { id: 'fundamentals', label: 'Fundamentals' },
       { id: 'dcf',          label: 'DCF Valuation' },
       { id: 'compare',      label: 'Chart Compare' },
-      { id: 'backtest',     label: 'Backtester' },
-      { id: 'signals',      label: 'Signals' },
+      { id: 'backtest',         label: 'Backtester' },
+      { id: 'earningssurprise', label: 'Earnings Surprise' },
+      { id: 'signals',          label: 'Signals' },
       { id: 'uoa',          label: 'Unusual Options' },
     ],
   },
@@ -812,6 +814,7 @@ export default function App() {
           {activeTab === 'stockanalyzer'        && <StockAnalyzer />}
           {activeTab === 'dividendtracker'      && <DividendTracker />}
           {activeTab === 'watchlistheatmap'    && <WatchlistHeatmap watchlist={watchlist} quotes={quotes} />}
+          {activeTab === 'earningssurprise'   && <EarningsSurpriseTracker watchlist={watchlist} />}
         </main>
       </div>
 
