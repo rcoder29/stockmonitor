@@ -63,6 +63,7 @@ import EtfOverlapAnalyzer from './components/EtfOverlapAnalyzer'
 import RelativeStrengthRanker from './components/RelativeStrengthRanker'
 import PortfolioAttribution from './components/PortfolioAttribution'
 import EarningsStrategyAnalyzer from './components/EarningsStrategyAnalyzer'
+import MarketSentimentDashboard from './components/MarketSentimentDashboard'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -131,6 +132,7 @@ const NAV_GROUPS = [
     icon: Icons.market,
     items: [
       { id: 'market',          label: 'Overview' },
+      { id: 'sentiment',       label: 'Sentiment' },
       { id: 'indexheatmap',    label: 'Index Heatmap' },
       { id: 'breadth',         label: 'Breadth' },
       { id: 'sectors',         label: 'Sector Rotation' },
@@ -835,6 +837,7 @@ export default function App() {
           {activeTab === 'seasonalpatterns'   && <SeasonalPatterns />}
           {activeTab === 'etfoverlap'         && <EtfOverlapAnalyzer />}
           {activeTab === 'earningstrategy'    && <EarningsStrategyAnalyzer watchlist={watchlist} />}
+          {activeTab === 'sentiment'          && <MarketSentimentDashboard />}
           {activeTab === 'relativestrengthr'  && <RelativeStrengthRanker watchlist={watchlist} />}
         </main>
       </div>

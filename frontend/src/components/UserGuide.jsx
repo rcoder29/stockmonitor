@@ -19,7 +19,7 @@ const GUIDE = [
       { type: 'h3', text: 'Navigation' },
       { type: 'p', text: 'The left sidebar organises all features into 8 groups. All groups start collapsed — click a group header to expand it. Only the group containing your current view opens automatically. Click any item to load that view. The ? User Guide button is always pinned to the bottom of the sidebar. On mobile, tap ☰ to open the sidebar drawer.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
-        ['Markets', 'Overview, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
+        ['Markets', 'Overview, Sentiment, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
         ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
         ['Watchlist', 'Watchlist, Heatmap, Correlation, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
         ['News', 'My News Feed'],
@@ -1109,6 +1109,17 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-07-30 — Market Sentiment Dashboard' },
+      { type: 'bullets', items: [
+        'New Market Sentiment Dashboard under Markets → Sentiment.',
+        'Composite 0–100 score (Extreme Fear → Extreme Greed) from 6 market signals: VIX, Put/Call Ratio, Market Momentum, Market Breadth, Junk Bond Demand, Safe Haven Demand.',
+        'Animated semicircle gauge with color-coded needle and zone labels.',
+        'VIX card includes 90-day sparkline chart, 50-day MA comparison, and VIX3M term structure (contango/backwardation).',
+        'Put/Call ratio computed live from SPY options chain (nearest expiry).',
+        'Breadth: % of 30 major S&P 500 stocks above their 50-day MA, fetched in parallel.',
+        'Credit: HYG vs LQD 1-month return spread. Safe Haven: SPY vs TLT 1-month spread + gold.',
+        'Auto-refreshes every 5 minutes. Server-side 30-minute cache.',
+      ]},
       { type: 'h3', text: '2026-07-30 — Earnings Strategy Analyzer' },
       { type: 'bullets', items: [
         'New Earnings Strategy Analyzer under Research → Earnings Strategy.',
