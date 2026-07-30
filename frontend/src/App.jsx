@@ -44,6 +44,10 @@ import ShortSqueeze from './components/ShortSqueeze'
 import IpoCalendar from './components/IpoCalendar'
 import FedWatch from './components/FedWatch'
 import MorningBriefing from './components/MorningBriefing'
+import WheelTracker from './components/WheelTracker'
+import TaxLotManager from './components/TaxLotManager'
+import MedicareEstimator from './components/MedicareEstimator'
+import EstateRmdProjector from './components/EstateRmdProjector'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -165,6 +169,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'tradeideas',   label: 'Trade Ideas' },
       { id: 'positionsize', label: 'Position Sizer' },
+      { id: 'wheeltracker', label: 'Wheel Tracker' },
       { id: 'daytrader',    label: 'Day Trader' },
     ],
   },
@@ -175,6 +180,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'portfolio',      label: 'Portfolio' },
       { id: 'optionstracker', label: 'Options P&L' },
+      { id: 'taxlots',        label: 'Tax Lots' },
       { id: 'journal',        label: 'Trade Journal' },
     ],
   },
@@ -205,6 +211,8 @@ const NAV_GROUPS = [
       { id: 'socialsecurity',         label: 'Social Security' },
       { id: 'earlyretirementhealth',  label: 'Early Retirement Health' },
       { id: 'rothconversionplanner',  label: 'Roth Conversion Planner' },
+      { id: 'medicare',               label: 'Medicare Estimator' },
+      { id: 'estatermd',              label: 'Estate & RMD' },
     ],
   },
 ]
@@ -779,6 +787,10 @@ export default function App() {
           {activeTab === 'shortsqueeze'          && <ShortSqueeze />}
           {activeTab === 'ipocalendar'           && <IpoCalendar />}
           {activeTab === 'fedwatch'              && <FedWatch />}
+          {activeTab === 'wheeltracker'          && <WheelTracker />}
+          {activeTab === 'taxlots'               && <TaxLotManager />}
+          {activeTab === 'medicare'              && <MedicareEstimator />}
+          {activeTab === 'estatermd'             && <EstateRmdProjector />}
         </main>
       </div>
 
