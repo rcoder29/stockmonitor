@@ -49,6 +49,8 @@ import TaxLotManager from './components/TaxLotManager'
 import MedicareEstimator from './components/MedicareEstimator'
 import EstateRmdProjector from './components/EstateRmdProjector'
 import InsiderFeed from './components/InsiderFeed'
+import CryptoDashboard from './components/CryptoDashboard'
+import PortfolioReview from './components/PortfolioReview'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -128,6 +130,7 @@ const NAV_GROUPS = [
       { id: 'shortsqueeze',    label: 'Short Squeeze' },
       { id: 'ipocalendar',     label: 'IPO & Lockups' },
       { id: 'insiderfeed',     label: 'Insider Trading' },
+      { id: 'crypto',          label: 'Crypto' },
     ],
   },
   {
@@ -191,10 +194,11 @@ const NAV_GROUPS = [
     label: 'AI Tools',
     icon: Icons.ai,
     items: [
-      { id: 'morningbriefing', label: 'Morning Briefing' },
-      { id: 'advisor',         label: 'Financial Advisor' },
-      { id: 'taxadvisor',      label: 'Tax Advisor' },
-      { id: 'aibot',           label: 'AI Chat' },
+      { id: 'morningbriefing',  label: 'Morning Briefing' },
+      { id: 'portfolioreview',  label: 'Portfolio Review' },
+      { id: 'advisor',          label: 'Financial Advisor' },
+      { id: 'taxadvisor',       label: 'Tax Advisor' },
+      { id: 'aibot',            label: 'AI Chat' },
     ],
   },
   {
@@ -794,6 +798,8 @@ export default function App() {
           {activeTab === 'taxlots'               && <TaxLotManager />}
           {activeTab === 'medicare'              && <MedicareEstimator />}
           {activeTab === 'estatermd'             && <EstateRmdProjector />}
+          {activeTab === 'crypto'               && <CryptoDashboard />}
+          {activeTab === 'portfolioreview'      && <PortfolioReview />}
         </main>
       </div>
 

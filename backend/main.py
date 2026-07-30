@@ -6281,6 +6281,254 @@ Generate the morning briefing now."""
     )
 
 
+# ── Crypto Dashboard ─────────────────────────────────────────────────────────
+
+_CRYPTO_TTL = timedelta(minutes=5)
+
+_CRYPTO_SYMBOLS = [
+    "BTC-USD","ETH-USD","BNB-USD","SOL-USD","XRP-USD",
+    "ADA-USD","AVAX-USD","DOGE-USD","DOT-USD","LINK-USD",
+    "LTC-USD","BCH-USD","ATOM-USD","FIL-USD","ALGO-USD",
+    "XLM-USD","NEAR-USD","TRX-USD","TON11419-USD","SUI20947-USD",
+]
+
+_CRYPTO_NAMES = {
+    "BTC-USD":"Bitcoin","ETH-USD":"Ethereum","BNB-USD":"BNB",
+    "SOL-USD":"Solana","XRP-USD":"XRP","ADA-USD":"Cardano",
+    "AVAX-USD":"Avalanche","DOGE-USD":"Dogecoin","DOT-USD":"Polkadot",
+    "LINK-USD":"Chainlink","LTC-USD":"Litecoin","BCH-USD":"Bitcoin Cash",
+    "ATOM-USD":"Cosmos","FIL-USD":"Filecoin","ALGO-USD":"Algorand",
+    "XLM-USD":"Stellar","NEAR-USD":"NEAR Protocol","TRX-USD":"TRON",
+    "TON11419-USD":"Toncoin","SUI20947-USD":"Sui",
+}
+
+
+def _fetch_crypto(sym: str) -> dict | None:
+    try:
+        t = yf.Ticker(sym, session=_session)
+        fi = t.fast_info
+        price = _safe_float(fi.last_price)
+        prev  = _safe_float(fi.previous_close)
+        if price is None:
+            return None
+        chg_pct = (price - prev) / prev * 100 if prev else None
+        mkt_cap = _safe_float(fi.market_cap)
+        volume  = _safe_float(fi.last_volume)
+        # fast_info.market_cap is often None for crypto; fall back to info dict
+        if mkt_cap is None:
+            try:
+                mkt_cap = _safe_float(t.info.get("marketCap"))
+            except Exception:
+                pass
+
+        # 7-day performance
+        try:
+            hist = t.history(period="8d")
+            week_ago = float(hist["Close"].iloc[0]) if len(hist) >= 7 else None
+            chg_7d = (price - week_ago) / week_ago * 100 if week_ago else None
+        except Exception:
+            chg_7d = None
+
+        return {
+            "symbol":   sym,
+            "name":     _CRYPTO_NAMES.get(sym, sym.replace("-USD", "")),
+            "price":    price,
+            "change24h": round(chg_pct, 2) if chg_pct is not None else None,
+            "change7d":  round(chg_7d,  2) if chg_7d  is not None else None,
+            "marketCap": mkt_cap,
+            "volume24h": volume,
+        }
+    except Exception as exc:
+        logger.debug("Crypto fetch %s: %s", sym, exc)
+        return None
+
+
+def _fetch_fear_greed() -> dict | None:
+    try:
+        import urllib.request
+        url = "https://api.alternative.me/fng/?limit=1&format=json"
+        with urllib.request.urlopen(url, timeout=5) as r:
+            data = json.loads(r.read())
+        entry = data["data"][0]
+        return {"value": int(entry["value"]), "label": entry["value_classification"]}
+    except Exception:
+        return None
+
+
+@app.get("/api/market/crypto")
+def get_crypto_dashboard():
+    cache_key = "market:crypto"
+    cached = cache_get(cache_key, _CRYPTO_TTL)
+    if cached is not None:
+        return cached
+
+    coins: list[dict] = []
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futures = {pool.submit(_fetch_crypto, sym): sym for sym in _CRYPTO_SYMBOLS}
+        fg_future = pool.submit(_fetch_fear_greed)
+        for fut in as_completed(futures):
+            c = fut.result()
+            if c:
+                coins.append(c)
+        fear_greed = fg_future.result()
+
+    sym_order = {s: i for i, s in enumerate(_CRYPTO_SYMBOLS)}
+    coins.sort(key=lambda c: (-(c.get("marketCap") or 0), sym_order.get(c["symbol"], 99)))
+
+    total_cap = sum(c["marketCap"] or 0 for c in coins)
+    btc_cap   = next((c["marketCap"] or 0 for c in coins if c["symbol"] == "BTC-USD"), 0)
+    eth_cap   = next((c["marketCap"] or 0 for c in coins if c["symbol"] == "ETH-USD"), 0)
+    btc_dom   = round(btc_cap / total_cap * 100, 1) if total_cap else None
+    eth_dom   = round(eth_cap / total_cap * 100, 1) if total_cap else None
+
+    result = {
+        "coins":        coins,
+        "totalMarketCap": total_cap,
+        "btcDominance":   btc_dom,
+        "ethDominance":   eth_dom,
+        "fearGreed":      fear_greed,
+        "asOf":           datetime.now().strftime("%H:%M"),
+    }
+    cache_set(cache_key, result)
+    return result
+
+
+# ── AI Portfolio Review ───────────────────────────────────────────────────────
+
+_PORTFOLIO_REVIEW_SYSTEM = """You are a senior portfolio strategist at a top wealth management firm. Your job is to analyse a client's stock portfolio and deliver a clear, specific, actionable review.
+
+Produce your review using exactly these section headers:
+
+## Portfolio Overview
+2-3 sentences: total value, number of positions, overall character of the portfolio (growth/value/balanced/concentrated/diversified). Mention the single largest position and its weight.
+
+## Concentration & Risk Assessment
+Identify concentration risks: any single stock >20% of portfolio, sector overweight vs S&P 500 benchmark, correlation risks (e.g. multiple semiconductor stocks), and market-cap skew. Be specific — name the stocks and percentages.
+
+## Sector & Style Analysis
+Break down sector exposure and compare to S&P 500 sector weights. Call out what's overweight and underweight. Comment on growth vs value tilt, large vs small cap mix, and domestic vs international exposure.
+
+## Performance & Valuation Snapshot
+Using the P/E, beta, and YTD data provided: flag any overvalued or undervalued positions, high-beta names that increase portfolio volatility, and any positions significantly underperforming. Name specific tickers.
+
+## Rebalancing Recommendations
+3-5 specific, actionable recommendations with rationale. Example: "Trim NVDA from 32% to 15% — it's driving excessive single-stock risk. Redeploy into [specific suggestion]." Be direct and name dollar amounts or percentages.
+
+## Action Checklist
+5 bullet points the investor should do this week or month. Be concrete — mention specific tickers, price levels, or events where relevant.
+
+Write with conviction. Use the actual numbers from the data. Avoid generic advice that could apply to any portfolio."""
+
+
+@app.post("/api/ai/portfolio-review")
+def ai_portfolio_review():
+    # Read portfolio from DB
+    with db_session() as db:
+        rows = db.query(PortfolioPosition).order_by(PortfolioPosition.added_at).all()
+        positions = [{"symbol": r.symbol, "shares": r.shares, "avgCost": r.avg_cost} for r in rows]
+
+    if not positions:
+        def empty_gen():
+            yield f"data: {json.dumps({'error': 'No portfolio positions found. Add positions in Portfolio → Portfolio first.'})}\n\n"
+        return StreamingResponse(empty_gen(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    # Fetch live quotes for all positions
+    symbols = [p["symbol"] for p in positions]
+    quote_map: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=min(len(symbols), 10)) as pool:
+        futures = {pool.submit(_fetch_quote, sym): sym for sym in symbols}
+        for fut in as_completed(futures):
+            q = fut.result()
+            quote_map[q["symbol"]] = q
+
+    # Build enriched positions
+    enriched = []
+    total_value = 0.0
+    for p in positions:
+        q = quote_map.get(p["symbol"], {})
+        price    = q.get("price") or p["avgCost"]
+        value    = price * p["shares"]
+        cost     = p["avgCost"] * p["shares"]
+        unrealised_pct = (value - cost) / cost * 100 if cost else 0
+        total_value += value
+        enriched.append({
+            **p,
+            "currentPrice": price,
+            "value":        value,
+            "unrealisedPct": round(unrealised_pct, 1),
+            "peRatio":   q.get("peRatio"),
+            "beta":      q.get("beta"),
+            "sector":    q.get("sector") or "Unknown",
+            "changePercent": q.get("changePercent"),
+        })
+
+    # Sort by value desc, compute weights
+    enriched.sort(key=lambda x: x["value"], reverse=True)
+    for p in enriched:
+        p["weight"] = round(p["value"] / total_value * 100, 1) if total_value else 0
+
+    # Sector breakdown
+    from collections import defaultdict
+    sector_map: dict[str, float] = defaultdict(float)
+    for p in enriched:
+        sector_map[p["sector"]] += p["weight"]
+
+    # Build prompt
+    pos_lines = "\n".join(
+        f"- {p['symbol']:6s} {p['shares']:8.1f} shares  "
+        f"avg cost ${p['avgCost']:.2f}  "
+        f"current ${p['currentPrice']:.2f}  "
+        f"value ${p['value']:,.0f}  "
+        f"weight {p['weight']:.1f}%  "
+        f"P&L {p['unrealisedPct']:+.1f}%  "
+        f"P/E {p['peRatio'] or 'N/A'}  "
+        f"Beta {p['beta'] or 'N/A'}  "
+        f"Sector: {p['sector']}"
+        for p in enriched
+    )
+
+    sector_lines = "\n".join(
+        f"- {sector}: {weight:.1f}%"
+        for sector, weight in sorted(sector_map.items(), key=lambda x: -x[1])
+    )
+
+    prompt = f"""## Portfolio Summary
+Total Value: ${total_value:,.0f}
+Positions: {len(enriched)}
+
+## Holdings (sorted by weight)
+{pos_lines}
+
+## Sector Breakdown
+{sector_lines}
+
+Please provide a comprehensive portfolio review following the required format."""
+
+    def generate():
+        try:
+            client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=3000,
+                system=[{"type": "text", "text": _PORTFOLIO_REVIEW_SYSTEM,
+                         "cache_control": {"type": "ephemeral"}}],
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                for text in stream.text_stream:
+                    yield f"data: {json.dumps({'text': text})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'totalValue': total_value, 'positions': len(enriched)})}\n\n"
+        except Exception as exc:
+            logger.error("Portfolio review error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # ── Insider Trading Feed ──────────────────────────────────────────────────────
 
 _INSIDER_TTL = timedelta(hours=4)
