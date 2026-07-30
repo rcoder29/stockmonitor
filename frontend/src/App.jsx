@@ -56,6 +56,7 @@ import StockAnalyzer from './components/StockAnalyzer'
 import DividendTracker from './components/DividendTracker'
 import WatchlistHeatmap from './components/WatchlistHeatmap'
 import EarningsSurpriseTracker from './components/EarningsSurpriseTracker'
+import PortfolioStressTest from './components/PortfolioStressTest'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -195,6 +196,7 @@ const NAV_GROUPS = [
       { id: 'optionstracker', label: 'Options P&L' },
       { id: 'taxlots',        label: 'Tax Lots' },
       { id: 'dividendtracker',label: 'Dividend Tracker' },
+      { id: 'stresstest',     label: 'Stress Test' },
       { id: 'journal',        label: 'Trade Journal' },
     ],
   },
@@ -815,6 +817,7 @@ export default function App() {
           {activeTab === 'dividendtracker'      && <DividendTracker />}
           {activeTab === 'watchlistheatmap'    && <WatchlistHeatmap watchlist={watchlist} quotes={quotes} />}
           {activeTab === 'earningssurprise'   && <EarningsSurpriseTracker watchlist={watchlist} />}
+          {activeTab === 'stresstest'         && <PortfolioStressTest />}
         </main>
       </div>
 
