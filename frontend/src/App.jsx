@@ -51,6 +51,7 @@ import EstateRmdProjector from './components/EstateRmdProjector'
 import InsiderFeed from './components/InsiderFeed'
 import CryptoDashboard from './components/CryptoDashboard'
 import PortfolioReview from './components/PortfolioReview'
+import EconomicDashboard from './components/EconomicDashboard'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -131,6 +132,7 @@ const NAV_GROUPS = [
       { id: 'ipocalendar',     label: 'IPO & Lockups' },
       { id: 'insiderfeed',     label: 'Insider Trading' },
       { id: 'crypto',          label: 'Crypto' },
+      { id: 'economic',        label: 'Economic Indicators' },
     ],
   },
   {
@@ -800,6 +802,7 @@ export default function App() {
           {activeTab === 'estatermd'             && <EstateRmdProjector />}
           {activeTab === 'crypto'               && <CryptoDashboard />}
           {activeTab === 'portfolioreview'      && <PortfolioReview />}
+          {activeTab === 'economic'             && <EconomicDashboard />}
         </main>
       </div>
 
