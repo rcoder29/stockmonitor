@@ -57,6 +57,11 @@ import DividendTracker from './components/DividendTracker'
 import WatchlistHeatmap from './components/WatchlistHeatmap'
 import EarningsSurpriseTracker from './components/EarningsSurpriseTracker'
 import PortfolioStressTest from './components/PortfolioStressTest'
+import CorrelationMatrix from './components/CorrelationMatrix'
+import SeasonalPatterns from './components/SeasonalPatterns'
+import EtfOverlapAnalyzer from './components/EtfOverlapAnalyzer'
+import RelativeStrengthRanker from './components/RelativeStrengthRanker'
+import PortfolioAttribution from './components/PortfolioAttribution'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -150,9 +155,12 @@ const NAV_GROUPS = [
       { id: 'dcf',          label: 'DCF Valuation' },
       { id: 'compare',      label: 'Chart Compare' },
       { id: 'backtest',         label: 'Backtester' },
-      { id: 'earningssurprise', label: 'Earnings Surprise' },
-      { id: 'signals',          label: 'Signals' },
-      { id: 'uoa',          label: 'Unusual Options' },
+      { id: 'earningssurprise',    label: 'Earnings Surprise' },
+      { id: 'relativestrengthr',   label: 'Relative Strength' },
+      { id: 'seasonalpatterns',    label: 'Seasonal Patterns' },
+      { id: 'etfoverlap',          label: 'ETF Overlap' },
+      { id: 'signals',             label: 'Signals' },
+      { id: 'uoa',                 label: 'Unusual Options' },
     ],
   },
   {
@@ -160,8 +168,9 @@ const NAV_GROUPS = [
     label: 'Watchlist',
     icon: Icons.watchlist,
     items: [
-      { id: 'watchlist',        label: 'Watchlist' },
-      { id: 'watchlistheatmap', label: 'Heatmap' },
+      { id: 'watchlist',         label: 'Watchlist' },
+      { id: 'watchlistheatmap',  label: 'Heatmap' },
+      { id: 'correlationmatrix', label: 'Correlation' },
       { id: 'pricetargets',     label: 'Price Targets' },
       { id: 'richearnings',  label: 'Earnings+' },
       { id: 'newssentiment', label: 'News Sentiment' },
@@ -196,8 +205,9 @@ const NAV_GROUPS = [
       { id: 'optionstracker', label: 'Options P&L' },
       { id: 'taxlots',        label: 'Tax Lots' },
       { id: 'dividendtracker',label: 'Dividend Tracker' },
-      { id: 'stresstest',     label: 'Stress Test' },
-      { id: 'journal',        label: 'Trade Journal' },
+      { id: 'stresstest',        label: 'Stress Test' },
+      { id: 'attribution',       label: 'Attribution' },
+      { id: 'journal',           label: 'Trade Journal' },
     ],
   },
   {
@@ -818,6 +828,11 @@ export default function App() {
           {activeTab === 'watchlistheatmap'    && <WatchlistHeatmap watchlist={watchlist} quotes={quotes} />}
           {activeTab === 'earningssurprise'   && <EarningsSurpriseTracker watchlist={watchlist} />}
           {activeTab === 'stresstest'         && <PortfolioStressTest />}
+          {activeTab === 'attribution'        && <PortfolioAttribution />}
+          {activeTab === 'correlationmatrix'  && <CorrelationMatrix watchlist={watchlist} />}
+          {activeTab === 'seasonalpatterns'   && <SeasonalPatterns />}
+          {activeTab === 'etfoverlap'         && <EtfOverlapAnalyzer />}
+          {activeTab === 'relativestrengthr'  && <RelativeStrengthRanker watchlist={watchlist} />}
         </main>
       </div>
 

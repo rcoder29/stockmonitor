@@ -7407,6 +7407,376 @@ def get_earnings_surprise(symbols: str):
     return results
 
 
+# ── Correlation Matrix ────────────────────────────────────────────────────────
+
+_CORR_TTL = timedelta(hours=1)
+
+
+@app.get("/api/market/correlation")
+def get_correlation(symbols: str, period: str = "3mo"):
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if len(syms) < 2:
+        raise HTTPException(400, "Need at least 2 symbols")
+    cache_key = f"corr:{'_'.join(sorted(syms))}:{period}"
+    cached = cache_get(cache_key, _CORR_TTL)
+    if cached:
+        return cached
+
+    valid_periods = {"1mo", "3mo", "6mo", "1y", "2y"}
+    if period not in valid_periods:
+        period = "3mo"
+
+    try:
+        price_data: dict[str, pd.Series] = {}
+        errors: list[str] = []
+
+        def _fetch_close(sym: str):
+            try:
+                hist = yf.Ticker(sym).history(period=period)
+                if hist.empty:
+                    return sym, None
+                closes = hist["Close"].dropna()
+                if len(closes) < 10:
+                    return sym, None
+                return sym, closes
+            except Exception:
+                return sym, None
+
+        with ThreadPoolExecutor(max_workers=min(len(syms), 8)) as pool:
+            for sym, closes in pool.map(_fetch_close, syms):
+                if closes is not None:
+                    price_data[sym] = closes
+                else:
+                    errors.append(sym)
+
+        if len(price_data) < 2:
+            raise HTTPException(400, "Insufficient data for correlation")
+
+        df = pd.DataFrame(price_data).dropna()
+        returns = df.pct_change().dropna()
+        corr = returns.corr()
+
+        used_syms = list(corr.columns)
+        matrix = []
+        for sym_a in used_syms:
+            row = []
+            for sym_b in used_syms:
+                val = corr.loc[sym_a, sym_b]
+                row.append(round(float(val), 4) if not pd.isna(val) else None)
+            matrix.append(row)
+
+        result = {"symbols": used_syms, "matrix": matrix, "period": period, "errors": errors}
+        cache_set(cache_key, result)
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Correlation: %s", exc)
+        raise HTTPException(500, str(exc))
+
+
+# ── Seasonal Patterns ─────────────────────────────────────────────────────────
+
+_SEASONAL_TTL = timedelta(hours=24)
+_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+@app.get("/api/market/seasonal")
+def get_seasonal(symbol: str, years: int = 10):
+    sym = symbol.strip().upper()
+    cache_key = f"seasonal:{sym}:{years}"
+    cached = cache_get(cache_key, _SEASONAL_TTL)
+    if cached:
+        return cached
+
+    try:
+        t = yf.Ticker(sym)
+        hist = t.history(period=f"{years}y")
+        if hist.empty or len(hist) < 100:
+            raise HTTPException(404, f"Insufficient history for {sym}")
+
+        info = t.fast_info
+        name = getattr(info, "exchange", None)
+        try:
+            name = t.info.get("longName") or t.info.get("shortName") or sym
+        except Exception:
+            name = sym
+
+        hist = hist[["Close"]].copy()
+        hist.index = hist.index.tz_localize(None) if hist.index.tzinfo else hist.index
+        hist["year"]  = hist.index.year
+        hist["month"] = hist.index.month
+
+        month_data: dict[int, list[float]] = {m: [] for m in range(1, 13)}
+
+        for (yr, mo), grp in hist.groupby(["year", "month"]):
+            if len(grp) < 5:
+                continue
+            open_px  = float(grp["Close"].iloc[0])
+            close_px = float(grp["Close"].iloc[-1])
+            if open_px > 0:
+                ret = (close_px / open_px - 1) * 100
+                month_data[mo].append(round(ret, 2))
+
+        months = []
+        for m in range(1, 13):
+            rets = month_data[m]
+            if not rets:
+                months.append({"month": m, "name": _MONTH_NAMES[m - 1],
+                               "avgReturn": None, "winRate": None,
+                               "best": None, "worst": None, "years": 0, "returns": []})
+                continue
+            avg = round(sum(rets) / len(rets), 2)
+            win = round(sum(1 for r in rets if r > 0) / len(rets) * 100)
+            months.append({
+                "month":     m,
+                "name":      _MONTH_NAMES[m - 1],
+                "avgReturn": avg,
+                "winRate":   win,
+                "best":      round(max(rets), 2),
+                "worst":     round(min(rets), 2),
+                "years":     len(rets),
+                "returns":   rets,
+            })
+
+        valid = [mo for mo in months if mo["avgReturn"] is not None]
+        best_mo  = max(valid, key=lambda x: x["avgReturn"]) if valid else None
+        worst_mo = min(valid, key=lambda x: x["avgReturn"]) if valid else None
+
+        result = {
+            "symbol":   sym,
+            "name":     name,
+            "months":   months,
+            "bestMonth":  best_mo["month"] if best_mo else None,
+            "worstMonth": worst_mo["month"] if worst_mo else None,
+            "yearsOfData": years,
+        }
+        cache_set(cache_key, result)
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Seasonal %s: %s", sym, exc)
+        raise HTTPException(500, str(exc))
+
+
+# ── ETF Overlap Analyzer ──────────────────────────────────────────────────────
+
+_ETF_OVERLAP_TTL = timedelta(hours=24)
+
+
+def _fetch_etf_holdings(sym: str) -> dict | None:
+    cache_key = f"etfhold:{sym}"
+    cached = cache_get(cache_key, _ETF_OVERLAP_TTL)
+    if cached:
+        return cached
+    try:
+        t = yf.Ticker(sym)
+        info = {}
+        try:
+            info = t.info or {}
+        except Exception:
+            pass
+
+        name = info.get("longName") or info.get("shortName") or sym
+        holdings_list: list[dict] = []
+
+        try:
+            fd = t.get_funds_data()
+            if fd is not None and hasattr(fd, "top_holdings"):
+                th = fd.top_holdings
+                if th is not None and not th.empty:
+                    for idx, row in th.iterrows():
+                        ticker_sym = str(idx) if idx else None
+                        pct = None
+                        for col in ["holdingPercent", "Holding Percent", "value"]:
+                            if col in row and row[col] is not None:
+                                try:
+                                    pct = float(row[col]) * 100
+                                    break
+                                except Exception:
+                                    pass
+                        holding_name = None
+                        for col in ["holdingName", "Holding Name", "name"]:
+                            if col in row:
+                                holding_name = str(row[col])
+                                break
+                        if ticker_sym and pct is not None:
+                            holdings_list.append({
+                                "symbol": ticker_sym.upper(),
+                                "name":   holding_name or ticker_sym,
+                                "weight": round(pct, 4),
+                            })
+        except Exception:
+            pass
+
+        if not holdings_list:
+            try:
+                th = t.funds_data.top_holdings if hasattr(t, "funds_data") else None
+                if th is not None and not th.empty:
+                    for idx, row in th.iterrows():
+                        ticker_sym = str(idx) if idx else None
+                        pct = None
+                        try:
+                            pct = float(row.iloc[0]) * 100
+                        except Exception:
+                            pass
+                        if ticker_sym and pct is not None:
+                            holdings_list.append({
+                                "symbol": ticker_sym.upper(),
+                                "name":   ticker_sym,
+                                "weight": round(pct, 4),
+                            })
+            except Exception:
+                pass
+
+        result = {"symbol": sym, "name": name, "holdings": holdings_list}
+        cache_set(cache_key, result)
+        return result
+    except Exception as exc:
+        logger.warning("ETF holdings %s: %s", sym, exc)
+        return None
+
+
+@app.get("/api/market/etf-overlap")
+def get_etf_overlap(tickers: str):
+    syms = [s.strip().upper() for s in tickers.split(",") if s.strip()][:4]
+    if len(syms) < 2:
+        raise HTTPException(400, "Need at least 2 ETF tickers")
+
+    cache_key = f"etfoverlap:{'_'.join(sorted(syms))}"
+    cached = cache_get(cache_key, _ETF_OVERLAP_TTL)
+    if cached:
+        return cached
+
+    etf_data: list[dict] = []
+    with ThreadPoolExecutor(max_workers=min(len(syms), 4)) as pool:
+        futures = {pool.submit(_fetch_etf_holdings, sym): sym for sym in syms}
+        for fut in as_completed(futures):
+            r = fut.result()
+            if r:
+                etf_data.append(r)
+
+    etf_data.sort(key=lambda x: syms.index(x["symbol"]) if x["symbol"] in syms else 99)
+
+    holding_map: dict[str, dict] = {}
+    for etf in etf_data:
+        for h in etf.get("holdings", []):
+            hs = h["symbol"]
+            if hs not in holding_map:
+                holding_map[hs] = {"symbol": hs, "name": h["name"], "appearsIn": [], "weights": {}}
+            holding_map[hs]["appearsIn"].append(etf["symbol"])
+            holding_map[hs]["weights"][etf["symbol"]] = h["weight"]
+
+    all_holdings = list(holding_map.values())
+    overlap = [h for h in all_holdings if len(h["appearsIn"]) >= 2]
+    overlap.sort(key=lambda x: -sum(x["weights"].values()))
+
+    result = {
+        "etfs":    etf_data,
+        "overlap": overlap[:50],
+        "allHoldings": all_holdings,
+        "overlapCount": len(overlap),
+    }
+    cache_set(cache_key, result)
+    return result
+
+
+# ── Relative Strength Ranker ──────────────────────────────────────────────────
+
+_RS_TTL = timedelta(minutes=30)
+
+
+@app.get("/api/market/relative-strength")
+def get_relative_strength(symbols: str):
+    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not syms:
+        return []
+
+    all_syms = list(dict.fromkeys(syms + ["SPY"]))
+    cache_key = f"rs:{'_'.join(sorted(syms))}"
+    cached = cache_get(cache_key, _RS_TTL)
+    if cached:
+        return cached
+
+    def _fetch_rs_data(sym: str):
+        try:
+            hist = yf.Ticker(sym).history(period="1y")
+            if hist.empty or len(hist) < 20:
+                return sym, None
+            closes = hist["Close"].dropna()
+            return sym, closes
+        except Exception:
+            return sym, None
+
+    price_map: dict[str, pd.Series] = {}
+    with ThreadPoolExecutor(max_workers=min(len(all_syms), 8)) as pool:
+        for sym, closes in pool.map(_fetch_rs_data, all_syms):
+            if closes is not None:
+                price_map[sym] = closes
+
+    spy_closes = price_map.get("SPY")
+    if spy_closes is None:
+        return []
+
+    def _period_return(closes: pd.Series, days: int) -> float | None:
+        if len(closes) < days + 1:
+            return None
+        end   = float(closes.iloc[-1])
+        start = float(closes.iloc[-days - 1])
+        return round((end / start - 1) * 100, 2) if start else None
+
+    def _rs_ratio(stock_ret: float | None, spy_ret: float | None) -> float | None:
+        if stock_ret is None or spy_ret is None:
+            return None
+        if spy_ret == 0:
+            return None
+        return round(stock_ret / abs(spy_ret) if spy_ret < 0 else stock_ret / spy_ret, 3)
+
+    PERIODS = [(5, "rs1w"), (21, "rs1m"), (63, "rs3m"), (126, "rs6m"), (252, "rs1y")]
+    spy_rets = {label: _period_return(spy_closes, days) for days, label in PERIODS}
+
+    results = []
+    for sym in syms:
+        closes = price_map.get(sym)
+        if closes is None:
+            continue
+        try:
+            t = yf.Ticker(sym)
+            info = {}
+            try:
+                fi = t.fast_info
+                price = _safe_float(getattr(fi, "last_price", None))
+            except Exception:
+                price = None
+            try:
+                info = t.info or {}
+            except Exception:
+                pass
+            name   = info.get("longName") or info.get("shortName") or sym
+            sector = info.get("sector")
+
+            row: dict = {"symbol": sym, "name": name, "sector": sector, "price": price}
+            composite_parts = []
+            for days, label in PERIODS:
+                sr = _period_return(closes, days)
+                rs = _rs_ratio(sr, spy_rets[label])
+                row[label.replace("rs", "ret")] = sr
+                row[label] = rs
+                if rs is not None:
+                    composite_parts.append(rs)
+
+            row["composite"] = round(sum(composite_parts) / len(composite_parts), 3) if composite_parts else None
+            results.append(row)
+        except Exception as exc:
+            logger.warning("RS %s: %s", sym, exc)
+
+    results.sort(key=lambda x: -(x.get("composite") or 0))
+    cache_set(cache_key, results)
+    return results
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
