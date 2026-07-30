@@ -20,7 +20,7 @@ const GUIDE = [
       { type: 'p', text: 'The left sidebar organises all features into 8 groups. All groups start collapsed — click a group header to expand it. Only the group containing your current view opens automatically. Click any item to load that view. The ? User Guide button is always pinned to the bottom of the sidebar. On mobile, tap ☰ to open the sidebar drawer.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
         ['Markets', 'Overview, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
-        ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
+        ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
         ['Watchlist', 'Watchlist, Heatmap, Correlation, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
         ['News', 'My News Feed'],
         ['Trading', 'Trade Ideas, Position Sizer, Wheel Tracker, Day Trader'],
@@ -617,6 +617,32 @@ const GUIDE = [
         'ITM contracts (in the money) are shown slightly brighter.',
       ]},
       { type: 'tip', text: 'Tip: unusual call activity on a stock you hold can be a bullish confirmation signal. Unusual put activity may indicate hedging or bearish positioning by informed players.' },
+      { type: 'h3', text: 'Earnings Strategy Analyzer' },
+      { type: 'p', text: 'Identifies the historically best trading strategy for each stock around its earnings announcement — pre-run, buy the beat, buy the dip, or hold through — based on 3 years of actual earnings data. Found under Research → Earnings Strategy.' },
+      { type: 'steps', items: [
+        'Scanner mode: enter symbols or click "⬇ Scan Watchlist" to analyze all watchlist stocks at once. Takes 10–30 seconds for larger lists.',
+        'The scanner table shows every stock sorted by days to next earnings, with beat rate, average earnings move, pre-run tendency, and the recommended strategy with its historical win rate.',
+        'Click any row (or "Deep Dive →") to open the full single-stock analysis.',
+        'Deep Dive mode: shows 4 strategy cards, a drift chart of all historical earnings events, and a full trade history table.',
+        'Quick Deep Dive: use the input bar at the top of the page to jump directly to any ticker without re-running the full scan.',
+      ]},
+      { type: 'table', headers: ['Strategy', 'When to use', 'Entry', 'Exit'], rows: [
+        ['Pre-Earnings Run', 'Stock historically runs up before earnings (positive avg pre-10D)', '10 trading days before earnings date', '1 trading day before earnings'],
+        ['Buy the Beat', 'Stock has high beat rate AND tends to continue higher after beating', '1 day after earnings, only if EPS beat', '10 trading days after earnings'],
+        ['Buy the Dip', 'Stock historically bounces after earnings sell-offs (mean reversion)', '1 day after earnings, only if stock dropped ≥3%', '10 trading days after earnings'],
+        ['Hold Through', 'Want full earnings-window exposure (highest risk/reward)', '5 days before earnings', '5 days after earnings'],
+      ]},
+      { type: 'table', headers: ['Column / Metric', 'What it means'], rows: [
+        ['Beat Rate', '% of quarters where EPS actual ≥ EPS estimate over the last 3 years.'],
+        ['Avg Move', 'Average absolute price move on the earnings announcement (reaction day), regardless of direction.'],
+        ['Pre-Run 10D', 'Average price change in the 10 trading days leading up to each earnings announcement.'],
+        ['Best Win %', 'Win rate of the best-performing strategy for this stock across historical setups.'],
+        ['Best Avg Ret', 'Average return per trade for the best strategy.'],
+        ['Signal', 'STRONG BUY (≥70% win rate, ≥2% avg) / BUY (≥60%, ≥1%) / NEUTRAL / WEAK / AVOID / NO DATA.'],
+        ['EV (Expected Value)', 'Win rate × avg return — the single best measure of strategy quality. Higher EV = better edge.'],
+        ['Earnings Reaction', 'In the drift chart/table, this is the price move from the day-before close to the day-after close — captures the full earnings gap regardless of whether the report was AMC or BMO.'],
+      ]},
+      { type: 'tip', text: 'Tip: the Pre-Earnings Run strategy is often overlooked. Many stocks exhibit a reliable 2–4% run in the 10 days before earnings as investors position ahead of the announcement. By selling before the report, you capture the run without taking the binary risk of the earnings event itself.' },
       { type: 'h3', text: 'Relative Strength Ranker' },
       { type: 'p', text: 'Ranks any list of stocks by how much they have outperformed or underperformed SPY over 5 timeframes. Found under Research → Relative Strength. RS > 1.0 means the stock returned more than the market; RS < 1.0 means it lagged.' },
       { type: 'steps', items: [
@@ -1083,6 +1109,16 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-07-30 — Earnings Strategy Analyzer' },
+      { type: 'bullets', items: [
+        'New Earnings Strategy Analyzer under Research → Earnings Strategy.',
+        'Scanner mode: scan entire watchlist for earnings opportunities, sorted by days to earnings, with beat rate, avg move, pre-run tendency, best strategy, and signal badge.',
+        'Deep Dive mode: 4 strategy cards (Pre-Earnings Run, Buy the Beat, Buy the Dip, Hold Through) with win rate, avg return, best/worst trade, and expected value.',
+        'Drift Chart: visual bar chart of all historical earnings events showing pre-10D/5D, earnings reaction, and post-1D/5D/10D for the last 8 quarters.',
+        'Trade History table: full per-quarter breakdown with EPS data, surprise %, and all drift metrics.',
+        'Signal system: STRONG BUY / BUY / NEUTRAL / WEAK / AVOID based on win rate and avg return thresholds.',
+        'Backend: /api/market/earnings-strategy (single stock full analysis) and /api/market/earnings-strategy-scan (multi-stock scanner). 6-hour cache.',
+      ]},
       { type: 'h3', text: '2026-07-30 — 5 New Analysis Features' },
       { type: 'bullets', items: [
         'Correlation Matrix (Watchlist → Correlation): color-coded Pearson correlation grid for any set of stocks over 1M–2Y lookbacks. Identifies hidden concentration risk and best diversifiers.',

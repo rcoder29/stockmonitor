@@ -62,6 +62,7 @@ import SeasonalPatterns from './components/SeasonalPatterns'
 import EtfOverlapAnalyzer from './components/EtfOverlapAnalyzer'
 import RelativeStrengthRanker from './components/RelativeStrengthRanker'
 import PortfolioAttribution from './components/PortfolioAttribution'
+import EarningsStrategyAnalyzer from './components/EarningsStrategyAnalyzer'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -156,6 +157,7 @@ const NAV_GROUPS = [
       { id: 'compare',      label: 'Chart Compare' },
       { id: 'backtest',         label: 'Backtester' },
       { id: 'earningssurprise',    label: 'Earnings Surprise' },
+      { id: 'earningstrategy',     label: 'Earnings Strategy' },
       { id: 'relativestrengthr',   label: 'Relative Strength' },
       { id: 'seasonalpatterns',    label: 'Seasonal Patterns' },
       { id: 'etfoverlap',          label: 'ETF Overlap' },
@@ -832,6 +834,7 @@ export default function App() {
           {activeTab === 'correlationmatrix'  && <CorrelationMatrix watchlist={watchlist} />}
           {activeTab === 'seasonalpatterns'   && <SeasonalPatterns />}
           {activeTab === 'etfoverlap'         && <EtfOverlapAnalyzer />}
+          {activeTab === 'earningstrategy'    && <EarningsStrategyAnalyzer watchlist={watchlist} />}
           {activeTab === 'relativestrengthr'  && <RelativeStrengthRanker watchlist={watchlist} />}
         </main>
       </div>
