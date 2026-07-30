@@ -48,6 +48,7 @@ import WheelTracker from './components/WheelTracker'
 import TaxLotManager from './components/TaxLotManager'
 import MedicareEstimator from './components/MedicareEstimator'
 import EstateRmdProjector from './components/EstateRmdProjector'
+import InsiderFeed from './components/InsiderFeed'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -126,6 +127,7 @@ const NAV_GROUPS = [
       { id: 'recommendations', label: 'Analyst Picks' },
       { id: 'shortsqueeze',    label: 'Short Squeeze' },
       { id: 'ipocalendar',     label: 'IPO & Lockups' },
+      { id: 'insiderfeed',     label: 'Insider Trading' },
     ],
   },
   {
@@ -787,6 +789,7 @@ export default function App() {
           {activeTab === 'shortsqueeze'          && <ShortSqueeze />}
           {activeTab === 'ipocalendar'           && <IpoCalendar />}
           {activeTab === 'fedwatch'              && <FedWatch />}
+          {activeTab === 'insiderfeed'           && <InsiderFeed />}
           {activeTab === 'wheeltracker'          && <WheelTracker />}
           {activeTab === 'taxlots'               && <TaxLotManager />}
           {activeTab === 'medicare'              && <MedicareEstimator />}
