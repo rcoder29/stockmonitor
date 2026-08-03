@@ -65,6 +65,7 @@ import PortfolioAttribution from './components/PortfolioAttribution'
 import EarningsStrategyAnalyzer from './components/EarningsStrategyAnalyzer'
 import MarketSentimentDashboard from './components/MarketSentimentDashboard'
 import AnalystRatingTracker from './components/AnalystRatingTracker'
+import FundHoldingsExplorer from './components/FundHoldingsExplorer'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -162,6 +163,7 @@ const NAV_GROUPS = [
       { id: 'earningssurprise',    label: 'Earnings Surprise' },
       { id: 'earningstrategy',     label: 'Earnings Strategy' },
       { id: 'analystratings',      label: 'Analyst Ratings' },
+      { id: 'fundholdings',        label: 'Fund Holdings' },
       { id: 'relativestrengthr',   label: 'Relative Strength' },
       { id: 'seasonalpatterns',    label: 'Seasonal Patterns' },
       { id: 'etfoverlap',          label: 'ETF Overlap' },
@@ -842,6 +844,7 @@ export default function App() {
           {activeTab === 'sentiment'          && <MarketSentimentDashboard />}
           {activeTab === 'relativestrengthr'  && <RelativeStrengthRanker watchlist={watchlist} />}
           {activeTab === 'analystratings'     && <AnalystRatingTracker watchlist={watchlist} />}
+          {activeTab === 'fundholdings'       && <FundHoldingsExplorer />}
         </main>
       </div>
 
