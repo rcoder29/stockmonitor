@@ -4,6 +4,28 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — SPACs: Alerts
+
+Rounds out the SPACs module: Tracker, Discovery, Deal Analyzer, Portfolio, Alerts.
+
+### New
+- **Alerts** — SPAC-specific alert rules, separate from the general Smart Alerts (Watchlist → Smart Alerts) since these read trust value, deadline, and status directly from tracked SPACs rather than price history.
+- Three alert types: **Deadline Approaching** (days-to-redemption threshold, fires on overdue too), **Discount/Premium Threshold** (directional — at-or-below or at-or-above a % vs. live trust value), **Deal Announced** (fires as soon as status moves off "Searching for Target").
+- Same on-demand scan pattern as the general Smart Alerts: rules are checked live when you click "Scan," not via background polling, and there's no dedup/already-seen tracking.
+
+### Backend
+- `SpacAlertRule` model (`spac_alert_rules` table): spac_id, alert_type, params JSON, active flag (soft-delete, matching the existing `SmartAlertRule` pattern).
+- `GET/POST/DELETE /api/spac/alerts` + `POST /api/spac/alerts/scan` — evaluates each active rule against `_enrich_spac` output for its linked SPAC.
+
+### Files changed
+- `backend/database.py` — `SpacAlertRule` model + migration
+- `backend/main.py` — `/api/spac/alerts` endpoints + `_check_spac_alert`
+- `frontend/src/components/SpacAlerts.jsx` (new)
+- `frontend/src/App.jsx` — new `spacalerts` tab route
+- `frontend/src/components/UserGuide.jsx` — new Alerts section + changelog entry
+
+---
+
 ## 2026-08-06 — SPACs: Portfolio
 
 Completes the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio).

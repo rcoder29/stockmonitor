@@ -34,7 +34,7 @@ from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
     WatchlistSymbol, WatchlistGroup, PortfolioPosition, PortfolioSnapshot,
     PriceAlert, SmartAlertRule, OptionsPosition, PriceTarget, TradeJournalEntry,
-    MergerDeal, ArbPosition, SpacDeal, SpacPosition,
+    MergerDeal, ArbPosition, SpacDeal, SpacPosition, SpacAlertRule,
 )
 
 # Corporate proxy uses a self-signed cert — reuse one session with SSL disabled
@@ -10135,6 +10135,136 @@ def delete_spac_position(position_id: int):
             raise HTTPException(404, 'Position not found')
         db.delete(pos)
     return {'ok': True}
+
+
+_SPAC_ALERT_TYPES = {
+    'deadline_approaching': {'param': 'days', 'default': 30,   'label': 'Deadline Approaching'},
+    'discount_threshold':   {'param': 'pct',  'default': -3.0, 'label': 'Discount/Premium Threshold'},
+    'deal_announced':       {'param': None,   'default': None, 'label': 'Deal Announced'},
+}
+
+
+class SpacAlertCreate(BaseModel):
+    spac_id:    int
+    alert_type: str
+    params:     dict = {}
+
+
+def _check_spac_alert(rule: dict, spac: SpacDeal) -> dict | None:
+    """Evaluate one SPAC alert rule against live-enriched deal data. Like the
+    generic Smart Alerts scanner, this checks whether the condition is
+    currently true -- it isn't edge-triggered / doesn't dedupe across scans."""
+    atype  = rule['alert_type']
+    params = rule['params']
+    enriched = _enrich_spac(spac)
+
+    if atype == 'deadline_approaching':
+        days_thresh = params.get('days', 30)
+        d = enriched['daysToDeadline']
+        if d is not None and d <= days_thresh:
+            detail = f"Overdue by {-d} day(s)" if d < 0 else f"{d} day(s) to deadline ({spac.deadline_date})"
+            return {'triggered': True, 'detail': detail}
+
+    elif atype == 'discount_threshold':
+        direction = params.get('direction', 'below')
+        pct = params.get('pct', -3.0)
+        disc = enriched['discountPct']
+        if disc is not None:
+            if direction == 'below' and disc <= pct:
+                return {'triggered': True, 'detail': f"Trading at {disc:.1f}% vs trust (≤ {pct}%)"}
+            if direction == 'above' and disc >= pct:
+                return {'triggered': True, 'detail': f"Trading at {disc:.1f}% vs trust (≥ {pct}%)"}
+
+    elif atype == 'deal_announced':
+        if spac.status != 'searching':
+            detail = f"Status: {enriched['statusLabel']}"
+            if spac.target_name:
+                detail += f" — target: {spac.target_name}"
+            return {'triggered': True, 'detail': detail}
+
+    return None
+
+
+@app.get('/api/spac/alerts')
+def list_spac_alerts():
+    with db_session() as db:
+        rules = db.query(SpacAlertRule).filter(SpacAlertRule.active == 1).order_by(SpacAlertRule.created_at.desc()).all()
+        if not rules:
+            return []
+        spac_ids = {r.spac_id for r in rules}
+        spacs = {d.id: d for d in db.query(SpacDeal).filter(SpacDeal.id.in_(spac_ids)).all()}
+
+    return [{
+        'id':          r.id,
+        'spacId':      r.spac_id,
+        'ticker':      spacs[r.spac_id].ticker if r.spac_id in spacs else '?',
+        'companyName': spacs[r.spac_id].company_name if r.spac_id in spacs else '',
+        'alertType':   r.alert_type,
+        'label':       _SPAC_ALERT_TYPES.get(r.alert_type, {}).get('label', r.alert_type),
+        'params':      json.loads(r.params),
+        'createdAt':   str(r.created_at),
+    } for r in rules]
+
+
+@app.post('/api/spac/alerts')
+def create_spac_alert(req: SpacAlertCreate):
+    if req.alert_type not in _SPAC_ALERT_TYPES:
+        raise HTTPException(400, f"Unknown alert_type. Valid: {list(_SPAC_ALERT_TYPES)}")
+    with db_session() as db:
+        if not db.query(SpacDeal).filter(SpacDeal.id == req.spac_id).first():
+            raise HTTPException(404, 'SPAC not found')
+        rule = SpacAlertRule(spac_id=req.spac_id, alert_type=req.alert_type, params=json.dumps(req.params))
+        db.add(rule)
+        db.flush()
+        return {'id': rule.id}
+
+
+@app.delete('/api/spac/alerts/{rule_id}')
+def delete_spac_alert(rule_id: int):
+    with db_session() as db:
+        rule = db.query(SpacAlertRule).filter(SpacAlertRule.id == rule_id).first()
+        if not rule:
+            raise HTTPException(404, 'Rule not found')
+        rule.active = 0
+    return {'ok': True}
+
+
+@app.post('/api/spac/alerts/scan')
+def scan_spac_alerts():
+    with db_session() as db:
+        rules = db.query(SpacAlertRule).filter(SpacAlertRule.active == 1).all()
+        if not rules:
+            return []
+        spac_ids = {r.spac_id for r in rules}
+        spacs = {d.id: d for d in db.query(SpacDeal).filter(SpacDeal.id.in_(spac_ids)).all()}
+        rule_list = [{'id': r.id, 'spac_id': r.spac_id, 'alert_type': r.alert_type, 'params': json.loads(r.params)} for r in rules]
+
+    results = []
+    with ThreadPoolExecutor(max_workers=min(len(rule_list), 8)) as pool:
+        futures = {}
+        for r in rule_list:
+            spac = spacs.get(r['spac_id'])
+            if spac is None:
+                continue
+            futures[pool.submit(_check_spac_alert, r, spac)] = r
+        for fut, r in futures.items():
+            try:
+                outcome = fut.result()
+            except Exception as exc:
+                logger.warning('spac alert check %s: %s', r['id'], exc)
+                continue
+            if outcome and outcome.get('triggered'):
+                spac = spacs[r['spac_id']]
+                results.append({
+                    'id':          r['id'],
+                    'spacId':      r['spac_id'],
+                    'ticker':      spac.ticker,
+                    'companyName': spac.company_name,
+                    'alertType':   r['alert_type'],
+                    'label':       _SPAC_ALERT_TYPES.get(r['alert_type'], {}).get('label', r['alert_type']),
+                    'detail':      outcome.get('detail', ''),
+                })
+    return results
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

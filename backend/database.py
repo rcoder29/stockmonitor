@@ -186,6 +186,16 @@ class SpacPosition(Base):
     created_at    = Column(DateTime, default=datetime.utcnow)
 
 
+class SpacAlertRule(Base):
+    __tablename__ = "spac_alert_rules"
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    spac_id     = Column(Integer, nullable=False, index=True)   # references spac_deals.id
+    alert_type  = Column(String(30), nullable=False)            # deadline_approaching | discount_threshold | deal_announced
+    params      = Column(Text, default='{}')
+    active      = Column(Integer, default=1)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
 # ── Generic key-value cache ───────────────────────────────────────────────────
 
 class CacheEntry(Base):
@@ -283,6 +293,13 @@ def migrate_db():
          "entry_price REAL NOT NULL, "
          "entry_date VARCHAR(10) DEFAULT '', "
          "notes VARCHAR(500) DEFAULT '', "
+         "created_at DATETIME)"),
+        ("CREATE TABLE IF NOT EXISTS spac_alert_rules ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "spac_id INTEGER NOT NULL, "
+         "alert_type VARCHAR(30) NOT NULL, "
+         "params TEXT DEFAULT '{}', "
+         "active INTEGER DEFAULT 1, "
          "created_at DATETIME)"),
     ]
     with engine.connect() as conn:

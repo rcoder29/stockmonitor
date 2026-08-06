@@ -791,6 +791,15 @@ const GUIDE = [
         'Trust Floor is shown per common position and rolled up in the "Trust-Protected" summary card and floor-value panel — the amount recoverable via redemption regardless of deal outcome.',
         'Warrant positions never show a floor value: warrants carry no redemption right and can go to zero if the deal falls through or the stock never clears the strike.',
       ]},
+      { type: 'h3', text: 'Alerts' },
+      { type: 'p', text: 'SPAC-specific alert rules for redemption deadlines, discount/premium thresholds, and deal announcements on tracked SPACs. Found under SPACs → Alerts. Separate from the general Smart Alerts (Watchlist → Smart Alerts) since these read trust value, deadline, and status directly from the SPAC Tracker rather than price history.' },
+      { type: 'steps', items: [
+        'Pick a tracked SPAC and an alert type, set any parameters, then "+ Add Rule". Click "Scan N Rules" to check them all against live data.',
+        'Deadline Approaching fires when the days remaining to the redemption deadline falls at or below your threshold (including overdue).',
+        'Discount/Premium Threshold fires when the live discount/premium to trust crosses your chosen level in the chosen direction — e.g. "at or below −3%" to catch attractive entries, or "at or above 0%" to flag when a SPAC has moved to a premium.',
+        'Deal Announced fires as soon as status moves away from "Searching for Target" — the single biggest catalyst for a SPAC.',
+      ]},
+      { type: 'tip', text: 'Like the general Smart Alerts, this checks whether the condition is true right now each time you scan — it isn\'t a background push notification and doesn\'t track "already seen." Remove a rule once you\'ve acted on it, or leave it to keep confirming the condition on each scan.' },
       { type: 'h3', text: 'Relative Strength Ranker' },
       { type: 'p', text: 'Ranks any list of stocks by how much they have outperformed or underperformed SPY over 5 timeframes. Found under Research → Relative Strength. RS > 1.0 means the stock returned more than the market; RS < 1.0 means it lagged.' },
       { type: 'steps', items: [
@@ -1257,6 +1266,12 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-08-06 — SPACs: Alerts' },
+      { type: 'bullets', items: [
+        'New Alerts page rounds out the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio, Alerts).',
+        'Three SPAC-specific alert types: Deadline Approaching (days-to-redemption threshold, including overdue), Discount/Premium Threshold (directional, vs. live trust value), and Deal Announced (status moves off "Searching for Target").',
+        'Separate rule/scan system from the general Smart Alerts (Watchlist → Smart Alerts) since these read trust value, deadline, and status from the SPAC Tracker rather than price history alone — same on-demand scan pattern (no background polling, no dedup).',
+      ]},
       { type: 'h3', text: '2026-08-06 — SPACs: Portfolio' },
       { type: 'bullets', items: [
         'New Portfolio page completes the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio).',
