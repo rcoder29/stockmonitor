@@ -67,6 +67,10 @@ import MarketSentimentDashboard from './components/MarketSentimentDashboard'
 import AnalystRatingTracker from './components/AnalystRatingTracker'
 import FundHoldingsExplorer from './components/FundHoldingsExplorer'
 import MergerDealDashboard from './components/MergerDealDashboard'
+import MergerOpportunityScanner from './components/MergerOpportunityScanner'
+import MergerDealAnalyzer from './components/MergerDealAnalyzer'
+import MergerArbPortfolio from './components/MergerArbPortfolio'
+import MergerRiskMatrix from './components/MergerRiskMatrix'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -863,6 +867,10 @@ export default function App() {
           {activeTab === 'analystratings'     && <AnalystRatingTracker watchlist={watchlist} />}
           {activeTab === 'fundholdings'       && <FundHoldingsExplorer />}
           {activeTab === 'mergerdashboard'    && <MergerDealDashboard />}
+          {activeTab === 'mergerscanner'      && <MergerOpportunityScanner />}
+          {activeTab === 'mergeranalyzer'     && <MergerDealAnalyzer />}
+          {activeTab === 'mergerportfolio'    && <MergerArbPortfolio />}
+          {activeTab === 'mergerrisk'         && <MergerRiskMatrix />}
         </main>
       </div>
 

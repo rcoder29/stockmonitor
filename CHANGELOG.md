@@ -4,6 +4,36 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — Merger Arb: Opportunity Scanner, Deal Analyzer, Arb Portfolio, Risk Matrix
+
+Completes the 5-component Merger Arb sidebar group (Deal Dashboard shipped earlier today).
+
+### New
+- **Opportunity Scanner** — expands EDGAR discovery beyond Deal Dashboard's tender-offer-only feed to 6 merger-indicative form types (SC TO-T, SC 13E-3, DEFM14A, PREM14A, S-4, 425) over a 60-day window. Extracts ticker from EDGAR's `display_names` field, enriches each filing with live price + 5D/1M % change, cross-references against tracked deals ("Tracked" badge), and supports filter-by-form/search/hide-tracked plus one-click Add.
+- **Deal Analyzer** — risk/reward calculator for a single deal (tracked or ad-hoc). Estimates a walk-away price from pre-announcement trading (or a 15% discount heuristic), computes upside/downside %, market-implied probability of close (`(current − walkaway) / (offer − walkaway)`), a full risk-factor point breakdown, and an expected-value table across close-probability scenarios (50–95%).
+- **Arb Portfolio** — position sizing tracker. Add shares/entry price/date against any tracked deal; live cost basis, market value, unrealized P&L ($ and %), value-at-close, and portfolio-level concentration by deal type and by regulatory body.
+- **Risk Matrix** — bubble scatter of tracked deals (days-to-close × annualized return, bubble size = deal value, color = risk level) plus a regulator × deal-type exposure grid shaded by average risk score.
+
+### Backend
+- `GET /api/merger/opportunities` — multi-form EDGAR scan with ticker extraction, live quote enrichment, and tracked-deal cross-reference. 4h cache.
+- `GET /api/merger/analyze` — deal_id or ad-hoc query params in, full risk/reward analysis out.
+- `GET/POST/PUT/DELETE /api/merger/positions` — new `ArbPosition` model (`arb_positions` table) with live enrichment joining against `merger_deals`.
+- `_deal_risk` refactored into `_deal_risk_breakdown`, exposing per-factor scores (deal structure, spread size, regulatory scrutiny, deal size, time horizon) reused by both Deal Dashboard and Deal Analyzer.
+- **Bug fix:** `db_session()` committed before closing, and SQLAlchemy's default `expire_on_commit=True` invalidated every attribute on committed ORM objects — any code reading them after the session closed (`_enrich_deal`, now also `_enrich_position`) hit a silently-swallowed `DetachedInstanceError`, so `/api/merger/deals` returned an empty list whenever deals existed. Fixed by setting `expire_on_commit=False` on the sessionmaker.
+
+### Files changed
+- `backend/database.py` — `ArbPosition` model + migration; `expire_on_commit=False` fix
+- `backend/main.py` — new endpoints above; `_deal_risk_breakdown` helper
+- `frontend/src/components/MergerDealDashboard.jsx` — exported shared `DealFormModal`, constants, and formatters for reuse
+- `frontend/src/components/MergerOpportunityScanner.jsx` (new)
+- `frontend/src/components/MergerDealAnalyzer.jsx` (new)
+- `frontend/src/components/MergerArbPortfolio.jsx` (new)
+- `frontend/src/components/MergerRiskMatrix.jsx` (new)
+- `frontend/src/App.jsx` — routed `mergerscanner`, `mergeranalyzer`, `mergerportfolio`, `mergerrisk` tabs
+- `frontend/src/components/UserGuide.jsx` — 4 new sections + changelog entry
+
+---
+
 ## 2026-07-25 — Retirement Planning Module
 
 New **Retirement** nav group with 4 tools:

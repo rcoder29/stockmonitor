@@ -4,9 +4,9 @@ const API = import.meta.env.VITE_API_URL || ''
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DEAL_TYPES   = ['cash', 'stock', 'mixed']
-const REG_BODIES   = ['', 'DOJ', 'FTC', 'DOJ/FTC', 'EU', 'CFIUS', 'DOJ/EU', 'Multiple', 'None']
-const STATUSES     = [
+export const DEAL_TYPES   = ['cash', 'stock', 'mixed']
+export const REG_BODIES   = ['', 'DOJ', 'FTC', 'DOJ/FTC', 'EU', 'CFIUS', 'DOJ/EU', 'Multiple', 'None']
+export const STATUSES     = [
   { value: 'pending_regulatory',  label: 'Pending Regulatory' },
   { value: 'pending_shareholder', label: 'Pending Shareholder Vote' },
   { value: 'pending_financing',   label: 'Pending Financing' },
@@ -15,7 +15,7 @@ const STATUSES     = [
   { value: 'closed',              label: 'Closed' },
 ]
 
-const BLANK_FORM = {
+export const BLANK_FORM = {
   target_ticker: '', target_name: '', acquirer_name: '',
   deal_type: 'cash', offer_price: '', announce_date: '', expected_close: '',
   status: 'pending_regulatory', deal_value_bn: '', regulatory_body: '', notes: '',
@@ -43,17 +43,17 @@ function statusCls(status) {
   return 'text-yellow-400'
 }
 
-function pctColor(v) {
+export function pctColor(v) {
   if (v == null) return 'text-slate-500'
   return v > 0 ? 'text-green-400' : 'text-red-400'
 }
 
-function fmt$(v) {
+export function fmt$(v) {
   if (v == null) return '—'
   return `$${Number(v).toFixed(2)}`
 }
 
-function fmtPct(v, digits = 2) {
+export function fmtPct(v, digits = 2) {
   if (v == null) return '—'
   return `${v > 0 ? '+' : ''}${v.toFixed(digits)}%`
 }
@@ -84,7 +84,7 @@ function SpreadSparkline({ data }) {
 
 // ── Deal Form Modal ───────────────────────────────────────────────────────────
 
-function DealFormModal({ initial, onSave, onClose }) {
+export function DealFormModal({ initial, onSave, onClose }) {
   const [form, setForm] = useState(initial || BLANK_FORM)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')

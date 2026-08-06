@@ -12,7 +12,7 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
     pool_pre_ping=True,
 )
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
 Base = declarative_base()
 
 
@@ -138,6 +138,17 @@ class MergerDeal(Base):
     created_at      = Column(DateTime, default=datetime.utcnow)
 
 
+class ArbPosition(Base):
+    __tablename__ = "arb_positions"
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    deal_id       = Column(Integer, nullable=False, index=True)   # references merger_deals.id
+    shares        = Column(Float, nullable=False)
+    entry_price   = Column(Float, nullable=False)
+    entry_date    = Column(String(10), default='')                # YYYY-MM-DD
+    notes         = Column(String(500), default='')
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+
 # ── Generic key-value cache ───────────────────────────────────────────────────
 
 class CacheEntry(Base):
@@ -198,6 +209,14 @@ def migrate_db():
          "notes VARCHAR(1000) DEFAULT '', "
          "source VARCHAR(20) DEFAULT 'manual', "
          "edgar_accession VARCHAR(60) DEFAULT '', "
+         "created_at DATETIME)"),
+        ("CREATE TABLE IF NOT EXISTS arb_positions ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "deal_id INTEGER NOT NULL, "
+         "shares REAL NOT NULL, "
+         "entry_price REAL NOT NULL, "
+         "entry_date VARCHAR(10) DEFAULT '', "
+         "notes VARCHAR(500) DEFAULT '', "
          "created_at DATETIME)"),
     ]
     with engine.connect() as conn:
