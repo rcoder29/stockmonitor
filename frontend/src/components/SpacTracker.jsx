@@ -130,9 +130,10 @@ export function SpacFormModal({ initial, onSave, onClose }) {
 
 // ── Row ───────────────────────────────────────────────────────────────────────
 
-function SpacRow({ spac, onEdit, onDelete }) {
+function SpacRow({ spac, onEdit, onDelete, highlighted }) {
   return (
-    <tr className="border-b border-slate-700/50 hover:bg-slate-750 group">
+    <tr id={`spac-row-${spac.id}`}
+      className={`border-b border-slate-700/50 hover:bg-slate-750 group transition-colors ${highlighted ? 'bg-sky-900/40 ring-1 ring-inset ring-sky-500' : ''}`}>
       <td className="px-3 py-3">
         <div className="font-bold text-sky-400 text-sm">{spac.ticker}</div>
         <div className="text-xs text-slate-500 truncate max-w-[160px]">{spac.companyName}</div>
@@ -181,12 +182,13 @@ function SpacRow({ spac, onEdit, onDelete }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function SpacTracker() {
+export default function SpacTracker({ focusDealId, onFocusConsumed } = {}) {
   const [spacs, setSpacs]                 = useState([])
   const [loading, setLoading]             = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
   const [modal, setModal]                 = useState(null)
   const [filterStatus, setFilterStatus]   = useState('All')
+  const [highlightId, setHighlightId]     = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -198,6 +200,20 @@ export default function SpacTracker() {
   }, [showCompleted])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (focusDealId == null) return
+    setHighlightId(focusDealId)
+    onFocusConsumed?.()
+  }, [focusDealId])
+
+  useEffect(() => {
+    if (highlightId == null || loading) return
+    const el = document.getElementById(`spac-row-${highlightId}`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(() => setHighlightId(null), 2500)
+    return () => clearTimeout(t)
+  }, [highlightId, loading, spacs])
 
   const handleSave = async (body) => {
     const isEdit = !!modal?.id
@@ -318,6 +334,7 @@ export default function SpacTracker() {
                   notes: spac.notes,
                 })}
                 onDelete={handleDelete}
+                highlighted={highlightId === s.id}
               />
             ))}
           </tbody>

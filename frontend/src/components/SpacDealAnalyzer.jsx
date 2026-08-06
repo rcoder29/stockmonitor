@@ -16,7 +16,7 @@ function yieldCls(v) {
   return 'text-slate-300'
 }
 
-export default function SpacDealAnalyzer() {
+export default function SpacDealAnalyzer({ focusDealId, onFocusConsumed } = {}) {
   const [spacs, setSpacs]         = useState([])
   const [dealId, setDealId]       = useState('')
   const [adhoc, setAdhoc]         = useState(BLANK_ADHOC)
@@ -62,6 +62,13 @@ export default function SpacDealAnalyzer() {
   }, [mode, dealId, adhoc])
 
   useEffect(() => { if (mode === 'tracked' && dealId) runAnalysis() }, [dealId, mode])
+
+  useEffect(() => {
+    if (focusDealId == null) return
+    setMode('tracked')
+    setDealId(String(focusDealId))
+    onFocusConsumed?.()
+  }, [focusDealId])
 
   const set = (k, v) => setAdhoc(f => ({ ...f, [k]: v }))
 

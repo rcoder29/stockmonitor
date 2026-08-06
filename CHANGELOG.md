@@ -4,6 +4,26 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — SPACs: Overview (launching pad)
+
+### New
+- **Overview** — new first item in the SPACs sidebar group, mirroring Merger Arb's Overview hub.
+- **Tracked SPACs** — every tracked SPAC sorted by soonest redemption deadline. Click a row to jump into the Deal Analyzer with that SPAC preloaded; click "Tracker" to jump to the Tracker, scrolled to and briefly highlighting that row.
+- **Upcoming — Newly Filed, Not Yet Tracked** — the most recent untracked filings from the Discovery feed, with quick-add (reuses the shared `SpacFormModal`) and a link through to full Discovery.
+- Cross-tab drill-in: `App.jsx` now lifts a `spacFocusId` + `goToSpac(tabId, spacId)` helper, matching the `mergerFocusDealId`/`goToMerger` pattern already used by Merger Arb. `SpacTracker` and `SpacDealAnalyzer` accept a `focusDealId` prop.
+
+### Backend
+- None — composes the existing `/api/spac/deals` and `/api/spac/discovery` responses client-side.
+
+### Files changed
+- `frontend/src/components/SpacOverview.jsx` (new)
+- `frontend/src/App.jsx` — `spacoverview` nav item + tab route, lifted focus-SPAC state
+- `frontend/src/components/SpacTracker.jsx` — accepts `focusDealId`/`onFocusConsumed`; scrolls to and highlights the row
+- `frontend/src/components/SpacDealAnalyzer.jsx` — accepts `focusDealId`/`onFocusConsumed` to auto-select a SPAC
+- `frontend/src/components/UserGuide.jsx` — new Overview section + changelog entry
+
+---
+
 ## 2026-08-06 — SPACs: Risk Matrix
 
 Completes the SPACs module at parity with Merger Arb's shape: Tracker, Discovery, Deal Analyzer, Portfolio, Alerts, Risk Matrix.

@@ -751,6 +751,13 @@ const GUIDE = [
       ]},
       { type: 'h2', text: 'SPACs' },
       { type: 'p', text: 'SPAC arbitrage is a different trade from merger arb: instead of a fixed offer price and deal-completion risk, a SPAC\'s common stock has a floor at its trust value — shareholders can redeem for trust value (plus accrued interest) at a shareholder vote or by the deadline, regardless of the proposed deal. Buying below trust captures that discount as a largely bounded-downside yield, with optional leveraged upside via warrants if you hold through a well-received business combination.' },
+      { type: 'h3', text: 'Overview' },
+      { type: 'p', text: 'Starter page for the SPACs group — a launching pad showing tracked SPACs and newly filed, not-yet-tracked opportunities in one screen. Found under SPACs → Overview (first item in the group).' },
+      { type: 'steps', items: [
+        'The "Tracked SPACs" table lists every tracked SPAC sorted by soonest redemption deadline. Click a row to jump straight into the Deal Analyzer with that SPAC preloaded, or click "Tracker" to jump to that row on the Tracker (it scrolls to and briefly highlights it).',
+        'The "Upcoming — Newly Filed, Not Yet Tracked" table shows the most recent untracked EDGAR filings from the Discovery feed. Click "+ Add" to pre-fill a new SPAC record, or "Open Discovery" to see the full feed.',
+        '"View Risk Matrix" jumps to the aggregate yield-vs-deadline view across your whole tracked book.',
+      ]},
       { type: 'h3', text: 'Tracker' },
       { type: 'p', text: 'Tracks SPACs against trust value, redemption deadlines, and warrant pricing. Found under SPACs → Tracker.' },
       { type: 'steps', items: [
@@ -1273,6 +1280,14 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-08-06 — SPACs: Overview' },
+      { type: 'bullets', items: [
+        'New Overview page — the first item in the SPACs group, acting as a launching pad across the other 5 components (mirrors Merger Arb\'s Overview).',
+        'Tracked SPACs table (sorted by soonest redemption deadline): click a row to jump into the Deal Analyzer with that SPAC preloaded; click "Tracker" to jump to the Tracker, scrolled to and briefly highlighting that row.',
+        'Upcoming — Newly Filed, Not Yet Tracked table surfaces the most recent untracked filings from the Discovery feed, with quick-add and a link to the full Discovery page.',
+        'Cross-tab drill-in via a lifted spacFocusId + goToSpac() helper in App.jsx, reusing the same pattern as Merger Arb; Tracker and Deal Analyzer now both accept a focusDealId prop.',
+        'No new backend endpoints — composes the existing /api/spac/deals and /api/spac/discovery responses client-side.',
+      ]},
       { type: 'h3', text: '2026-08-06 — SPACs: Risk Matrix' },
       { type: 'bullets', items: [
         'New Risk Matrix page completes the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio, Alerts, Risk Matrix) at parity with Merger Arb\'s shape.',

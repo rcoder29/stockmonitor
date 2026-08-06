@@ -72,6 +72,7 @@ import MergerOpportunityScanner from './components/MergerOpportunityScanner'
 import MergerDealAnalyzer from './components/MergerDealAnalyzer'
 import MergerArbPortfolio from './components/MergerArbPortfolio'
 import MergerRiskMatrix from './components/MergerRiskMatrix'
+import SpacOverview from './components/SpacOverview'
 import SpacTracker from './components/SpacTracker'
 import SpacDiscovery from './components/SpacDiscovery'
 import SpacDealAnalyzer from './components/SpacDealAnalyzer'
@@ -242,6 +243,7 @@ const NAV_GROUPS = [
       </svg>
     ),
     items: [
+      { id: 'spacoverview',  label: 'Overview' },
       { id: 'spactracker',   label: 'Tracker' },
       { id: 'spacdiscovery', label: 'Discovery' },
       { id: 'spacanalyzer',  label: 'Deal Analyzer' },
@@ -485,6 +487,8 @@ export default function App() {
   const [portfolioSymbols,  setPortfolioSymbols]  = useState([])
   const [mergerFocusDealId, setMergerFocusDealId] = useState(null)
   const goToMerger = (tabId, dealId = null) => { setMergerFocusDealId(dealId); setActiveTab(tabId) }
+  const [spacFocusId, setSpacFocusId] = useState(null)
+  const goToSpac = (tabId, spacId = null) => { setSpacFocusId(spacId); setActiveTab(tabId) }
 
   // ── Theme ──────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('sm-theme') || 'dark')
@@ -899,9 +903,10 @@ export default function App() {
           {activeTab === 'mergeranalyzer'     && <MergerDealAnalyzer focusDealId={mergerFocusDealId} onFocusConsumed={() => setMergerFocusDealId(null)} />}
           {activeTab === 'mergerportfolio'    && <MergerArbPortfolio />}
           {activeTab === 'mergerrisk'         && <MergerRiskMatrix />}
-          {activeTab === 'spactracker'        && <SpacTracker />}
+          {activeTab === 'spacoverview'        && <SpacOverview onNavigate={goToSpac} />}
+          {activeTab === 'spactracker'        && <SpacTracker focusDealId={spacFocusId} onFocusConsumed={() => setSpacFocusId(null)} />}
           {activeTab === 'spacdiscovery'      && <SpacDiscovery />}
-          {activeTab === 'spacanalyzer'       && <SpacDealAnalyzer />}
+          {activeTab === 'spacanalyzer'       && <SpacDealAnalyzer focusDealId={spacFocusId} onFocusConsumed={() => setSpacFocusId(null)} />}
           {activeTab === 'spacportfolio'      && <SpacPortfolio />}
           {activeTab === 'spacalerts'         && <SpacAlerts />}
           {activeTab === 'spacrisk'           && <SpacRiskMatrix />}
