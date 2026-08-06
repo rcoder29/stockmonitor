@@ -8120,36 +8120,39 @@ def get_analyst_ratings(symbols: str):
 
 # ── EDGAR Fund Holdings Explorer ──────────────────────────────────────────────
 
-_EDGAR_UA             = {'User-Agent': 'StockMonitor/1.0 raghuravuri@gmail.com', 'Accept': 'application/json,text/html,application/xml;q=0.9,*/*;q=0.8'}
-_EDGAR_SEARCH_TTL     = timedelta(hours=12)
-_EDGAR_HOLDINGS_TTL   = timedelta(hours=6)
+_EDGAR_UA           = {'User-Agent': 'StockMonitor/1.0 raghuravuri@gmail.com'}
+_EDGAR_SEARCH_TTL   = timedelta(hours=12)
+_EDGAR_HOLDINGS_TTL = timedelta(hours=6)
+_EDGAR_TICKERMAP_TTL = timedelta(hours=24)
 
 _EDGAR_ASSET_CATS = {
     'EC': 'Equity', 'DBT': 'Debt', 'DERIV': 'Derivative',
     'OTH': 'Other', 'ABS': 'ABS', 'MBS': 'MBS',
-    'STIV': 'Short-Term', 'RE': 'Real Estate', 'CORP': 'Corporate',
+    'STIV': 'Short-Term', 'RE': 'Real Estate',
 }
 
+# Filing types used by EDGAR for monthly portfolio reports (no hyphen variant is current)
+_NPORT_FORMS = {'NPORT-P', 'N-PORT-P', 'NPORT-P/A', 'N-PORT-P/A', 'N-PORT', 'NPORT'}
+
 _POPULAR_FUNDS = [
-    {'ticker': 'SPY',  'name': 'SPDR S&P 500 ETF Trust'},
-    {'ticker': 'QQQ',  'name': 'Invesco QQQ Trust'},
-    {'ticker': 'IVV',  'name': 'iShares Core S&P 500 ETF'},
-    {'ticker': 'VTI',  'name': 'Vanguard Total Stock Market ETF'},
-    {'ticker': 'VOO',  'name': 'Vanguard S&P 500 ETF'},
-    {'ticker': 'ARKK', 'name': 'ARK Innovation ETF'},
-    {'ticker': 'XLK',  'name': 'Technology Select Sector SPDR'},
-    {'ticker': 'XLF',  'name': 'Financial Select Sector SPDR'},
-    {'ticker': 'GLD',  'name': 'SPDR Gold Shares'},
-    {'ticker': 'IWM',  'name': 'iShares Russell 2000 ETF'},
+    {'ticker': 'SPY',  'name': 'SPDR S&P 500 ETF Trust',          'cik': '884394'},
+    {'ticker': 'QQQ',  'name': 'Invesco QQQ Trust',                'cik': '1067839'},
+    {'ticker': 'IVV',  'name': 'iShares Core S&P 500 ETF',         'cik': '1100663'},
+    {'ticker': 'VTI',  'name': 'Vanguard Total Stock Market ETF',  'cik': '1075817'},
+    {'ticker': 'ARKK', 'name': 'ARK Innovation ETF',               'cik': '1579982'},
+    {'ticker': 'XLK',  'name': 'Technology Select Sector SPDR',    'cik': '1064642'},
+    {'ticker': 'XLF',  'name': 'Financial Select Sector SPDR',     'cik': '1064641'},
+    {'ticker': 'IWM',  'name': 'iShares Russell 2000 ETF',         'cik': '1100624'},
+    {'ticker': 'GLD',  'name': 'SPDR Gold Shares',                 'cik': '1222333'},
+    {'ticker': 'VOO',  'name': 'Vanguard S&P 500 ETF',             'cik': '1479240'},
 ]
 
 
-def _edgar_req(url: str, timeout: int = 25) -> curl_requests.Response:
+def _edgar_req(url: str, timeout: int = 30) -> curl_requests.Response:
     return curl_requests.get(url, headers=_EDGAR_UA, timeout=timeout, impersonate='chrome')
 
 
 def _localname_find(elem, localname: str):
-    """Find first child element by local tag name (namespace-agnostic)."""
     for child in elem:
         if child.tag.split('}')[-1] == localname:
             return child
@@ -8157,11 +8160,84 @@ def _localname_find(elem, localname: str):
 
 
 def _localname_iter(root, localname: str):
-    """Iterate all descendants with a given local tag name."""
     for el in root.iter():
         if el.tag.split('}')[-1] == localname:
             yield el
 
+
+# ── Name → Ticker lookup (from SEC company_tickers_exchange.json) ─────────────
+
+def _build_ticker_map() -> dict[str, str]:
+    """Download SEC company ticker list and build normalized-name → ticker map."""
+    cache_key = 'sec_ticker_name_map'
+    cached = cache_get(cache_key, _EDGAR_TICKERMAP_TTL)
+    if cached:
+        return cached
+    try:
+        data   = _edgar_req('https://www.sec.gov/files/company_tickers_exchange.json').json()
+        fields = data.get('fields', [])
+        rows   = data.get('data', [])
+        ni = fields.index('name')   if 'name'   in fields else 1
+        ti = fields.index('ticker') if 'ticker' in fields else 2
+
+        _STRIP_SUFFIXES = (
+            ' INC.', ' INC', ' CORP.', ' CORP', ' CO.', ' CO',
+            ' LTD.', ' LTD', ' LLC', ' LP', ' PLC', ' SA', ' AG',
+            ' NV', ' SE', ' GROUP', ' HOLDINGS', ' HOLDING',
+            ' TRUST', ' FUND', ' ETF', ' CLASS A', ' CLASS B', ' CLASS C',
+        )
+
+        ticker_map: dict[str, str] = {}
+        for row in rows:
+            if len(row) <= max(ni, ti):
+                continue
+            raw_name = str(row[ni]).strip()
+            ticker   = str(row[ti]).strip().upper()
+            if not raw_name or not ticker or len(ticker) > 6:
+                continue
+            # Store original normalized
+            key = raw_name.upper().rstrip('.')
+            ticker_map[key] = ticker
+            # Strip suffixes progressively
+            stripped = key
+            for sfx in _STRIP_SUFFIXES:
+                if stripped.endswith(sfx):
+                    stripped = stripped[: -len(sfx)].rstrip(' ,')
+            if stripped != key:
+                ticker_map.setdefault(stripped, ticker)
+
+        cache_set(cache_key, ticker_map)
+        return ticker_map
+    except Exception as exc:
+        logger.warning('sec ticker map build: %s', exc)
+        return {}
+
+
+def _lookup_ticker_by_name(name: str, ticker_map: dict[str, str]) -> str | None:
+    if not name or not ticker_map:
+        return None
+    _STRIP_SUFFIXES = (
+        ' INC.', ' INC', ' CORP.', ' CORP', ' CO.', ' CO',
+        ' LTD.', ' LTD', ' LLC', ' LP', ' PLC', ' SA', ' AG',
+        ' NV', ' SE', ' GROUP', ' HOLDINGS', ' HOLDING',
+        ' TRUST', ' FUND', ' ETF', ' CLASS A', ' CLASS B', ' CLASS C',
+        ' THE',
+    )
+    key = name.upper().rstrip('.,')
+    # Direct match
+    if key in ticker_map:
+        return ticker_map[key]
+    # Strip common suffixes
+    stripped = key
+    for sfx in _STRIP_SUFFIXES:
+        if stripped.endswith(sfx):
+            stripped = stripped[: -len(sfx)].rstrip(' ,')
+    if stripped in ticker_map:
+        return ticker_map[stripped]
+    return None
+
+
+# ── EDGAR fund search ─────────────────────────────────────────────────────────
 
 def _edgar_search_funds(query: str) -> list[dict]:
     cache_key = f"edgar_search:{query.lower().strip()}"
@@ -8171,149 +8247,194 @@ def _edgar_search_funds(query: str) -> list[dict]:
 
     results: list[dict] = []
     seen: set[str] = set()
+    q = query.strip()
 
     try:
-        # Try both company name search and CIK/ticker search
-        for param_name, param_val in [('company', query), ('CIK', query)]:
-            url = (
+        # 1) Try direct CIK/ticker search — works for known tickers like SPY, QQQ
+        url_cik = (
+            f"https://www.sec.gov/cgi-bin/browse-edgar"
+            f"?company=&CIK={q}&type=NPORT-P&dateb=&owner=include&count=10"
+            f"&search_text=&action=getcompany"
+        )
+        html_cik = _edgar_req(url_cik).text
+
+        # When EDGAR finds one exact match it shows company details (no table row), extract CIK
+        single = re.search(
+            r'CIK[#\s]*:.*?CIK=0*(\d+)[^"]*">0*(\d+)\s*\(see all',
+            html_cik, re.IGNORECASE | re.DOTALL
+        )
+        if single:
+            cik = single.group(1)
+            name_m = re.search(r'<span class="companyName">([^<]+)', html_cik)
+            name = name_m.group(1).strip() if name_m else q.upper()
+            # Strip the CIK# suffix that EDGAR appends
+            name = re.sub(r'\s*CIK.*', '', name).strip()
+            if cik not in seen:
+                seen.add(cik)
+                results.append({'cik': cik, 'name': name})
+        else:
+            # Multiple results in tableFile2
+            rows = re.findall(
+                r'CIK=0*(\d+)[^"]*">\s*0*\1\s*</a>\s*</td>\s*<td[^>]*>\s*<a[^>]+>([^<]+)</a>',
+                html_cik, re.IGNORECASE
+            )
+            for cik, name in rows[:8]:
+                if cik not in seen:
+                    seen.add(cik)
+                    results.append({'cik': cik, 'name': name.strip()})
+
+        # 2) Company name search (catches fund families like "iShares", "Vanguard")
+        if not results or len(results) < 3:
+            url_name = (
                 f"https://www.sec.gov/cgi-bin/browse-edgar"
-                f"?{param_name}={query.replace(' ', '+')}"
-                f"&CIK=&type=N-PORT-P&dateb=&owner=include&count=20"
+                f"?company={q.replace(' ', '+')}&CIK=&type=NPORT-P&dateb=&owner=include&count=15"
                 f"&search_text=&action=getcompany"
             )
-            try:
-                html = _edgar_req(url).text
-                # Extract CIK numbers and company names from HTML table
-                # Matches: <a href="...CIK=0001234567...">0001234567</a> ... <a ...>Company Name</a>
-                matches = re.findall(
-                    r'CIK=0*(\d{6,10})[^"]*">\s*0*\1\s*</a>.*?<td[^>]*>\s*<a[^>]+>([^<]+)</a>',
-                    html, re.IGNORECASE | re.DOTALL
-                )
-                for cik, name in matches[:10]:
-                    if cik not in seen:
-                        seen.add(cik)
-                        results.append({'cik': cik, 'name': name.strip()})
-            except Exception as exc:
-                logger.warning('edgar company search %s=%s: %s', param_name, query, exc)
+            html_name = _edgar_req(url_name).text
+            rows2 = re.findall(
+                r'CIK=0*(\d+)[^"]*">\s*0*\1\s*</a>\s*</td>\s*<td[^>]*>\s*<a[^>]+>([^<]+)</a>',
+                html_name, re.IGNORECASE
+            )
+            for cik, name in rows2[:10]:
+                if cik not in seen:
+                    seen.add(cik)
+                    results.append({'cik': cik, 'name': name.strip()})
 
     except Exception as exc:
-        logger.warning('edgar fund search: %s', exc)
+        logger.warning('edgar fund search %s: %s', q, exc)
 
     cache_set(cache_key, results[:15])
     return results[:15]
 
 
-def _edgar_latest_nport(cik: str) -> tuple[str, str, str] | None:
-    """Return (accession_number, period, primary_doc_filename) for latest N-PORT-P."""
+# ── Latest N-PORT filing ──────────────────────────────────────────────────────
+
+def _edgar_latest_nport(cik: str):
+    """Return (accession, period, entity_name) for the latest NPORT-P filing."""
     try:
         padded = cik.zfill(10)
         data = _edgar_req(f"https://data.sec.gov/submissions/CIK{padded}.json").json()
         entity_name = data.get('name', '')
 
-        filings      = data.get('filings', {}).get('recent', {})
-        forms        = filings.get('form', [])
-        accnums      = filings.get('accessionNumber', [])
-        periods      = filings.get('reportDate', [])
-        dates        = filings.get('filingDate', [])
-        primary_docs = filings.get('primaryDocument', [])
+        filings = data.get('filings', {}).get('recent', {})
+        forms   = filings.get('form', [])
+        accnums = filings.get('accessionNumber', [])
+        periods = filings.get('reportDate', [])
+        dates   = filings.get('filingDate', [])
 
         for i, form in enumerate(forms):
-            if form in ('N-PORT-P', 'N-PORT'):
-                acc     = accnums[i] if i < len(accnums) else ''
-                period  = (periods[i] if i < len(periods) and periods[i] else
-                           dates[i][:10] if i < len(dates) else '')
-                primary = primary_docs[i] if i < len(primary_docs) else 'primary_doc.xml'
-                return acc, period, primary, entity_name
+            if form.upper() in _NPORT_FORMS:
+                acc    = accnums[i] if i < len(accnums) else ''
+                period = (periods[i] if i < len(periods) and periods[i]
+                          else dates[i][:10] if i < len(dates) else '')
+                return acc, period, entity_name
         return None
     except Exception as exc:
         logger.warning('edgar submissions %s: %s', cik, exc)
         return None
 
 
-def _edgar_filing_xml(cik: str, accession: str, primary_doc: str) -> str | None:
-    """Download the N-PORT XML document."""
+def _edgar_filing_xml(cik: str, accession: str) -> str | None:
+    """Download the raw N-PORT XML from EDGAR."""
     try:
         acc_nodash = accession.replace('-', '')
-        url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc_nodash}/{primary_doc}"
-        resp = _edgar_req(url, timeout=60)
-        if resp.status_code == 200:
-            return resp.text
+        base = f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc_nodash}"
 
-        # Fallback: try fetching index and finding the first XML link
-        idx_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc_nodash}/{accession}-index.htm"
-        idx_resp = _edgar_req(idx_url)
-        xml_links = re.findall(
-            r'href="(/Archives/edgar/data/\d+/[^"]+\.xml)"',
-            idx_resp.text, re.IGNORECASE
-        )
-        if xml_links:
-            return _edgar_req(f"https://www.sec.gov{xml_links[0]}", timeout=60).text
+        # The raw XML is always primary_doc.xml at the accession root,
+        # even when submissions.json lists an XSL subdirectory path.
+        for filename in ('primary_doc.xml', 'form.xml', 'nport.xml'):
+            try:
+                resp = _edgar_req(f"{base}/{filename}", timeout=90)
+                if resp.status_code == 200 and resp.text.strip().startswith('<'):
+                    return resp.text
+            except Exception:
+                continue
+
+        # Fallback: parse filing index for any .xml link
+        idx = _edgar_req(f"{base}/{accession}-index.htm", timeout=30)
+        links = re.findall(r'href="(/Archives/edgar/data/\d+/[^"]+\.xml)"', idx.text, re.I)
+        for link in links:
+            try:
+                r = _edgar_req(f"https://www.sec.gov{link}", timeout=90)
+                if r.status_code == 200 and r.text.strip().startswith('<'):
+                    return r.text
+            except Exception:
+                continue
         return None
     except Exception as exc:
         logger.warning('edgar xml %s/%s: %s', cik, accession, exc)
         return None
 
 
-def _parse_nport_xml(xml_text: str) -> tuple[dict, list[dict]]:
-    """Parse N-PORT XML; returns (fund_info, holdings)."""
+def _parse_nport_xml(xml_text: str, ticker_map: dict) -> tuple[dict, list[dict]]:
+    """Parse N-PORT XML; enrich holding tickers via name lookup."""
     fund_info: dict = {'netAssets': None, 'totAssets': None, 'seriesName': None, 'period': None}
     holdings: list[dict] = []
 
     try:
         root = ET.fromstring(xml_text)
 
-        # Fund-level fields
-        for tag in ('seriesName', 'repPdDate', 'totAssets', 'netAssets', 'cik'):
+        # Fund-level metadata
+        for tag, key in [('seriesName', 'seriesName'), ('regName', 'seriesName'),
+                         ('repPdDate', 'period'), ('totAssets', 'totAssets'),
+                         ('netAssets', 'netAssets')]:
             for el in _localname_iter(root, tag):
                 val = el.text.strip() if el.text else None
-                if tag == 'seriesName' and val:
-                    fund_info['seriesName'] = val
-                elif tag == 'repPdDate' and val:
-                    fund_info['period'] = val
-                elif tag in ('totAssets', 'netAssets') and val:
-                    fund_info[tag] = _safe_float(val)
+                if not val or val == 'N/A':
+                    break
+                if key in ('totAssets', 'netAssets'):
+                    fund_info[key] = _safe_float(val)
+                elif not fund_info.get(key):
+                    fund_info[key] = val
                 break
 
-        # Holdings
+        # Holdings — each <invstOrSec> element
         for sec in _localname_iter(root, 'invstOrSec'):
-            def _txt(localname):
-                el = _localname_find(sec, localname)
+            def _txt(lname):
+                el = _localname_find(sec, lname)
                 return el.text.strip() if el is not None and el.text else None
 
-            name     = _txt('name')
+            name = _txt('name')
             if not name:
                 continue
 
             pct_val  = _safe_float(_txt('pctVal'))
-            fair_val = _safe_float(_txt('fairValAmt'))
+            # N-PORT uses valUSD for USD fair value; older forms used fairValAmt
+            fair_val = _safe_float(_txt('valUSD') or _txt('fairValAmt'))
             asset_cat = _txt('assetCat') or 'OTH'
             country  = _txt('invCountry')
             cusip    = _txt('cusip')
 
-            # Ticker inside <identifiers><ticker value="..."/>
-            ticker = None
+            # Extract ISIN from <identifiers>
+            isin = None
             ident_el = _localname_find(sec, 'identifiers')
             if ident_el is not None:
                 for child in ident_el:
-                    if child.tag.split('}')[-1] == 'ticker':
-                        ticker = child.get('value') or (child.text.strip() if child.text else None)
-                        break
+                    ltag = child.tag.split('}')[-1]
+                    if ltag == 'isin':
+                        isin = child.get('value') or (child.text.strip() if child.text else None)
+                    # Some older filings have <ticker value="...">
+                    # (rare in modern N-PORT but keep for compatibility)
+
+            # Derive ticker: try name lookup in SEC ticker map
+            ticker = _lookup_ticker_by_name(name, ticker_map)
 
             holdings.append({
-                'name':      name,
-                'ticker':    ticker,
-                'cusip':     cusip,
-                'weight':    round(pct_val, 4) if pct_val is not None else None,
-                'fairValue': round(fair_val, 2) if fair_val is not None else None,
-                'assetCat':  _EDGAR_ASSET_CATS.get(asset_cat, asset_cat),
-                'country':   country,
-                'price':     None,
-                'high52w':   None,
-                'low52w':    None,
-                'perf1m':    None,
-                'perf3m':    None,
-                'perf6m':    None,
-                'perf1y':    None,
+                'name':       name,
+                'ticker':     ticker,
+                'cusip':      cusip,
+                'isin':       isin,
+                'weight':     round(pct_val, 4) if pct_val is not None else None,
+                'fairValue':  round(fair_val, 2) if fair_val is not None else None,
+                'assetCat':   _EDGAR_ASSET_CATS.get(asset_cat, asset_cat),
+                'country':    country,
+                'price':      None,
+                'high52w':    None,
+                'low52w':     None,
+                'perf1m':     None,
+                'perf3m':     None,
+                'perf6m':     None,
+                'perf1y':     None,
                 'pctFromHigh': None,
             })
 
@@ -8325,40 +8446,32 @@ def _parse_nport_xml(xml_text: str) -> tuple[dict, list[dict]]:
 
 
 def _enrich_edgar_holding(h: dict) -> None:
-    """Enrich a holding dict in-place with yfinance price/52w/perf data."""
     ticker = (h.get('ticker') or '').strip().upper()
-    if not ticker or len(ticker) > 6 or not ticker.isalpha():
+    if not ticker or len(ticker) > 6 or not ticker.replace('.', '').isalpha():
         return
     try:
         t  = yf.Ticker(ticker)
         fi = t.fast_info
-
         price   = _safe_float(getattr(fi, 'last_price', None))
         high52w = _safe_float(getattr(fi, 'year_high', None))
         low52w  = _safe_float(getattr(fi, 'year_low', None))
-
         if not price:
             return
-
         h['price']   = round(price, 2)
         h['high52w'] = round(high52w, 2) if high52w else None
-        h['low52w']  = round(low52w, 2)  if low52w  else None
-
+        h['low52w']  = round(low52w,  2) if low52w  else None
         if high52w and price:
             h['pctFromHigh'] = round((price / high52w - 1) * 100, 1)
-
         hist = t.history(period='1y')
         if hist.empty:
             return
         hist.index = hist.index.tz_localize(None) if hist.index.tzinfo else hist.index
         closes = hist['Close'].dropna()
         n = len(closes)
-
-        def _ret(days: int) -> float | None:
+        def _ret(days: int):
             idx = max(0, n - days - 1)
             ref = float(closes.iloc[idx])
             return round((price / ref - 1) * 100, 1) if ref else None
-
         h['perf1m'] = _ret(21)
         h['perf3m'] = _ret(63)
         h['perf6m'] = _ret(126)
@@ -8376,30 +8489,30 @@ def edgar_fund_search(q: str = ''):
 
 @app.get('/api/edgar/fund-holdings')
 def edgar_fund_holdings(cik: str, enrich: int = 50):
-    """Fetch latest N-PORT holdings for a fund CIK.
-    enrich = how many top holdings (by weight) to enrich with live price data.
-    """
-    cache_key = f"edgar_holdings:{cik}:{enrich}"
+    cache_key = f"edgar_holdings2:{cik}:{enrich}"
     cached = cache_get(cache_key, _EDGAR_HOLDINGS_TTL)
     if cached:
         return cached
 
     nport = _edgar_latest_nport(cik)
     if not nport:
-        raise HTTPException(404, 'No N-PORT filing found for this CIK')
+        raise HTTPException(404, 'No NPORT-P filing found for this CIK')
 
-    accession, period, primary_doc, entity_name = nport
-    xml_text = _edgar_filing_xml(cik, accession, primary_doc)
+    accession, period, entity_name = nport
+    xml_text = _edgar_filing_xml(cik, accession)
     if not xml_text:
         raise HTTPException(502, 'Could not retrieve N-PORT XML from EDGAR')
 
-    fund_info, holdings = _parse_nport_xml(xml_text)
+    # Build name→ticker map once (cached 24h)
+    ticker_map = _build_ticker_map()
+
+    fund_info, holdings = _parse_nport_xml(xml_text, ticker_map)
     if not fund_info.get('period'):
         fund_info['period'] = period
     if not fund_info.get('seriesName'):
         fund_info['seriesName'] = entity_name
 
-    # Enrich top N equity holdings with live market data
+    # Enrich top N holdings that resolved a ticker
     to_enrich = [h for h in holdings if h.get('ticker')][:max(1, enrich)]
     with ThreadPoolExecutor(max_workers=10) as pool:
         futs = [pool.submit(_enrich_edgar_holding, h) for h in to_enrich]

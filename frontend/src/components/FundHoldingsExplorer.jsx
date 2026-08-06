@@ -326,16 +326,18 @@ function FundHeader({ fund, cik, accession, holdingCount }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
+// CIKs pre-resolved so popular picks load without a search round-trip
 const POPULAR = [
-  { ticker: 'SPY',  name: 'SPDR S&P 500 ETF Trust' },
-  { ticker: 'QQQ',  name: 'Invesco QQQ Trust' },
-  { ticker: 'IVV',  name: 'iShares Core S&P 500' },
-  { ticker: 'VTI',  name: 'Vanguard Total Market' },
-  { ticker: 'VOO',  name: 'Vanguard S&P 500' },
-  { ticker: 'ARKK', name: 'ARK Innovation ETF' },
-  { ticker: 'XLK',  name: 'Technology SPDR' },
-  { ticker: 'XLF',  name: 'Financial SPDR' },
-  { ticker: 'IWM',  name: 'Russell 2000 ETF' },
+  { ticker: 'SPY',  name: 'SPDR S&P 500',        cik: '884394'  },
+  { ticker: 'QQQ',  name: 'Invesco QQQ',          cik: '1067839' },
+  { ticker: 'IVV',  name: 'iShares Core S&P 500', cik: '1100663' },
+  { ticker: 'VTI',  name: 'Vanguard Total Mkt',   cik: '1075817' },
+  { ticker: 'ARKK', name: 'ARK Innovation',        cik: '1579982' },
+  { ticker: 'XLK',  name: 'Tech SPDR',             cik: '1064642' },
+  { ticker: 'XLF',  name: 'Financial SPDR',        cik: '1064641' },
+  { ticker: 'IWM',  name: 'Russell 2000',          cik: '1100624' },
+  { ticker: 'GLD',  name: 'SPDR Gold',             cik: '1222333' },
+  { ticker: 'VOO',  name: 'Vanguard S&P 500',      cik: '1479240' },
 ]
 
 export default function FundHoldingsExplorer() {
@@ -369,21 +371,9 @@ export default function FundHoldingsExplorer() {
   }, [loadHoldings])
 
   const handlePopular = useCallback(async item => {
-    // Search EDGAR for popular fund by ticker, then load first result
-    setLoading(true)
-    setError(null)
-    setData(null)
-    try {
-      const res  = await fetch(`${API}/api/edgar/fund-search?q=${encodeURIComponent(item.ticker)}`)
-      const list = await res.json()
-      if (!list.length) throw new Error(`No N-PORT filings found for ${item.ticker}`)
-      const fund = list[0]
-      setSelectedFund(fund)
-      await loadHoldings(fund.cik)
-    } catch (e) {
-      setError(e.message)
-      setLoading(false)
-    }
+    // CIK is pre-resolved in the POPULAR list — load directly without a search
+    setSelectedFund({ cik: item.cik, name: item.name })
+    loadHoldings(item.cik)
   }, [loadHoldings])
 
   return (
