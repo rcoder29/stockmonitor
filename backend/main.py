@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, FileResponse
+from fastapi.staticfiles import StaticFiles
 import csv
 import io
 import asyncio
@@ -8910,3 +8911,19 @@ def get_relative_strength(symbols: str):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ── Serve React build (production) ────────────────────────────────────────────
+# In dev, Vite runs separately and proxies /api to this server.
+# In production on Render, FastAPI serves the built frontend files.
+
+_FRONTEND_DIST = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist')
+
+if os.path.isdir(_FRONTEND_DIST):
+    app.mount('/assets', StaticFiles(directory=os.path.join(_FRONTEND_DIST, 'assets')), name='assets')
+
+    @app.get('/{full_path:path}', include_in_schema=False)
+    def serve_react(full_path: str):
+        # Let all non-API routes fall through to index.html for React Router
+        index = os.path.join(_FRONTEND_DIST, 'index.html')
+        return FileResponse(index)

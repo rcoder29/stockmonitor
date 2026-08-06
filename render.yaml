@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: stockmonitor
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: .
+    buildCommand: |
+      cd frontend && npm install && npm run build && cd ../backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false          # set manually in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FRED_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.12.0
