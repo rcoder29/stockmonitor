@@ -686,6 +686,13 @@ const GUIDE = [
       ]},
       { type: 'tip', text: 'Tip: the N-PORT filing period is typically 60 days before the public can see it (regulatory delay). So a fund\'s December holdings appear in late February. Weight figures show what the fund held at the reporting date, not necessarily today.' },
       { type: 'h2', text: 'Merger Arb' },
+      { type: 'h3', text: 'Overview' },
+      { type: 'p', text: 'Starter page for the Merger Arb group — a launching pad showing active tracked deals and newly filed, not-yet-tracked opportunities in one screen. Found under Merger Arb → Overview (first item in the group).' },
+      { type: 'steps', items: [
+        'The "Active Deals In Progress" table lists every tracked deal sorted by soonest expected close. Click a row to jump straight into the Deal Analyzer with that deal preloaded, or click "Dashboard" to jump to that row on the Deal Dashboard (it scrolls to and briefly highlights it).',
+        'The "Upcoming — Newly Filed, Not Yet Tracked" table shows the most recent untracked EDGAR filings from the Opportunity Scanner feed. Click "+ Add" to pre-fill a new deal record, or "Open Scanner" to see the full feed.',
+        '"View Risk Matrix" jumps to the aggregate risk/reward view across your whole tracked book.',
+      ]},
       { type: 'h3', text: 'Deal Dashboard' },
       { type: 'p', text: 'Tracks active merger and acquisition deals in your arb universe. Shows live bid-ask spreads, annualised return, days to close, and risk rating for every deal. Found under Merger Arb → Deal Dashboard.' },
       { type: 'steps', items: [
@@ -1208,6 +1215,13 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-08-06 — Merger Arb: Overview' },
+      { type: 'bullets', items: [
+        'New Overview page — the first item in the Merger Arb group, acting as a launching pad across the other 5 components.',
+        'Active Deals In Progress table (sorted by soonest expected close): click a row to jump into the Deal Analyzer with that deal preloaded, or click "Dashboard" to jump to the Deal Dashboard scrolled to and briefly highlighting that row.',
+        'Upcoming — Newly Filed, Not Yet Tracked table surfaces the most recent untracked filings from the Opportunity Scanner feed, with quick-add and a link to the full Scanner.',
+        'No new backend endpoints — composes the existing /api/merger/deals and /api/merger/opportunities responses client-side.',
+      ]},
       { type: 'h3', text: '2026-07-30 — Market Sentiment Dashboard' },
       { type: 'bullets', items: [
         'New Market Sentiment Dashboard under Markets → Sentiment.',

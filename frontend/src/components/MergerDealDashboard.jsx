@@ -260,9 +260,10 @@ function EdgarScanner({ onAddFromEdgar }) {
 
 // ── Deal Row ──────────────────────────────────────────────────────────────────
 
-function DealRow({ deal, onEdit, onDelete, onSelectHistory }) {
+function DealRow({ deal, onEdit, onDelete, onSelectHistory, highlighted }) {
   return (
-    <tr className="border-b border-slate-700/50 hover:bg-slate-750 group">
+    <tr id={`merger-deal-row-${deal.id}`}
+      className={`border-b border-slate-700/50 hover:bg-slate-750 group transition-colors ${highlighted ? 'bg-sky-900/40 ring-1 ring-inset ring-sky-500' : ''}`}>
       <td className="px-3 py-3">
         <div className="font-bold text-sky-400 text-sm">{deal.targetTicker}</div>
         <div className="text-xs text-slate-500 truncate max-w-[160px]">{deal.targetName}</div>
@@ -400,7 +401,7 @@ function SpreadHistoryModal({ deal, onClose }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function MergerDealDashboard() {
+export default function MergerDealDashboard({ focusDealId, onFocusConsumed } = {}) {
   const [deals, setDeals]             = useState([])
   const [loading, setLoading]         = useState(false)
   const [showClosed, setShowClosed]   = useState(false)
@@ -409,6 +410,7 @@ export default function MergerDealDashboard() {
   const [sortCol, setSortCol]         = useState('annualizedPct')
   const [sortDir, setSortDir]         = useState('desc')
   const [filterRisk, setFilterRisk]   = useState('All')
+  const [highlightId, setHighlightId] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -420,6 +422,20 @@ export default function MergerDealDashboard() {
   }, [showClosed])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (focusDealId == null) return
+    setHighlightId(focusDealId)
+    onFocusConsumed?.()
+  }, [focusDealId])
+
+  useEffect(() => {
+    if (highlightId == null || loading) return
+    const el = document.getElementById(`merger-deal-row-${highlightId}`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(() => setHighlightId(null), 2500)
+    return () => clearTimeout(t)
+  }, [highlightId, loading, deals])
 
   const handleSave = async (body) => {
     const isEdit = !!modal?.id
@@ -570,6 +586,7 @@ export default function MergerDealDashboard() {
                 onEdit={deal => setModal({ ...deal, offer_price: deal.offerPrice, target_ticker: deal.targetTicker, target_name: deal.targetName, acquirer_name: deal.acquirerName, deal_type: deal.dealType, announce_date: deal.announceDate, expected_close: deal.expectedClose, deal_value_bn: deal.dealValueBn, regulatory_body: deal.regulatoryBody })}
                 onDelete={handleDelete}
                 onSelectHistory={setHistDeal}
+                highlighted={highlightId === d.id}
               />
             ))}
           </tbody>

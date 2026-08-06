@@ -4,6 +4,26 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — Merger Arb: Overview (launching pad)
+
+### New
+- **Overview** — new first item in the Merger Arb sidebar group, acting as a hub across the other 5 components.
+- **Active Deals In Progress** — every tracked deal, sorted by soonest expected close. Click a row to jump into the Deal Analyzer with that deal preloaded; click "Dashboard" to jump to the Deal Dashboard, scrolled to and briefly highlighting that row.
+- **Upcoming — Newly Filed, Not Yet Tracked** — the most recent untracked filings from the Opportunity Scanner feed, with quick-add (reuses the shared `DealFormModal`) and a link through to the full Scanner.
+- Cross-tab drill-in: `App.jsx` now lifts a `mergerFocusDealId` + `goToMerger(tabId, dealId)` helper so Overview can hand off a specific deal to the Analyzer or Dashboard tabs.
+
+### Backend
+- None — composes the existing `/api/merger/deals` and `/api/merger/opportunities` responses client-side.
+
+### Files changed
+- `frontend/src/components/MergerArbOverview.jsx` (new)
+- `frontend/src/App.jsx` — `mergeroverview` nav item + tab route, lifted focus-deal state
+- `frontend/src/components/MergerDealAnalyzer.jsx` — accepts `focusDealId`/`onFocusConsumed` to auto-select a deal
+- `frontend/src/components/MergerDealDashboard.jsx` — accepts `focusDealId`/`onFocusConsumed`; scrolls to and highlights the row
+- `frontend/src/components/UserGuide.jsx` — new Overview section + changelog entry
+
+---
+
 ## 2026-08-06 — Merger Arb: Opportunity Scanner, Deal Analyzer, Arb Portfolio, Risk Matrix
 
 Completes the 5-component Merger Arb sidebar group (Deal Dashboard shipped earlier today).

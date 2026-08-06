@@ -66,6 +66,7 @@ import EarningsStrategyAnalyzer from './components/EarningsStrategyAnalyzer'
 import MarketSentimentDashboard from './components/MarketSentimentDashboard'
 import AnalystRatingTracker from './components/AnalystRatingTracker'
 import FundHoldingsExplorer from './components/FundHoldingsExplorer'
+import MergerArbOverview from './components/MergerArbOverview'
 import MergerDealDashboard from './components/MergerDealDashboard'
 import MergerOpportunityScanner from './components/MergerOpportunityScanner'
 import MergerDealAnalyzer from './components/MergerDealAnalyzer'
@@ -218,6 +219,7 @@ const NAV_GROUPS = [
       </svg>
     ),
     items: [
+      { id: 'mergeroverview',   label: 'Overview' },
       { id: 'mergerdashboard',  label: 'Deal Dashboard' },
       { id: 'mergerscanner',    label: 'Opportunity Scanner' },
       { id: 'mergeranalyzer',   label: 'Deal Analyzer' },
@@ -458,6 +460,8 @@ export default function App() {
   const [alertSymbol,     setAlertSymbol]     = useState(null)
   const [toasts,          setToasts]          = useState([])
   const [portfolioSymbols,  setPortfolioSymbols]  = useState([])
+  const [mergerFocusDealId, setMergerFocusDealId] = useState(null)
+  const goToMerger = (tabId, dealId = null) => { setMergerFocusDealId(dealId); setActiveTab(tabId) }
 
   // ── Theme ──────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('sm-theme') || 'dark')
@@ -866,9 +870,10 @@ export default function App() {
           {activeTab === 'relativestrengthr'  && <RelativeStrengthRanker watchlist={watchlist} />}
           {activeTab === 'analystratings'     && <AnalystRatingTracker watchlist={watchlist} />}
           {activeTab === 'fundholdings'       && <FundHoldingsExplorer />}
-          {activeTab === 'mergerdashboard'    && <MergerDealDashboard />}
+          {activeTab === 'mergeroverview'      && <MergerArbOverview onNavigate={goToMerger} />}
+          {activeTab === 'mergerdashboard'    && <MergerDealDashboard focusDealId={mergerFocusDealId} onFocusConsumed={() => setMergerFocusDealId(null)} />}
           {activeTab === 'mergerscanner'      && <MergerOpportunityScanner />}
-          {activeTab === 'mergeranalyzer'     && <MergerDealAnalyzer />}
+          {activeTab === 'mergeranalyzer'     && <MergerDealAnalyzer focusDealId={mergerFocusDealId} onFocusConsumed={() => setMergerFocusDealId(null)} />}
           {activeTab === 'mergerportfolio'    && <MergerArbPortfolio />}
           {activeTab === 'mergerrisk'         && <MergerRiskMatrix />}
         </main>

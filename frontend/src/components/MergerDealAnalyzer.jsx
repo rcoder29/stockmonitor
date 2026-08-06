@@ -15,7 +15,7 @@ const BLANK_ADHOC = {
   expected_close: '', announce_date: '', deal_value_bn: '', walkaway_price: '',
 }
 
-export default function MergerDealAnalyzer() {
+export default function MergerDealAnalyzer({ focusDealId, onFocusConsumed } = {}) {
   const [deals, setDeals]         = useState([])
   const [dealId, setDealId]       = useState('')
   const [adhoc, setAdhoc]         = useState(BLANK_ADHOC)
@@ -59,6 +59,13 @@ export default function MergerDealAnalyzer() {
   }, [mode, dealId, adhoc])
 
   useEffect(() => { if (mode === 'tracked' && dealId) runAnalysis() }, [dealId, mode])
+
+  useEffect(() => {
+    if (focusDealId == null) return
+    setMode('tracked')
+    setDealId(String(focusDealId))
+    onFocusConsumed?.()
+  }, [focusDealId])
 
   const set = (k, v) => setAdhoc(f => ({ ...f, [k]: v }))
 
