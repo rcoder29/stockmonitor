@@ -34,7 +34,7 @@ from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
     WatchlistSymbol, WatchlistGroup, PortfolioPosition, PortfolioSnapshot,
     PriceAlert, SmartAlertRule, OptionsPosition, PriceTarget, TradeJournalEntry,
-    MergerDeal, ArbPosition, SpacDeal,
+    MergerDeal, ArbPosition, SpacDeal, SpacPosition,
 )
 
 # Corporate proxy uses a self-signed cert — reuse one session with SSL disabled
@@ -9995,6 +9995,146 @@ def analyze_spac(
         'warrantBreakeven':    warrant_breakeven,
         'scenarios':           scenarios,
     }
+
+
+class SpacPositionCreate(BaseModel):
+    spac_id:       int
+    security_type: str = 'common'   # common | warrant
+    shares:        float
+    entry_price:   float
+    entry_date:    str = ''
+    notes:         str = ''
+
+
+def _enrich_spac_position(pos: SpacPosition, spac: SpacDeal | None) -> dict | None:
+    if spac is None:
+        return None
+
+    enriched = _enrich_spac(spac)
+    is_warrant = pos.security_type == 'warrant'
+    current_price = enriched['warrantPrice'] if is_warrant else enriched['currentPrice']
+
+    cost_basis   = pos.shares * pos.entry_price
+    market_value = pos.shares * current_price if current_price is not None else None
+    unrealized_pnl     = (market_value - cost_basis) if market_value is not None else None
+    unrealized_pnl_pct = (unrealized_pnl / cost_basis * 100) if unrealized_pnl is not None and cost_basis else None
+    # Warrants have no redemption right -- they can go to zero if the deal
+    # falls through or the stock never clears the strike. Only common stock
+    # carries the trust-value floor.
+    floor_value = None if is_warrant else round(pos.shares * spac.trust_value_per_share, 2)
+
+    return {
+        'id':               pos.id,
+        'spacId':           spac.id,
+        'ticker':           enriched['ticker'],
+        'companyName':      enriched['companyName'],
+        'securityType':     pos.security_type,
+        'positionTicker':   enriched['warrantTicker'] if is_warrant else enriched['ticker'],
+        'shares':           pos.shares,
+        'entryPrice':       pos.entry_price,
+        'entryDate':        pos.entry_date,
+        'notes':            pos.notes,
+        'currentPrice':     round(current_price, 2) if current_price is not None else None,
+        'costBasis':        round(cost_basis, 2),
+        'marketValue':      round(market_value, 2) if market_value is not None else None,
+        'unrealizedPnl':    round(unrealized_pnl, 2) if unrealized_pnl is not None else None,
+        'unrealizedPnlPct': round(unrealized_pnl_pct, 2) if unrealized_pnl_pct is not None else None,
+        'floorValue':       floor_value,
+        'trustValuePerShare': spac.trust_value_per_share,
+        'status':           enriched['status'],
+        'statusLabel':      enriched['statusLabel'],
+        'daysToDeadline':   enriched['daysToDeadline'],
+    }
+
+
+@app.get('/api/spac/positions')
+def get_spac_positions():
+    with db_session() as db:
+        positions = db.query(SpacPosition).order_by(SpacPosition.created_at.desc()).all()
+        if not positions:
+            return {'positions': [], 'summary': None}
+        spac_ids = {p.spac_id for p in positions}
+        spacs = {d.id: d for d in db.query(SpacDeal).filter(SpacDeal.id.in_(spac_ids)).all()}
+
+    rows = []
+    with ThreadPoolExecutor(max_workers=min(len(positions), 8)) as pool:
+        futures = {pool.submit(_enrich_spac_position, p, spacs.get(p.spac_id)): p for p in positions}
+        for fut in as_completed(futures):
+            try:
+                r = fut.result()
+                if r: rows.append(r)
+            except Exception as exc:
+                logger.warning('enrich spac position: %s', exc)
+
+    rows.sort(key=lambda r: r['marketValue'] or 0, reverse=True)
+
+    total_cost    = sum(r['costBasis'] for r in rows)
+    total_value   = sum(r['marketValue'] for r in rows if r['marketValue'] is not None)
+    total_pnl     = sum(r['unrealizedPnl'] for r in rows if r['unrealizedPnl'] is not None)
+    total_pnl_pct = (total_pnl / total_cost * 100) if total_cost else None
+    floor_value   = sum(r['floorValue'] or 0 for r in rows)
+    protected_pct = (floor_value / total_value * 100) if total_value else None
+
+    concentration_type = {}
+    for r in rows:
+        w = (r['marketValue'] or 0) / total_value * 100 if total_value else 0
+        label = 'Common' if r['securityType'] == 'common' else 'Warrants'
+        concentration_type[label] = concentration_type.get(label, 0) + w
+
+    summary = {
+        'positionCount':         len(rows),
+        'totalCostBasis':        round(total_cost, 2),
+        'totalMarketValue':      round(total_value, 2),
+        'totalUnrealizedPnl':    round(total_pnl, 2),
+        'totalUnrealizedPnlPct': round(total_pnl_pct, 2) if total_pnl_pct is not None else None,
+        'floorValue':            round(floor_value, 2),
+        'protectedPct':          round(protected_pct, 1) if protected_pct is not None else None,
+        'concentrationBySecurityType': {k: round(v, 1) for k, v in concentration_type.items()},
+    }
+    return {'positions': rows, 'summary': summary}
+
+
+@app.post('/api/spac/positions')
+def create_spac_position(body: SpacPositionCreate):
+    with db_session() as db:
+        if not db.query(SpacDeal).filter(SpacDeal.id == body.spac_id).first():
+            raise HTTPException(404, 'SPAC not found')
+        pos = SpacPosition(
+            spac_id       = body.spac_id,
+            security_type = body.security_type,
+            shares        = body.shares,
+            entry_price   = body.entry_price,
+            entry_date    = body.entry_date,
+            notes         = body.notes.strip(),
+        )
+        db.add(pos)
+        db.flush()
+        return {'id': pos.id}
+
+
+@app.put('/api/spac/positions/{position_id}')
+def update_spac_position(position_id: int, body: SpacPositionCreate):
+    with db_session() as db:
+        pos = db.query(SpacPosition).filter(SpacPosition.id == position_id).first()
+        if not pos:
+            raise HTTPException(404, 'Position not found')
+        pos.spac_id       = body.spac_id
+        pos.security_type = body.security_type
+        pos.shares        = body.shares
+        pos.entry_price   = body.entry_price
+        pos.entry_date    = body.entry_date
+        pos.notes         = body.notes.strip()
+        return {'ok': True}
+
+
+@app.delete('/api/spac/positions/{position_id}')
+def delete_spac_position(position_id: int):
+    with db_session() as db:
+        pos = db.query(SpacPosition).filter(SpacPosition.id == position_id).first()
+        if not pos:
+            raise HTTPException(404, 'Position not found')
+        db.delete(pos)
+    return {'ok': True}
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

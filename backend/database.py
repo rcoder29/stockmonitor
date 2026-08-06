@@ -174,6 +174,18 @@ class SpacDeal(Base):
     created_at             = Column(DateTime, default=datetime.utcnow)
 
 
+class SpacPosition(Base):
+    __tablename__ = "spac_positions"
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    spac_id       = Column(Integer, nullable=False, index=True)   # references spac_deals.id
+    security_type = Column(String(10), default='common')          # common | warrant
+    shares        = Column(Float, nullable=False)                 # shares or warrant units
+    entry_price   = Column(Float, nullable=False)
+    entry_date    = Column(String(10), default='')
+    notes         = Column(String(500), default='')
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+
 # ── Generic key-value cache ───────────────────────────────────────────────────
 
 class CacheEntry(Base):
@@ -262,6 +274,15 @@ def migrate_db():
          "notes VARCHAR(1000) DEFAULT '', "
          "source VARCHAR(20) DEFAULT 'manual', "
          "edgar_accession VARCHAR(60) DEFAULT '', "
+         "created_at DATETIME)"),
+        ("CREATE TABLE IF NOT EXISTS spac_positions ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "spac_id INTEGER NOT NULL, "
+         "security_type VARCHAR(10) DEFAULT 'common', "
+         "shares REAL NOT NULL, "
+         "entry_price REAL NOT NULL, "
+         "entry_date VARCHAR(10) DEFAULT '', "
+         "notes VARCHAR(500) DEFAULT '', "
          "created_at DATETIME)"),
     ]
     with engine.connect() as conn:

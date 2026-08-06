@@ -4,6 +4,28 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — SPACs: Portfolio
+
+Completes the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio).
+
+### New
+- **Portfolio** — position sizing for common stock and/or warrants against tracked SPACs. Common and warrant legs of the same SPAC are tracked as independent positions with independent live pricing.
+- Summary rolls up cost basis, market value, unrealized P&L, and a **Trust-Protected** figure: the redemption value of common positions at trust, recoverable regardless of deal outcome. Warrant positions are excluded from that figure since warrants carry no redemption right and can go to zero.
+- Common vs. warrant exposure concentration breakdown.
+
+### Backend
+- `SpacPosition` model (`spac_positions` table): spac_id, security_type (common|warrant), shares, entry price/date.
+- `GET/POST/PUT/DELETE /api/spac/positions` — CRUD with live enrichment (`_enrich_spac_position`), reusing `_enrich_spac` for pricing so common and warrant legs stay consistent with the Tracker.
+
+### Files changed
+- `backend/database.py` — `SpacPosition` model + migration
+- `backend/main.py` — `/api/spac/positions` CRUD + enrichment
+- `frontend/src/components/SpacPortfolio.jsx` (new)
+- `frontend/src/App.jsx` — new `spacportfolio` tab route
+- `frontend/src/components/UserGuide.jsx` — new Portfolio section + changelog entry
+
+---
+
 ## 2026-08-06 — New SPACs module: Tracker, Discovery, Deal Analyzer
 
 New top-level **SPACs** sidebar group — a separate strategy from Merger Arb. A SPAC's common stock has a floor at trust value (shareholders can redeem for trust value + accrued interest at a vote or by the deadline, independent of deal terms), so the trade is discount-to-trust capture with optional leveraged upside via warrants, not deal-completion risk against a fixed offer price.

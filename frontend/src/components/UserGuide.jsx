@@ -783,6 +783,14 @@ const GUIDE = [
         'If a warrant ticker is set, the warrant panel shows live price, intrinsic value, time value, and the common-stock breakeven price for the warrant.',
         'The scenario table spans redemption/flat-to-trust through a range of post-deal outcomes (weak aftermarket up to +200% to trust), showing both common and warrant returns — illustrating the asymmetric payoff: bounded downside at trust, leveraged upside via warrants if the business combination does well.',
       ]},
+      { type: 'h3', text: 'Portfolio' },
+      { type: 'p', text: 'Size common and warrant positions in tracked SPACs and track cost basis, unrealized P&L, and how much of the book is protected by the trust-value floor. Found under SPACs → Portfolio.' },
+      { type: 'steps', items: [
+        'Click "+ Add Position", select a tracked SPAC, then choose Common or Warrant (warrant is only selectable if that SPAC has a warrant ticker set on the Tracker).',
+        'Each row shows live cost basis, market value, and unrealized P&L for that position — common and warrant prices are tracked independently.',
+        'Trust Floor is shown per common position and rolled up in the "Trust-Protected" summary card and floor-value panel — the amount recoverable via redemption regardless of deal outcome.',
+        'Warrant positions never show a floor value: warrants carry no redemption right and can go to zero if the deal falls through or the stock never clears the strike.',
+      ]},
       { type: 'h3', text: 'Relative Strength Ranker' },
       { type: 'p', text: 'Ranks any list of stocks by how much they have outperformed or underperformed SPY over 5 timeframes. Found under Research → Relative Strength. RS > 1.0 means the stock returned more than the market; RS < 1.0 means it lagged.' },
       { type: 'steps', items: [
@@ -1249,6 +1257,13 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-08-06 — SPACs: Portfolio' },
+      { type: 'bullets', items: [
+        'New Portfolio page completes the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio).',
+        'Position sizing for both common stock and warrants against tracked SPACs, with independent live pricing for each.',
+        '"Trust-Protected" summary and floor-value panel show how much of the book is recoverable via redemption regardless of deal outcome — warrant positions carry no floor and are excluded from that figure.',
+        'Common vs. warrant exposure concentration breakdown.',
+      ]},
       { type: 'h3', text: '2026-08-06 — New SPACs module: Tracker, Discovery, Deal Analyzer' },
       { type: 'bullets', items: [
         'New top-level SPACs sidebar group with 3 components — a separate strategy from Merger Arb since SPAC economics center on a redemption floor at trust value rather than deal-completion risk to a fixed offer price.',

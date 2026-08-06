@@ -75,6 +75,7 @@ import MergerRiskMatrix from './components/MergerRiskMatrix'
 import SpacTracker from './components/SpacTracker'
 import SpacDiscovery from './components/SpacDiscovery'
 import SpacDealAnalyzer from './components/SpacDealAnalyzer'
+import SpacPortfolio from './components/SpacPortfolio'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -242,6 +243,7 @@ const NAV_GROUPS = [
       { id: 'spactracker',   label: 'Tracker' },
       { id: 'spacdiscovery', label: 'Discovery' },
       { id: 'spacanalyzer',  label: 'Deal Analyzer' },
+      { id: 'spacportfolio', label: 'Portfolio' },
     ],
   },
   {
@@ -896,6 +898,7 @@ export default function App() {
           {activeTab === 'spactracker'        && <SpacTracker />}
           {activeTab === 'spacdiscovery'      && <SpacDiscovery />}
           {activeTab === 'spacanalyzer'       && <SpacDealAnalyzer />}
+          {activeTab === 'spacportfolio'      && <SpacPortfolio />}
         </main>
       </div>
 
