@@ -800,6 +800,13 @@ const GUIDE = [
         'Deal Announced fires as soon as status moves away from "Searching for Target" — the single biggest catalyst for a SPAC.',
       ]},
       { type: 'tip', text: 'Like the general Smart Alerts, this checks whether the condition is true right now each time you scan — it isn\'t a background push notification and doesn\'t track "already seen." Remove a rule once you\'ve acted on it, or leave it to keep confirming the condition on each scan.' },
+      { type: 'h3', text: 'Risk Matrix' },
+      { type: 'p', text: 'Visual map of annualized yield vs. deadline timing across your tracked SPAC universe. Found under SPACs → Risk Matrix. SPACs don\'t get a synthetic risk score the way Merger Arb deals do — there\'s no regulatory/deal-type risk model that applies — so this maps the two things that actually drive the arb: how attractive the entry is and how soon the catalyst (deadline or deal) arrives.' },
+      { type: 'steps', items: [
+        'The scatter plot places each SPAC by days-to-deadline (x-axis) and annualized yield (y-axis); bubble size reflects the magnitude of its discount/premium to trust, and color reflects deal stage (Searching, Deal Announced, Shareholder Vote, Redemption Period, Closing).',
+        'The Deal Stage × Deadline Urgency grid buckets your book by how close each SPAC is to its deadline (Urgent <45d, Moderate 45–120d, Distant >120d) crossed with deal stage, showing count and average annualized yield per cell.',
+        '"Nearest Deadlines" and "Best Annualized Yield" panels surface the extremes in your book at a glance.',
+      ]},
       { type: 'h3', text: 'Relative Strength Ranker' },
       { type: 'p', text: 'Ranks any list of stocks by how much they have outperformed or underperformed SPY over 5 timeframes. Found under Research → Relative Strength. RS > 1.0 means the stock returned more than the market; RS < 1.0 means it lagged.' },
       { type: 'steps', items: [
@@ -1266,6 +1273,14 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-08-06 — SPACs: Risk Matrix' },
+      { type: 'bullets', items: [
+        'New Risk Matrix page completes the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio, Alerts, Risk Matrix) at parity with Merger Arb\'s shape.',
+        'Scatter plot of annualized yield vs. days-to-deadline across tracked SPACs; bubble size = discount/premium magnitude, color = deal stage.',
+        'No synthetic risk score (unlike Merger Arb\'s regulatory/deal-type model) — SPACs don\'t have an analogous risk framework, so the matrix maps entry attractiveness against catalyst timing instead.',
+        'Deal Stage × Deadline Urgency grid (Urgent/Moderate/Distant buckets) plus Nearest Deadlines and Best Annualized Yield panels.',
+        'Pure frontend — composes the existing /api/spac/deals response, no new backend endpoints.',
+      ]},
       { type: 'h3', text: '2026-08-06 — SPACs: Alerts' },
       { type: 'bullets', items: [
         'New Alerts page rounds out the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio, Alerts).',

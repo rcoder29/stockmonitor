@@ -4,6 +4,25 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — SPACs: Risk Matrix
+
+Completes the SPACs module at parity with Merger Arb's shape: Tracker, Discovery, Deal Analyzer, Portfolio, Alerts, Risk Matrix.
+
+### New
+- **Risk Matrix** — scatter plot of annualized yield vs. days-to-deadline across tracked SPACs; bubble size reflects discount/premium magnitude, color reflects deal stage (Searching / Deal Announced / Shareholder Vote / Redemption Period / Closing).
+- No synthetic risk score, unlike Merger Arb's Risk Matrix (which scores deal type, regulator, spread, size, time) — SPACs don't have an analogous risk model, so this maps the two things that actually drive the arb: entry attractiveness (discount to trust) and catalyst timing (deadline).
+- Deal Stage × Deadline Urgency grid (Urgent <45d / Moderate 45–120d / Distant >120d buckets), plus Nearest Deadlines and Best Annualized Yield quick-list panels.
+
+### Backend
+- None — composes the existing `/api/spac/deals` response client-side.
+
+### Files changed
+- `frontend/src/components/SpacRiskMatrix.jsx` (new)
+- `frontend/src/App.jsx` — new `spacrisk` tab route
+- `frontend/src/components/UserGuide.jsx` — new Risk Matrix section + changelog entry
+
+---
+
 ## 2026-08-06 — SPACs: Alerts
 
 Rounds out the SPACs module: Tracker, Discovery, Deal Analyzer, Portfolio, Alerts.
