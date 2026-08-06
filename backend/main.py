@@ -33,6 +33,7 @@ from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
     WatchlistSymbol, WatchlistGroup, PortfolioPosition, PortfolioSnapshot,
     PriceAlert, SmartAlertRule, OptionsPosition, PriceTarget, TradeJournalEntry,
+    MergerDeal,
 )
 
 # Corporate proxy uses a self-signed cert — reuse one session with SSL disabled
@@ -8904,6 +8905,288 @@ def get_relative_strength(symbols: str):
     results.sort(key=lambda x: -(x.get("composite") or 0))
     cache_set(cache_key, results)
     return results
+
+
+# ── Merger Arb ───────────────────────────────────────────────────────────────
+
+_MERGER_EDGAR_TTL = timedelta(hours=4)
+
+_DEAL_STATUSES = {
+    'pending_regulatory':  'Pending Regulatory',
+    'pending_shareholder': 'Pending Shareholder Vote',
+    'pending_financing':   'Pending Financing',
+    'closing':             'Closing',
+    'terminated':          'Terminated',
+    'closed':              'Closed',
+}
+
+_DEAL_STATUS_LABELS = list(_DEAL_STATUSES.keys())
+
+
+class MergerDealCreate(BaseModel):
+    target_ticker:   str
+    target_name:     str = ''
+    acquirer_name:   str = ''
+    deal_type:       str = 'cash'
+    offer_price:     float
+    announce_date:   str = ''
+    expected_close:  str = ''
+    status:          str = 'pending_regulatory'
+    deal_value_bn:   float | None = None
+    regulatory_body: str = ''
+    notes:           str = ''
+    source:          str = 'manual'
+    edgar_accession: str = ''
+
+
+def _deal_risk(deal_type: str, spread_pct: float | None,
+               days_to_close: int | None, deal_value_bn: float | None,
+               regulatory_body: str) -> tuple[int, str]:
+    """Return (score 0-10, label)."""
+    score = 0
+    # Deal type
+    score += {'cash': 2, 'mixed': 4, 'stock': 6}.get(deal_type, 3)
+    # Market-implied risk from spread size
+    if spread_pct is not None:
+        if spread_pct > 15: score += 4
+        elif spread_pct > 8: score += 3
+        elif spread_pct > 4: score += 2
+        elif spread_pct > 2: score += 1
+    # Regulatory
+    rb = (regulatory_body or '').upper()
+    if 'DOJ' in rb or 'FTC' in rb: score += 2
+    if 'EU' in rb or 'CFIUS' in rb: score += 1
+    # Deal size
+    if deal_value_bn:
+        if deal_value_bn > 20: score += 2
+        elif deal_value_bn > 5: score += 1
+    # Time horizon
+    if days_to_close:
+        if days_to_close > 270: score += 2
+        elif days_to_close > 180: score += 1
+    score = min(10, score)
+    label = 'Low' if score <= 3 else 'High' if score >= 7 else 'Medium'
+    return score, label
+
+
+def _enrich_deal(deal: MergerDeal) -> dict:
+    """Add live price, spread, annualized return, and risk to a deal row."""
+    from datetime import date as _date
+    today = _date.today()
+
+    row = {
+        'id':             deal.id,
+        'targetTicker':   deal.target_ticker.upper(),
+        'targetName':     deal.target_name or deal.target_ticker.upper(),
+        'acquirerName':   deal.acquirer_name,
+        'dealType':       deal.deal_type,
+        'offerPrice':     deal.offer_price,
+        'announceDate':   deal.announce_date,
+        'expectedClose':  deal.expected_close,
+        'status':         deal.status,
+        'statusLabel':    _DEAL_STATUSES.get(deal.status, deal.status),
+        'dealValueBn':    deal.deal_value_bn,
+        'regulatoryBody': deal.regulatory_body,
+        'notes':          deal.notes,
+        'source':         deal.source,
+        'edgarAccession': deal.edgar_accession,
+        'currentPrice':   None,
+        'spread':         None,
+        'spreadPct':      None,
+        'annualizedPct':  None,
+        'daysToClose':    None,
+        'riskScore':      None,
+        'riskLabel':      'Unknown',
+        'priceChange1d':  None,
+        'volume':         None,
+    }
+
+    # Days to close
+    days_to_close = None
+    if deal.expected_close:
+        try:
+            close_dt = datetime.strptime(deal.expected_close, '%Y-%m-%d').date()
+            days_to_close = (close_dt - today).days
+            row['daysToClose'] = days_to_close
+        except ValueError:
+            pass
+
+    try:
+        t  = yf.Ticker(deal.target_ticker)
+        fi = t.fast_info
+        price = _safe_float(getattr(fi, 'last_price', None))
+        if price:
+            row['currentPrice'] = round(price, 2)
+            spread      = deal.offer_price - price
+            spread_pct  = (spread / deal.offer_price) * 100
+            row['spread']    = round(spread, 2)
+            row['spreadPct'] = round(spread_pct, 2)
+            if days_to_close and days_to_close > 0:
+                row['annualizedPct'] = round(spread_pct / days_to_close * 365, 1)
+            row['priceChange1d'] = round(
+                _safe_float(getattr(fi, 'regular_market_price', None) or 0) -
+                _safe_float(getattr(fi, 'previous_close', None) or 0), 2
+            ) or None
+    except Exception:
+        spread_pct = None
+
+    score, label = _deal_risk(
+        deal.deal_type,
+        row.get('spreadPct'),
+        days_to_close,
+        deal.deal_value_bn,
+        deal.regulatory_body,
+    )
+    row['riskScore'] = score
+    row['riskLabel'] = label
+    return row
+
+
+@app.get('/api/merger/deals')
+def get_merger_deals(include_closed: bool = False):
+    with db_session() as db:
+        q = db.query(MergerDeal)
+        if not include_closed:
+            q = q.filter(MergerDeal.status.notin_(['terminated', 'closed']))
+        deals = q.order_by(MergerDeal.created_at.desc()).all()
+
+    if not deals:
+        return []
+
+    results = []
+    with ThreadPoolExecutor(max_workers=min(len(deals), 8)) as pool:
+        futures = {pool.submit(_enrich_deal, d): d for d in deals}
+        for fut in as_completed(futures):
+            try:
+                results.append(fut.result())
+            except Exception as exc:
+                logger.warning('enrich deal: %s', exc)
+
+    results.sort(key=lambda r: -(r.get('annualizedPct') or 0))
+    return results
+
+
+@app.post('/api/merger/deals')
+def create_merger_deal(body: MergerDealCreate):
+    with db_session() as db:
+        deal = MergerDeal(
+            target_ticker   = body.target_ticker.strip().upper(),
+            target_name     = body.target_name.strip(),
+            acquirer_name   = body.acquirer_name.strip(),
+            deal_type       = body.deal_type,
+            offer_price     = body.offer_price,
+            announce_date   = body.announce_date,
+            expected_close  = body.expected_close,
+            status          = body.status,
+            deal_value_bn   = body.deal_value_bn,
+            regulatory_body = body.regulatory_body.strip(),
+            notes           = body.notes.strip(),
+            source          = body.source,
+            edgar_accession = body.edgar_accession,
+        )
+        db.add(deal)
+        db.flush()
+        return {'id': deal.id}
+
+
+@app.put('/api/merger/deals/{deal_id}')
+def update_merger_deal(deal_id: int, body: MergerDealCreate):
+    with db_session() as db:
+        deal = db.query(MergerDeal).filter(MergerDeal.id == deal_id).first()
+        if not deal:
+            raise HTTPException(404, 'Deal not found')
+        deal.target_ticker   = body.target_ticker.strip().upper()
+        deal.target_name     = body.target_name.strip()
+        deal.acquirer_name   = body.acquirer_name.strip()
+        deal.deal_type       = body.deal_type
+        deal.offer_price     = body.offer_price
+        deal.announce_date   = body.announce_date
+        deal.expected_close  = body.expected_close
+        deal.status          = body.status
+        deal.deal_value_bn   = body.deal_value_bn
+        deal.regulatory_body = body.regulatory_body.strip()
+        deal.notes           = body.notes.strip()
+        deal.source          = body.source
+        return {'ok': True}
+
+
+@app.delete('/api/merger/deals/{deal_id}')
+def delete_merger_deal(deal_id: int):
+    with db_session() as db:
+        deal = db.query(MergerDeal).filter(MergerDeal.id == deal_id).first()
+        if not deal:
+            raise HTTPException(404, 'Deal not found')
+        db.delete(deal)
+    return {'ok': True}
+
+
+@app.get('/api/merger/scan-edgar')
+def scan_edgar_deals():
+    """Return recent SC TO-T and SC 13E-3 tender offer filings from EDGAR."""
+    cache_key = 'merger_edgar_scan'
+    cached = cache_get(cache_key, _MERGER_EDGAR_TTL)
+    if cached:
+        return cached
+
+    from datetime import date as _date
+    cutoff = (_date.today() - pd.Timedelta(days=90)).strftime('%Y-%m-%d')
+    results = []
+
+    for form in ('SC TO-T', 'SC 13E-3'):
+        try:
+            url = (
+                f"https://efts.sec.gov/LATEST/search-index"
+                f"?q=&forms={form.replace(' ', '+')}"
+                f"&dateRange=custom&startdt={cutoff}"
+            )
+            resp = _edgar_req(url).json()
+            hits = resp.get('hits', {}).get('hits', [])
+            for h in hits[:30]:
+                src = h.get('_source', {})
+                acc = h.get('_id', '')
+                # Normalise accession to XX-XXXXXXXX-XXXXXXXX format
+                if acc and '-' not in acc and len(acc) == 18:
+                    acc = f"{acc[:10]}-{acc[10:12]}-{acc[12:]}"
+                results.append({
+                    'accession':  acc,
+                    'filerName':  src.get('entity_name', ''),
+                    'formType':   src.get('form_type', form),
+                    'fileDate':   src.get('file_date', ''),
+                    'edgarUrl':   f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&filenum=&State=0&SIC=&dateb=&owner=include&count=1&search_text=&accession={acc.replace('-', '')}",
+                })
+        except Exception as exc:
+            logger.warning('edgar scan %s: %s', form, exc)
+
+    results.sort(key=lambda r: r.get('fileDate', ''), reverse=True)
+    cache_set(cache_key, results)
+    return results
+
+
+@app.get('/api/merger/deal/{deal_id}/spread-history')
+def deal_spread_history(deal_id: int):
+    """90-day daily spread history for a deal."""
+    with db_session() as db:
+        deal = db.query(MergerDeal).filter(MergerDeal.id == deal_id).first()
+        if not deal:
+            raise HTTPException(404, 'Deal not found')
+        offer = deal.offer_price
+        ticker = deal.target_ticker
+
+    try:
+        hist = yf.Ticker(ticker).history(period='3mo')
+        if hist.empty:
+            return []
+        hist.index = hist.index.tz_localize(None) if hist.index.tzinfo else hist.index
+        rows = []
+        for dt, row in hist.iterrows():
+            price = float(row['Close'])
+            spread_pct = round((offer - price) / offer * 100, 3)
+            rows.append({'date': str(dt.date()), 'price': round(price, 2),
+                         'spread': round(offer - price, 2), 'spreadPct': spread_pct})
+        return rows
+    except Exception as exc:
+        logger.warning('spread history %s: %s', ticker, exc)
+        return []
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

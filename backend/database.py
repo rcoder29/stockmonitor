@@ -117,6 +117,27 @@ class PriceAlert(Base):
     triggered_at  = Column(DateTime, nullable=True)
 
 
+# ── Merger Arb ───────────────────────────────────────────────────────────────
+
+class MergerDeal(Base):
+    __tablename__ = "merger_deals"
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    target_ticker   = Column(String(20), nullable=False)
+    target_name     = Column(String(200), default='')
+    acquirer_name   = Column(String(200), default='')
+    deal_type       = Column(String(20), default='cash')   # cash | stock | mixed
+    offer_price     = Column(Float, nullable=False)
+    announce_date   = Column(String(10), default='')       # YYYY-MM-DD
+    expected_close  = Column(String(10), default='')       # YYYY-MM-DD
+    status          = Column(String(30), default='pending_regulatory')
+    deal_value_bn   = Column(Float, nullable=True)
+    regulatory_body = Column(String(50), default='')
+    notes           = Column(String(1000), default='')
+    source          = Column(String(20), default='manual') # manual | edgar
+    edgar_accession = Column(String(60), default='')
+    created_at      = Column(DateTime, default=datetime.utcnow)
+
+
 # ── Generic key-value cache ───────────────────────────────────────────────────
 
 class CacheEntry(Base):
@@ -161,6 +182,22 @@ def migrate_db():
          "alert_type VARCHAR(30) NOT NULL, "
          "params TEXT DEFAULT '{}', "
          "active INTEGER DEFAULT 1, "
+         "created_at DATETIME)"),
+        ("CREATE TABLE IF NOT EXISTS merger_deals ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "target_ticker VARCHAR(20) NOT NULL, "
+         "target_name VARCHAR(200) DEFAULT '', "
+         "acquirer_name VARCHAR(200) DEFAULT '', "
+         "deal_type VARCHAR(20) DEFAULT 'cash', "
+         "offer_price REAL NOT NULL, "
+         "announce_date VARCHAR(10) DEFAULT '', "
+         "expected_close VARCHAR(10) DEFAULT '', "
+         "status VARCHAR(30) DEFAULT 'pending_regulatory', "
+         "deal_value_bn REAL, "
+         "regulatory_body VARCHAR(50) DEFAULT '', "
+         "notes VARCHAR(1000) DEFAULT '', "
+         "source VARCHAR(20) DEFAULT 'manual', "
+         "edgar_accession VARCHAR(60) DEFAULT '', "
          "created_at DATETIME)"),
     ]
     with engine.connect() as conn:

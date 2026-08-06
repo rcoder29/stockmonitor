@@ -66,6 +66,7 @@ import EarningsStrategyAnalyzer from './components/EarningsStrategyAnalyzer'
 import MarketSentimentDashboard from './components/MarketSentimentDashboard'
 import AnalystRatingTracker from './components/AnalystRatingTracker'
 import FundHoldingsExplorer from './components/FundHoldingsExplorer'
+import MergerDealDashboard from './components/MergerDealDashboard'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -202,6 +203,22 @@ const NAV_GROUPS = [
       { id: 'positionsize', label: 'Position Sizer' },
       { id: 'wheeltracker', label: 'Wheel Tracker' },
       { id: 'daytrader',    label: 'Day Trader' },
+    ],
+  },
+  {
+    id: 'mergerarb',
+    label: 'Merger Arb',
+    icon: (
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+        <path d="M2 8h4M10 8h4M6 5l-3 3 3 3M10 5l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      </svg>
+    ),
+    items: [
+      { id: 'mergerdashboard',  label: 'Deal Dashboard' },
+      { id: 'mergerscanner',    label: 'Opportunity Scanner' },
+      { id: 'mergeranalyzer',   label: 'Deal Analyzer' },
+      { id: 'mergerportfolio',  label: 'Arb Portfolio' },
+      { id: 'mergerrisk',       label: 'Risk Matrix' },
     ],
   },
   {
@@ -845,6 +862,7 @@ export default function App() {
           {activeTab === 'relativestrengthr'  && <RelativeStrengthRanker watchlist={watchlist} />}
           {activeTab === 'analystratings'     && <AnalystRatingTracker watchlist={watchlist} />}
           {activeTab === 'fundholdings'       && <FundHoldingsExplorer />}
+          {activeTab === 'mergerdashboard'    && <MergerDealDashboard />}
         </main>
       </div>
 
