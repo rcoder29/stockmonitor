@@ -72,6 +72,9 @@ import MergerOpportunityScanner from './components/MergerOpportunityScanner'
 import MergerDealAnalyzer from './components/MergerDealAnalyzer'
 import MergerArbPortfolio from './components/MergerArbPortfolio'
 import MergerRiskMatrix from './components/MergerRiskMatrix'
+import SpacTracker from './components/SpacTracker'
+import SpacDiscovery from './components/SpacDiscovery'
+import SpacDealAnalyzer from './components/SpacDealAnalyzer'
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -225,6 +228,20 @@ const NAV_GROUPS = [
       { id: 'mergeranalyzer',   label: 'Deal Analyzer' },
       { id: 'mergerportfolio',  label: 'Arb Portfolio' },
       { id: 'mergerrisk',       label: 'Risk Matrix' },
+    ],
+  },
+  {
+    id: 'spacs',
+    label: 'SPACs',
+    icon: (
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+        <path d="M8 1.5v13M4 5.5l4-4 4 4M4 10.5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      </svg>
+    ),
+    items: [
+      { id: 'spactracker',   label: 'Tracker' },
+      { id: 'spacdiscovery', label: 'Discovery' },
+      { id: 'spacanalyzer',  label: 'Deal Analyzer' },
     ],
   },
   {
@@ -876,6 +893,9 @@ export default function App() {
           {activeTab === 'mergeranalyzer'     && <MergerDealAnalyzer focusDealId={mergerFocusDealId} onFocusConsumed={() => setMergerFocusDealId(null)} />}
           {activeTab === 'mergerportfolio'    && <MergerArbPortfolio />}
           {activeTab === 'mergerrisk'         && <MergerRiskMatrix />}
+          {activeTab === 'spactracker'        && <SpacTracker />}
+          {activeTab === 'spacdiscovery'      && <SpacDiscovery />}
+          {activeTab === 'spacanalyzer'       && <SpacDealAnalyzer />}
         </main>
       </div>
 

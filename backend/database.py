@@ -149,6 +149,31 @@ class ArbPosition(Base):
     created_at    = Column(DateTime, default=datetime.utcnow)
 
 
+# ── SPACs ─────────────────────────────────────────────────────────────────────
+
+class SpacDeal(Base):
+    __tablename__ = "spac_deals"
+    id                     = Column(Integer, primary_key=True, autoincrement=True)
+    ticker                 = Column(String(20), nullable=False)
+    company_name           = Column(String(200), default='')
+    sponsor                = Column(String(200), default='')
+    warrant_ticker         = Column(String(20), default='')
+    warrant_strike         = Column(Float, default=11.5)
+    warrant_ratio          = Column(Float, default=0.5)    # shares received per warrant exercised
+    ipo_date               = Column(String(10), default='')
+    trust_value_per_share  = Column(Float, default=10.0)
+    trust_value_date       = Column(String(10), default='')   # as-of date for trust_value_per_share
+    deadline_date          = Column(String(10), default='')
+    status                 = Column(String(30), default='searching')  # searching|deal_announced|shareholder_vote|redemption_period|closing|completed|liquidated
+    target_name            = Column(String(200), default='')
+    deal_announce_date     = Column(String(10), default='')
+    pipe_amount_mn         = Column(Float, nullable=True)
+    notes                  = Column(String(1000), default='')
+    source                 = Column(String(20), default='manual')  # manual | edgar
+    edgar_accession        = Column(String(60), default='')
+    created_at             = Column(DateTime, default=datetime.utcnow)
+
+
 # ── Generic key-value cache ───────────────────────────────────────────────────
 
 class CacheEntry(Base):
@@ -217,6 +242,26 @@ def migrate_db():
          "entry_price REAL NOT NULL, "
          "entry_date VARCHAR(10) DEFAULT '', "
          "notes VARCHAR(500) DEFAULT '', "
+         "created_at DATETIME)"),
+        ("CREATE TABLE IF NOT EXISTS spac_deals ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "ticker VARCHAR(20) NOT NULL, "
+         "company_name VARCHAR(200) DEFAULT '', "
+         "sponsor VARCHAR(200) DEFAULT '', "
+         "warrant_ticker VARCHAR(20) DEFAULT '', "
+         "warrant_strike REAL DEFAULT 11.5, "
+         "warrant_ratio REAL DEFAULT 0.5, "
+         "ipo_date VARCHAR(10) DEFAULT '', "
+         "trust_value_per_share REAL DEFAULT 10.0, "
+         "trust_value_date VARCHAR(10) DEFAULT '', "
+         "deadline_date VARCHAR(10) DEFAULT '', "
+         "status VARCHAR(30) DEFAULT 'searching', "
+         "target_name VARCHAR(200) DEFAULT '', "
+         "deal_announce_date VARCHAR(10) DEFAULT '', "
+         "pipe_amount_mn REAL, "
+         "notes VARCHAR(1000) DEFAULT '', "
+         "source VARCHAR(20) DEFAULT 'manual', "
+         "edgar_accession VARCHAR(60) DEFAULT '', "
          "created_at DATETIME)"),
     ]
     with engine.connect() as conn:

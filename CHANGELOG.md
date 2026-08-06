@@ -4,6 +4,35 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — New SPACs module: Tracker, Discovery, Deal Analyzer
+
+New top-level **SPACs** sidebar group — a separate strategy from Merger Arb. A SPAC's common stock has a floor at trust value (shareholders can redeem for trust value + accrued interest at a vote or by the deadline, independent of deal terms), so the trade is discount-to-trust capture with optional leveraged upside via warrants, not deal-completion risk against a fixed offer price.
+
+### New
+- **Tracker** — CRUD list of SPACs with live discount/premium-to-trust, annualized capture-yield-to-deadline, days to redemption deadline, and warrant price. Sorted by annualized yield (best opportunities first).
+- **Discovery** — EDGAR scan for new SPAC IPOs (S-1 + "blank check") and de-SPAC merger announcements (425/DEFM14A/S-4 + "trust account"), 60-day window. Auto-parses common and warrant tickers from EDGAR's combined ticker listing in filer display names (e.g. `CDAQF, CDAUF, CDAWF` → common `CDAQF`, warrant `CDAWF`). Quick-add to Tracker.
+- **Deal Analyzer** — capture-yield floor case (return if bought now and redeemed at trust by the deadline), warrant intrinsic/time value/breakeven, and a redeem-vs-hold scenario table (weak aftermarket through +200%-to-trust) showing both common and warrant returns — the asymmetric bounded-downside/leveraged-upside payoff that defines SPAC arb.
+
+### Backend
+- `SpacDeal` model (`spac_deals` table): ticker, warrant ticker/strike/ratio, trust value + as-of date, deadline, status, target/PIPE info.
+- `GET/POST/PUT/DELETE /api/spac/deals` — CRUD with live enrichment (`_enrich_spac`).
+- `GET /api/spac/discovery` — multi-form/keyword EDGAR scan, 4h cache, tracked cross-reference.
+- `GET /api/spac/analyze` — deal_id or ad-hoc params in; discount/capture-yield/annualized-yield, warrant economics, and scenario table out.
+
+### Bug fix
+- All three EDGAR full-text-search scanners (new SPAC Discovery, the Merger Opportunity Scanner, and the original Deal Dashboard EDGAR panel) were omitting the `enddt` query parameter. Without it, EDGAR's API silently ignores `startdt` entirely and returns all-time, relevance-sorted results instead of the claimed recent window — e.g. Deal Dashboard's "last 90 days" panel could surface filings from 2019. Fixed by passing an explicit `enddt=today` alongside `startdt` in all three.
+
+### Files changed
+- `backend/database.py` — `SpacDeal` model + migration
+- `backend/main.py` — SPAC endpoints; `enddt` fix in `scan_edgar_deals`, `merger_opportunities`, `spac_discovery`
+- `frontend/src/components/SpacTracker.jsx` (new)
+- `frontend/src/components/SpacDiscovery.jsx` (new)
+- `frontend/src/components/SpacDealAnalyzer.jsx` (new)
+- `frontend/src/App.jsx` — new SPACs nav group + 3 tab routes
+- `frontend/src/components/UserGuide.jsx` — new SPACs section + changelog entry
+
+---
+
 ## 2026-08-06 — Merger Arb: Overview (launching pad)
 
 ### New
