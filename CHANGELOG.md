@@ -4,6 +4,28 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — Merger Arb: Alerts
+
+New Alerts page for Merger Arb, mirroring SPAC Alerts. Merger Arb's sidebar group is now 7 items.
+
+### New
+- **Alerts** — merger-arb-specific alert rules, separate from the general Smart Alerts since these read spread, days-to-close, and status directly from tracked deals rather than price history.
+- Three alert types: **Days to Close Threshold** (fires on overdue too), **Spread Threshold** (directional — at-or-above or at-or-below a % vs. live spread), **Status Reached** (fires when a deal's status matches your pick — e.g. "Closing" as the completion catalyst, "Terminated" as the downside one).
+- Same on-demand scan pattern as SPAC Alerts and the general Smart Alerts: rules are checked live when you click "Scan," no background polling, no dedup/already-seen tracking.
+
+### Backend
+- `MergerAlertRule` model (`merger_alert_rules` table): deal_id, alert_type, params JSON, active flag (soft-delete).
+- `GET/POST/DELETE /api/merger/alerts` + `POST /api/merger/alerts/scan` — evaluates each active rule against `_enrich_deal` output for its linked deal.
+
+### Files changed
+- `backend/database.py` — `MergerAlertRule` model + migration
+- `backend/main.py` — `/api/merger/alerts` endpoints + `_check_merger_alert`
+- `frontend/src/components/MergerAlerts.jsx` (new)
+- `frontend/src/App.jsx` — new `mergeralerts` tab route
+- `frontend/src/components/UserGuide.jsx` — new Alerts section + changelog entry
+
+---
+
 ## 2026-08-06 — SPACs: Overview (launching pad)
 
 ### New

@@ -749,6 +749,15 @@ const GUIDE = [
         'The Regulator × Deal Type grid shows how many deals fall in each combination and their average risk score — cells shade green/yellow/red by average risk.',
         '"Highest Risk Deals" and "Best Annualized Return" panels surface the extremes in your book at a glance.',
       ]},
+      { type: 'h3', text: 'Alerts' },
+      { type: 'p', text: 'Merger-arb-specific alert rules for days-to-close, spread thresholds, and status changes on tracked deals. Found under Merger Arb → Alerts. Separate from the general Smart Alerts (Watchlist → Smart Alerts) since these read spread, days to close, and status directly from the Deal Dashboard rather than price history.' },
+      { type: 'steps', items: [
+        'Pick a tracked deal and an alert type, set any parameters, then "+ Add Rule". Click "Scan N Rules" to check them all against live data.',
+        'Days to Close Threshold fires when the days remaining to expected close falls at or below your threshold (including overdue).',
+        'Spread Threshold fires when the live spread crosses your chosen level in the chosen direction — e.g. "at or above 8%" to flag a widening spread (elevated perceived risk, or a wider entry), or "at or below 1%" to flag a deal nearly fully priced in.',
+        'Status Reached fires as soon as a deal\'s status matches the one you pick — e.g. watch for "Closing" as the completion catalyst, or "Terminated" as the downside one.',
+      ]},
+      { type: 'tip', text: 'Like SPAC Alerts and the general Smart Alerts, this checks whether the condition is true right now each time you scan — it isn\'t a background push notification and doesn\'t track "already seen." Remove a rule once you\'ve acted on it, or leave it to keep confirming the condition on each scan.' },
       { type: 'h2', text: 'SPACs' },
       { type: 'p', text: 'SPAC arbitrage is a different trade from merger arb: instead of a fixed offer price and deal-completion risk, a SPAC\'s common stock has a floor at its trust value — shareholders can redeem for trust value (plus accrued interest) at a shareholder vote or by the deadline, regardless of the proposed deal. Buying below trust captures that discount as a largely bounded-downside yield, with optional leveraged upside via warrants if you hold through a well-received business combination.' },
       { type: 'h3', text: 'Overview' },
@@ -1280,6 +1289,12 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-08-06 — Merger Arb: Alerts' },
+      { type: 'bullets', items: [
+        'New Alerts page for Merger Arb, mirroring SPAC Alerts — Merger Arb\'s sidebar group is now 7 items.',
+        'Three alert types: Days to Close Threshold (fires on overdue too), Spread Threshold (directional — at-or-above or at-or-below a % vs. live spread), Status Reached (fires when a deal\'s status matches your pick, e.g. "Closing" or "Terminated").',
+        'Separate rule/scan system from the general Smart Alerts, same on-demand scan pattern as SPAC Alerts — reads spread/days-to-close/status from tracked deals rather than price history alone.',
+      ]},
       { type: 'h3', text: '2026-08-06 — SPACs: Overview' },
       { type: 'bullets', items: [
         'New Overview page — the first item in the SPACs group, acting as a launching pad across the other 5 components (mirrors Merger Arb\'s Overview).',

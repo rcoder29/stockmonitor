@@ -72,6 +72,7 @@ import MergerOpportunityScanner from './components/MergerOpportunityScanner'
 import MergerDealAnalyzer from './components/MergerDealAnalyzer'
 import MergerArbPortfolio from './components/MergerArbPortfolio'
 import MergerRiskMatrix from './components/MergerRiskMatrix'
+import MergerAlerts from './components/MergerAlerts'
 import SpacOverview from './components/SpacOverview'
 import SpacTracker from './components/SpacTracker'
 import SpacDiscovery from './components/SpacDiscovery'
@@ -232,6 +233,7 @@ const NAV_GROUPS = [
       { id: 'mergeranalyzer',   label: 'Deal Analyzer' },
       { id: 'mergerportfolio',  label: 'Arb Portfolio' },
       { id: 'mergerrisk',       label: 'Risk Matrix' },
+      { id: 'mergeralerts',     label: 'Alerts' },
     ],
   },
   {
@@ -903,6 +905,7 @@ export default function App() {
           {activeTab === 'mergeranalyzer'     && <MergerDealAnalyzer focusDealId={mergerFocusDealId} onFocusConsumed={() => setMergerFocusDealId(null)} />}
           {activeTab === 'mergerportfolio'    && <MergerArbPortfolio />}
           {activeTab === 'mergerrisk'         && <MergerRiskMatrix />}
+          {activeTab === 'mergeralerts'       && <MergerAlerts />}
           {activeTab === 'spacoverview'        && <SpacOverview onNavigate={goToSpac} />}
           {activeTab === 'spactracker'        && <SpacTracker focusDealId={spacFocusId} onFocusConsumed={() => setSpacFocusId(null)} />}
           {activeTab === 'spacdiscovery'      && <SpacDiscovery />}

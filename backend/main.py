@@ -34,7 +34,7 @@ from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
     WatchlistSymbol, WatchlistGroup, PortfolioPosition, PortfolioSnapshot,
     PriceAlert, SmartAlertRule, OptionsPosition, PriceTarget, TradeJournalEntry,
-    MergerDeal, ArbPosition, SpacDeal, SpacPosition, SpacAlertRule,
+    MergerDeal, ArbPosition, SpacDeal, SpacPosition, SpacAlertRule, MergerAlertRule,
 )
 
 # Corporate proxy uses a self-signed cert — reuse one session with SSL disabled
@@ -9574,6 +9574,135 @@ def delete_arb_position(position_id: int):
             raise HTTPException(404, 'Position not found')
         db.delete(pos)
     return {'ok': True}
+
+
+_MERGER_ALERT_TYPES = {
+    'days_to_close_threshold': {'param': 'days',   'default': 30,        'label': 'Days to Close Threshold'},
+    'spread_threshold':        {'param': 'pct',    'default': 8.0,       'label': 'Spread Threshold'},
+    'status_alert':            {'param': 'status', 'default': 'closing', 'label': 'Status Reached'},
+}
+
+
+class MergerAlertCreate(BaseModel):
+    deal_id:    int
+    alert_type: str
+    params:     dict = {}
+
+
+def _check_merger_alert(rule: dict, deal: MergerDeal) -> dict | None:
+    """Evaluate one merger-arb alert rule against live-enriched deal data.
+    Like the SPAC and generic Smart Alerts scanners, this checks whether the
+    condition is currently true -- it isn't edge-triggered / doesn't dedupe
+    across scans."""
+    atype  = rule['alert_type']
+    params = rule['params']
+    enriched = _enrich_deal(deal)
+
+    if atype == 'days_to_close_threshold':
+        days_thresh = params.get('days', 30)
+        d = enriched['daysToClose']
+        if d is not None and d <= days_thresh:
+            detail = f"Overdue by {-d} day(s)" if d < 0 else f"{d} day(s) to expected close ({deal.expected_close})"
+            return {'triggered': True, 'detail': detail}
+
+    elif atype == 'spread_threshold':
+        direction = params.get('direction', 'above')
+        pct = params.get('pct', 8.0)
+        spread = enriched['spreadPct']
+        if spread is not None:
+            if direction == 'above' and spread >= pct:
+                return {'triggered': True, 'detail': f"Spread at {spread:.1f}% (≥ {pct}%)"}
+            if direction == 'below' and spread <= pct:
+                return {'triggered': True, 'detail': f"Spread at {spread:.1f}% (≤ {pct}%)"}
+
+    elif atype == 'status_alert':
+        target_status = params.get('status', 'closing')
+        if deal.status == target_status:
+            return {'triggered': True, 'detail': f"Status: {enriched['statusLabel']}"}
+
+    return None
+
+
+@app.get('/api/merger/alerts')
+def list_merger_alerts():
+    with db_session() as db:
+        rules = db.query(MergerAlertRule).filter(MergerAlertRule.active == 1).order_by(MergerAlertRule.created_at.desc()).all()
+        if not rules:
+            return []
+        deal_ids = {r.deal_id for r in rules}
+        deals = {d.id: d for d in db.query(MergerDeal).filter(MergerDeal.id.in_(deal_ids)).all()}
+
+    return [{
+        'id':          r.id,
+        'dealId':      r.deal_id,
+        'ticker':      deals[r.deal_id].target_ticker.upper() if r.deal_id in deals else '?',
+        'companyName': deals[r.deal_id].target_name if r.deal_id in deals else '',
+        'alertType':   r.alert_type,
+        'label':       _MERGER_ALERT_TYPES.get(r.alert_type, {}).get('label', r.alert_type),
+        'params':      json.loads(r.params),
+        'createdAt':   str(r.created_at),
+    } for r in rules]
+
+
+@app.post('/api/merger/alerts')
+def create_merger_alert(req: MergerAlertCreate):
+    if req.alert_type not in _MERGER_ALERT_TYPES:
+        raise HTTPException(400, f"Unknown alert_type. Valid: {list(_MERGER_ALERT_TYPES)}")
+    with db_session() as db:
+        if not db.query(MergerDeal).filter(MergerDeal.id == req.deal_id).first():
+            raise HTTPException(404, 'Deal not found')
+        rule = MergerAlertRule(deal_id=req.deal_id, alert_type=req.alert_type, params=json.dumps(req.params))
+        db.add(rule)
+        db.flush()
+        return {'id': rule.id}
+
+
+@app.delete('/api/merger/alerts/{rule_id}')
+def delete_merger_alert(rule_id: int):
+    with db_session() as db:
+        rule = db.query(MergerAlertRule).filter(MergerAlertRule.id == rule_id).first()
+        if not rule:
+            raise HTTPException(404, 'Rule not found')
+        rule.active = 0
+    return {'ok': True}
+
+
+@app.post('/api/merger/alerts/scan')
+def scan_merger_alerts():
+    with db_session() as db:
+        rules = db.query(MergerAlertRule).filter(MergerAlertRule.active == 1).all()
+        if not rules:
+            return []
+        deal_ids = {r.deal_id for r in rules}
+        deals = {d.id: d for d in db.query(MergerDeal).filter(MergerDeal.id.in_(deal_ids)).all()}
+        rule_list = [{'id': r.id, 'deal_id': r.deal_id, 'alert_type': r.alert_type, 'params': json.loads(r.params)} for r in rules]
+
+    results = []
+    with ThreadPoolExecutor(max_workers=min(len(rule_list), 8)) as pool:
+        futures = {}
+        for r in rule_list:
+            deal = deals.get(r['deal_id'])
+            if deal is None:
+                continue
+            futures[pool.submit(_check_merger_alert, r, deal)] = r
+        for fut, r in futures.items():
+            try:
+                outcome = fut.result()
+            except Exception as exc:
+                logger.warning('merger alert check %s: %s', r['id'], exc)
+                continue
+            if outcome and outcome.get('triggered'):
+                deal = deals[r['deal_id']]
+                results.append({
+                    'id':          r['id'],
+                    'dealId':      r['deal_id'],
+                    'ticker':      deal.target_ticker.upper(),
+                    'companyName': deal.target_name,
+                    'alertType':   r['alert_type'],
+                    'label':       _MERGER_ALERT_TYPES.get(r['alert_type'], {}).get('label', r['alert_type']),
+                    'detail':      outcome.get('detail', ''),
+                })
+    return results
 
 
 # ── SPACs ─────────────────────────────────────────────────────────────────────

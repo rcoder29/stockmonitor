@@ -196,6 +196,16 @@ class SpacAlertRule(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 
+class MergerAlertRule(Base):
+    __tablename__ = "merger_alert_rules"
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    deal_id     = Column(Integer, nullable=False, index=True)   # references merger_deals.id
+    alert_type  = Column(String(30), nullable=False)            # days_to_close_threshold | spread_threshold | status_alert
+    params      = Column(Text, default='{}')
+    active      = Column(Integer, default=1)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
 # ── Generic key-value cache ───────────────────────────────────────────────────
 
 class CacheEntry(Base):
@@ -297,6 +307,13 @@ def migrate_db():
         ("CREATE TABLE IF NOT EXISTS spac_alert_rules ("
          "id INTEGER PRIMARY KEY AUTOINCREMENT, "
          "spac_id INTEGER NOT NULL, "
+         "alert_type VARCHAR(30) NOT NULL, "
+         "params TEXT DEFAULT '{}', "
+         "active INTEGER DEFAULT 1, "
+         "created_at DATETIME)"),
+        ("CREATE TABLE IF NOT EXISTS merger_alert_rules ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "deal_id INTEGER NOT NULL, "
          "alert_type VARCHAR(30) NOT NULL, "
          "params TEXT DEFAULT '{}', "
          "active INTEGER DEFAULT 1, "
