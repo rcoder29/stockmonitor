@@ -66,6 +66,8 @@ import EarningsStrategyAnalyzer from './components/EarningsStrategyAnalyzer'
 import MarketSentimentDashboard from './components/MarketSentimentDashboard'
 import AnalystRatingTracker from './components/AnalystRatingTracker'
 import FundHoldingsExplorer from './components/FundHoldingsExplorer'
+import ActivistTracker from './components/ActivistTracker'
+import RedditTrending from './components/RedditTrending'
 import MergerArbOverview from './components/MergerArbOverview'
 import MergerDealDashboard from './components/MergerDealDashboard'
 import MergerOpportunityScanner from './components/MergerOpportunityScanner'
@@ -149,6 +151,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'market',          label: 'Overview' },
       { id: 'sentiment',       label: 'Sentiment' },
+      { id: 'reddittrending',  label: 'Reddit Trending' },
       { id: 'indexheatmap',    label: 'Index Heatmap' },
       { id: 'breadth',         label: 'Breadth' },
       { id: 'sectors',         label: 'Sector Rotation' },
@@ -178,6 +181,7 @@ const NAV_GROUPS = [
       { id: 'earningstrategy',     label: 'Earnings Strategy' },
       { id: 'analystratings',      label: 'Analyst Ratings' },
       { id: 'fundholdings',        label: 'Fund Holdings' },
+      { id: 'activisttracker',     label: 'Activist Tracker' },
       { id: 'relativestrengthr',   label: 'Relative Strength' },
       { id: 'seasonalpatterns',    label: 'Seasonal Patterns' },
       { id: 'etfoverlap',          label: 'ETF Overlap' },
@@ -896,9 +900,11 @@ export default function App() {
           {activeTab === 'etfoverlap'         && <EtfOverlapAnalyzer />}
           {activeTab === 'earningstrategy'    && <EarningsStrategyAnalyzer watchlist={watchlist} />}
           {activeTab === 'sentiment'          && <MarketSentimentDashboard />}
+          {activeTab === 'reddittrending'     && <RedditTrending />}
           {activeTab === 'relativestrengthr'  && <RelativeStrengthRanker watchlist={watchlist} />}
           {activeTab === 'analystratings'     && <AnalystRatingTracker watchlist={watchlist} />}
           {activeTab === 'fundholdings'       && <FundHoldingsExplorer />}
+          {activeTab === 'activisttracker'    && <ActivistTracker />}
           {activeTab === 'mergeroverview'      && <MergerArbOverview onNavigate={goToMerger} />}
           {activeTab === 'mergerdashboard'    && <MergerDealDashboard focusDealId={mergerFocusDealId} onFocusConsumed={() => setMergerFocusDealId(null)} />}
           {activeTab === 'mergerscanner'      && <MergerOpportunityScanner />}

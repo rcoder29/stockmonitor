@@ -4,6 +4,50 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — Reddit Trending Stocks
+
+New Markets page: most-mentioned tickers across finance subreddits.
+
+### New
+- **Reddit Trending** under Markets → Reddit Trending. Direct Reddit scraping is blocked (403 even with Chrome TLS impersonation, same technique used elsewhere in the app) — sourced instead from ApeWisdom, a free, unauthenticated API aggregating mention counts and upvotes across r/wallstreetbets and other finance subreddits.
+- Surfaces mention volume and 24h rank/mention momentum ("Rising Attention" / "Cooling Attention"), not bullish/bearish sentiment — the data source has no sentiment classification, so this is labeled honestly as attention momentum rather than a long/short call.
+- Filter by subreddit source, sortable table, live price + 5D change per ticker.
+
+### Backend
+- `GET /api/reddit/trending` — paginated ApeWisdom fetch, rank/mention delta computation, live quote enrichment via `_fetch_opp_quote`. 30-minute cache.
+
+### Bug fix
+- `_fetch_opp_quote` (shared with the Merger Opportunity Scanner) could return a NaN price for thin/sparse-data tickers, which crashed FastAPI's JSON response encoder (`ValueError: Out of range float values are not JSON compliant: nan`). Reddit's noisier, more speculative ticker universe surfaced it. The bug was masked in ad-hoc testing because Python's `json.dumps` (used by the SQLite cache layer) silently allows NaN by default, so a broken result could get cached successfully and only fail on the stricter FastAPI response encoder on a later request — caught via `TestClient`, which exercises the full response-serialization path that a raw function call skips. Fixed with explicit `math.isfinite` guards; removed a near-duplicate helper (`_fetch_activist_quote`) in favor of the shared, now-fixed one.
+
+### Files changed
+- `backend/main.py` — `/api/reddit/trending` endpoint; `_fetch_opp_quote` NaN fix; consolidated `_fetch_activist_quote` into `_fetch_opp_quote`
+- `frontend/src/components/RedditTrending.jsx` (new)
+- `frontend/src/App.jsx` — new `reddittrending` tab under Markets
+- `frontend/src/components/UserGuide.jsx` — new Reddit Trending section + changelog entry
+
+---
+
+## 2026-08-06 — Activist Tracker (13D/13G)
+
+New Research page: scans EDGAR for Schedule 13D and 13G beneficial-ownership filings — the disclosure required whenever an investor crosses 5% ownership of a public company.
+
+### New
+- **Activist Tracker** under Research → Activist Tracker. 13D signals possible activist/control intent and is far lower-volume/higher-signal than 13G, which is dominated by routine index-fund threshold crossings — defaults to 13D-only.
+- Parses both the subject company *and* the reporting person/fund from EDGAR's combined `display_names` field (`[0]` = subject, `[1]` = filer) — the first feature in the app to use the filer half of that field.
+- "New filings only" toggle isolates fresh 5%+ stakes from amendments (13D/A, 13G/A, which reflect changes to an existing position). Search by ticker, company, or filer name — e.g. search a known activist fund to see its recent activity across companies.
+- Live price + 5-day change per filing.
+
+### Backend
+- `GET /api/activist/tracker` — EDGAR scan across SCHEDULE 13D and SCHEDULE 13G (30-day window, 4h cache), live quote enrichment.
+
+### Files changed
+- `backend/main.py` — `/api/activist/tracker` endpoint
+- `frontend/src/components/ActivistTracker.jsx` (new)
+- `frontend/src/App.jsx` — new `activisttracker` tab under Research
+- `frontend/src/components/UserGuide.jsx` — new Activist Tracker section + changelog entry
+
+---
+
 ## 2026-08-06 — Merger Arb: Alerts
 
 New Alerts page for Merger Arb, mirroring SPAC Alerts. Merger Arb's sidebar group is now 7 items.

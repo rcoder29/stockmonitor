@@ -20,6 +20,8 @@ from curl_cffi import requests as curl_requests
 import xml.etree.ElementTree as ET
 import re
 import urllib.parse
+import html
+import math
 from anthropic import Anthropic
 from dotenv import load_dotenv
 load_dotenv()
@@ -9226,19 +9228,29 @@ _MERGER_OPP_FORM_LABELS = {
 _TICKER_RE = re.compile(r'\(([A-Z]{1,6}(?:,\s*[A-Z]{1,6})*)\)\s*\(CIK')
 
 
+def _finite_or_none(v):
+    return v if v is not None and math.isfinite(v) else None
+
+
 def _fetch_opp_quote(ticker: str) -> dict:
     try:
         hist = yf.Ticker(ticker).history(period='1mo')
         if hist.empty:
             return {}
         last = float(hist['Close'].iloc[-1])
+        if not math.isfinite(last):
+            return {}
         chg5d = None
         chg1mo = None
         if len(hist) > 5:
-            chg5d = round((last / float(hist['Close'].iloc[-6]) - 1) * 100, 2)
+            prev5 = float(hist['Close'].iloc[-6])
+            if math.isfinite(prev5) and prev5:
+                chg5d = round((last / prev5 - 1) * 100, 2)
         if len(hist) > 1:
-            chg1mo = round((last / float(hist['Close'].iloc[0]) - 1) * 100, 2)
-        return {'currentPrice': round(last, 2), 'priceChange5d': chg5d, 'priceChange1mo': chg1mo}
+            prev1mo = float(hist['Close'].iloc[0])
+            if math.isfinite(prev1mo) and prev1mo:
+                chg1mo = round((last / prev1mo - 1) * 100, 2)
+        return {'currentPrice': round(last, 2), 'priceChange5d': _finite_or_none(chg5d), 'priceChange1mo': _finite_or_none(chg1mo)}
     except Exception:
         return {}
 
@@ -10394,6 +10406,180 @@ def scan_spac_alerts():
                     'detail':      outcome.get('detail', ''),
                 })
     return results
+
+
+# ── 13D/13G Activist Tracker ───────────────────────────────────────────────────
+
+_ACTIVIST_TTL = timedelta(hours=4)
+_ACTIVIST_FORMS = (
+    ('SCHEDULE 13D', 'Activist (13D)'),
+    ('SCHEDULE 13G', 'Institutional/Passive (13G)'),
+)
+
+
+@app.get('/api/activist/tracker')
+def activist_tracker(days: int = 30):
+    """Scan EDGAR for Schedule 13D (activist / control-intent) and 13G (passive)
+    beneficial ownership filings -- new 5%+ stakes and amendments to existing
+    ones. 13D is filed by investors who may seek to influence the company and
+    is far lower-volume/higher-signal than 13G, which is dominated by routine
+    index-fund threshold crossings."""
+    cache_key = f'activist_tracker_{days}'
+    cached = cache_get(cache_key, _ACTIVIST_TTL)
+    if cached:
+        return cached
+
+    from datetime import date as _date
+    today_str = _date.today().strftime('%Y-%m-%d')
+    cutoff = (_date.today() - pd.Timedelta(days=days)).strftime('%Y-%m-%d')
+
+    raw = {}
+    for form_token, category in _ACTIVIST_FORMS:
+        try:
+            url = (
+                f"https://efts.sec.gov/LATEST/search-index"
+                f"?q=&forms={urllib.parse.quote(form_token)}"
+                f"&dateRange=custom&startdt={cutoff}&enddt={today_str}"
+            )
+            resp = _edgar_req(url).json()
+            hits = resp.get('hits', {}).get('hits', [])
+            for h in hits[:60]:
+                src = h.get('_source', {})
+                acc = src.get('adsh') or h.get('_id', '').split(':')[0]
+                if acc in raw:
+                    continue
+                display_names   = src.get('display_names') or []
+                subject_display = display_names[0] if len(display_names) > 0 else ''
+                filer_display    = display_names[1] if len(display_names) > 1 else ''
+                m = _TICKER_RE.search(subject_display)
+                ticker       = m.group(1).split(',')[0].strip() if m else None
+                company_name = subject_display.split('  (')[0].strip() if subject_display else ''
+                filer_name   = filer_display.split('  (')[0].strip() if filer_display else ''
+                form = src.get('form', form_token)
+                raw[acc] = {
+                    'accession':   acc,
+                    'ticker':      ticker,
+                    'companyName': company_name,
+                    'filerName':   filer_name,
+                    'formType':    form,
+                    'category':    category,
+                    'isAmendment': '/A' in form,
+                    'fileDate':    src.get('file_date', ''),
+                    'cik':         (src.get('ciks') or [''])[0],
+                    'edgarUrl':    f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&filenum=&State=0&SIC=&dateb=&owner=include&count=1&search_text=&accession={acc.replace('-', '')}",
+                }
+        except Exception as exc:
+            logger.warning('activist tracker %s: %s', form_token, exc)
+
+    results = list(raw.values())
+
+    tickers = sorted({r['ticker'] for r in results if r['ticker']})
+    quotes = {}
+    if tickers:
+        with ThreadPoolExecutor(max_workers=min(len(tickers), 10)) as pool:
+            futures = {pool.submit(_fetch_opp_quote, t): t for t in tickers}
+            for fut in as_completed(futures):
+                t = futures[fut]
+                try:
+                    quotes[t] = fut.result()
+                except Exception:
+                    pass
+
+    for r in results:
+        q = quotes.get(r['ticker'], {}) if r['ticker'] else {}
+        r['currentPrice']  = q.get('currentPrice')
+        r['priceChange5d'] = q.get('priceChange5d')
+
+    results.sort(key=lambda r: r.get('fileDate', ''), reverse=True)
+    cache_set(cache_key, results)
+    return results
+
+
+# ── Reddit Trending Stocks ──────────────────────────────────────────────────────
+
+_REDDIT_TTL = timedelta(minutes=30)
+_REDDIT_FILTERS = {
+    'all-stocks':      'All Stocks',
+    'wallstreetbets':  'r/wallstreetbets',
+    'stocks':          'r/stocks',
+    'options':         'r/options',
+}
+
+
+@app.get('/api/reddit/trending')
+def reddit_trending(source: str = 'all-stocks', limit: int = 75):
+    """Most-mentioned tickers on Reddit's finance subreddits, via ApeWisdom's
+    free public aggregation API (Reddit itself blocks unauthenticated scraping).
+    ApeWisdom doesn't classify bullish/bearish sentiment -- only mention volume
+    and rank vs. 24h ago -- so this surfaces attention momentum (rising/cooling
+    chatter), not a long/short call."""
+    if source not in _REDDIT_FILTERS:
+        source = 'all-stocks'
+    limit = max(1, min(limit, 200))
+
+    cache_key = f'reddit_trending_{source}_{limit}'
+    cached = cache_get(cache_key, _REDDIT_TTL)
+    if cached:
+        return cached
+
+    raw = []
+    try:
+        page = 1
+        while len(raw) < limit and page <= 3:
+            resp = _session.get(f"https://apewisdom.io/api/v1.0/filter/{source}/page/{page}", timeout=15).json()
+            batch = resp.get('results', [])
+            if not batch:
+                break
+            raw.extend(batch)
+            if page >= resp.get('pages', 1):
+                break
+            page += 1
+    except Exception as exc:
+        logger.warning('reddit trending: %s', exc)
+        return []
+
+    raw = raw[:limit]
+
+    rows = []
+    for r in raw:
+        mentions      = r.get('mentions', 0) or 0
+        mentions_prev = r.get('mentions_24h_ago', 0) or 0
+        rank          = r.get('rank')
+        rank_prev     = r.get('rank_24h_ago')
+        mentions_change_pct = round((mentions - mentions_prev) / mentions_prev * 100, 1) if mentions_prev else None
+        rank_change = (rank_prev - rank) if (rank is not None and rank_prev is not None) else None
+        rows.append({
+            'rank':               rank,
+            'ticker':             r.get('ticker'),
+            'name':               html.unescape(r.get('name', '') or ''),
+            'mentions':           mentions,
+            'mentionsPrev':       mentions_prev,
+            'mentionsChangePct':  mentions_change_pct,
+            'upvotes':            r.get('upvotes'),
+            'rankPrev':           rank_prev,
+            'rankChange':         rank_change,
+        })
+
+    tickers = sorted({r['ticker'] for r in rows if r['ticker']})
+    quotes = {}
+    if tickers:
+        with ThreadPoolExecutor(max_workers=min(len(tickers), 10)) as pool:
+            futures = {pool.submit(_fetch_opp_quote, t): t for t in tickers}
+            for fut in as_completed(futures):
+                t = futures[fut]
+                try:
+                    quotes[t] = fut.result()
+                except Exception:
+                    pass
+
+    for r in rows:
+        q = quotes.get(r['ticker'], {}) if r['ticker'] else {}
+        r['currentPrice']   = q.get('currentPrice')
+        r['priceChange5d']  = q.get('priceChange5d')
+        r['priceChange1mo'] = q.get('priceChange1mo')
+
+    cache_set(cache_key, rows)
+    return rows
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
