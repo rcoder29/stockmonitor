@@ -5883,89 +5883,174 @@ async def short_squeeze(extra: str = ""):
 
 
 # ── IPO & Lockup Calendar ─────────────────────────────────────────────────────
+#
+# Live EDGAR-sourced (previously a hand-maintained static list, which meant it
+# silently went stale). 424B4 = final prospectus filed at pricing -> feeds the
+# lockup tracker below. S-1 = registration filed pre-pricing -> the "not yet
+# priced" pipeline in ipo_pipeline(). SPACs are excluded (SIC 6770 / name
+# pattern) since they're covered by their own Discovery feed.
 
 _IPO_TTL = timedelta(hours=1)
+_LOCKUP_DAYS = 180  # standard underwriting lockup; not disclosed in EDGAR full-text search metadata
 
-# (symbol, company, ipo_date, ipo_price, lockup_days, sector)
-_IPO_LIST = [
-    ("RDDT",  "Reddit",            "2024-03-21", 34.00,  180, "Technology"),
-    ("ALAB",  "Astera Labs",        "2024-03-20", 36.00,  180, "Semiconductors"),
-    ("RBRK",  "Rubrik",             "2024-04-25", 32.00,  180, "Cybersecurity"),
-    ("VIK",   "Viking Holdings",    "2024-05-01", 24.00,  180, "Leisure"),
-    ("WAY",   "Waystar",            "2024-06-06", 21.50,  180, "Healthcare IT"),
-    ("TEM",   "Tempus AI",          "2024-06-14", 37.00,  180, "AI / Healthcare"),
-    ("OS",    "OneStream",          "2024-07-25", 20.00,  180, "Enterprise SaaS"),
-    ("LINE",  "Lineage",            "2024-07-25", 78.00,  180, "REITs"),
-    ("TTAN",  "ServiceTitan",       "2024-12-12", 71.00,  180, "Field Service SaaS"),
-    ("SEZL",  "Sezzle",             "2024-01-10", 8.00,   180, "Fintech"),
-    ("MDGL",  "Madrigal Pharma",    "2023-06-01", 100.00, 180, "Biotech"),
-    ("KVYO",  "Klaviyo",            "2023-09-20", 30.00,  180, "MarTech SaaS"),
-    ("ARM",   "Arm Holdings",       "2023-09-14", 51.00,  180, "Semiconductors"),
-    ("BIRK",  "Birkenstock",        "2023-10-11", 46.00,  180, "Consumer"),
-    ("CART",  "Instacart (Maplebear)","2023-09-19",30.00, 180, "E-commerce"),
-    ("KKWB",  "Kenvue",             "2023-05-04", 22.00,  180, "Consumer Health"),
-    # 2025 IPOs
-    ("KLAR",  "Klarna",             "2025-07-01", 68.00,  180, "Fintech"),
-    ("MNDY",  "Monday.com (2025)",  "2021-06-11", 155.00, 180, "SaaS"),
-    ("SOUN",  "SoundHound AI",      "2024-02-12", 5.00,   365, "AI / Audio"),
-    ("SMCI",  "Super Micro Comp.",  "2007-03-29", 14.00,  180, "Servers"),
-    ("GRAB",  "Grab Holdings",      "2021-12-02", 8.75,   180, "Super App"),
-    ("IONQ",  "IonQ",               "2021-10-01", 10.00,  180, "Quantum"),
-    ("ACHR",  "Archer Aviation",    "2021-09-17", 9.00,   180, "eVTOL"),
-    ("JOBY",  "Joby Aviation",      "2021-08-10", 10.00,  180, "eVTOL"),
-    ("RKLB",  "Rocket Lab",         "2021-08-25", 10.00,  180, "Space"),
-    ("ASTS",  "AST SpaceMobile",    "2021-04-07", 10.00,  180, "Space Telecom"),
-]
+_SIC_SECTOR_RANGES = (
+    (2800, 2836, 'Healthcare / Biotech'), (8000, 8099, 'Healthcare / Biotech'),
+    (3570, 3579, 'Technology'), (3600, 3699, 'Technology'), (7370, 7379, 'Technology'),
+    (6000, 6299, 'Financials'), (6300, 6499, 'Insurance'), (6500, 6599, 'Real Estate'),
+    (4800, 4899, 'Communications / Media'), (4900, 4999, 'Utilities'),
+    (1000, 1499, 'Energy / Mining'), (2900, 2999, 'Energy / Mining'),
+    (4000, 4799, 'Transportation'),
+    (2000, 2799, 'Consumer'), (5000, 5999, 'Consumer'),
+    (3000, 3999, 'Industrials'),
+)
+
+
+def _sic_to_sector(sic: str | None) -> str:
+    try:
+        code = int(sic)
+    except (TypeError, ValueError):
+        return 'Other'
+    for lo, hi, label in _SIC_SECTOR_RANGES:
+        if lo <= code <= hi:
+            return label
+    return 'Other'
+
+
+def _is_likely_spac(name: str, sic: str | None) -> bool:
+    if sic == '6770':
+        return True
+    n = (name or '').upper()
+    return 'ACQUISITION CORP' in n or 'ACQUISITION CO' in n or 'BLANK CHECK' in n
+
+
+def _edgar_ipo_scan(form: str, days_back: int) -> list[dict]:
+    from datetime import date as _date
+    today_str = _date.today().strftime('%Y-%m-%d')
+    cutoff = (_date.today() - pd.Timedelta(days=days_back)).strftime('%Y-%m-%d')
+    out = []
+    try:
+        url = (
+            f"https://efts.sec.gov/LATEST/search-index"
+            f"?q=&forms={form}&dateRange=custom&startdt={cutoff}&enddt={today_str}"
+        )
+        resp = _edgar_req(url).json()
+        for h in resp.get('hits', {}).get('hits', [])[:100]:
+            src = h.get('_source', {})
+            display = (src.get('display_names') or [''])[0]
+            sic = (src.get('sics') or [None])[0]
+            m = _TICKER_RE.search(display)
+            ticker = m.group(1).split(',')[0].strip() if m else None
+            name = display.split('  (')[0].strip() if display else src.get('entity_name', '')
+            if _is_likely_spac(name, sic):
+                continue
+            out.append({
+                'accession': src.get('adsh') or h.get('_id', '').split(':')[0],
+                'ticker':    ticker,
+                'company':   name,
+                'sector':    _sic_to_sector(sic),
+                'fileDate':  src.get('file_date', ''),
+                'cik':       (src.get('ciks') or [''])[0],
+                'formType':  src.get('form', form),
+            })
+    except Exception as exc:
+        logger.warning('ipo scan %s: %s', form, exc)
+    return out
+
+
+def _fetch_ipo_reference_price(ticker: str, ipo_date: str) -> dict:
+    """First trading day's open (proxy for offer price) plus current price."""
+    try:
+        t = yf.Ticker(ticker)
+        start = datetime.strptime(ipo_date, '%Y-%m-%d').date()
+        hist = t.history(start=start.isoformat(), end=(start + timedelta(days=10)).isoformat())
+        if hist.empty:
+            return {}
+        ref_price = _finite_or_none(round(float(hist['Open'].iloc[0]), 2))
+        current = yf.Ticker(ticker).fast_info
+        current_price = _finite_or_none(_safe_float(getattr(current, 'last_price', None)))
+        return {'ipoPrice': ref_price, 'currentPrice': current_price}
+    except Exception:
+        return {}
 
 
 @app.get("/api/market/ipo-calendar")
-async def ipo_calendar():
-    cache_key = "market:ipo-calendar"
+def ipo_calendar():
+    """Recently-priced IPOs (from 424B4 filings) with a live lockup-expiration
+    countdown. ipoPrice is the first trading day's open (a proxy -- the actual
+    underwriting offer price isn't in EDGAR's full-text search metadata)."""
+    cache_key = "market:ipo-calendar:v2"
     cached = cache_get(cache_key, _IPO_TTL)
     if cached is not None:
         return cached
 
     today = datetime.utcnow().date()
-    syms = [row[0] for row in _IPO_LIST]
+    # Look back far enough to still catch lockups expiring soon after pricing this long ago.
+    filings = [f for f in _edgar_ipo_scan('424B4', days_back=_LOCKUP_DAYS + 45) if f['ticker']]
 
-    def fetch_price(sym: str) -> tuple[str, float | None]:
-        try:
-            info = yf.Ticker(sym, session=_session).info
-            return sym, _safe_float(info.get("regularMarketPrice"))
-        except Exception:
-            return sym, None
-
-    prices: dict[str, float | None] = {}
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        for sym, price in pool.map(fetch_price, syms):
-            prices[sym] = price
+    tickers = sorted({f['ticker'] for f in filings})
+    quotes = {}
+    if tickers:
+        with ThreadPoolExecutor(max_workers=min(len(tickers), 10)) as pool:
+            futures = {pool.submit(_fetch_ipo_reference_price, f['ticker'], f['fileDate']): f['ticker'] for f in filings}
+            for fut in as_completed(futures):
+                t = futures[fut]
+                try:
+                    quotes[t] = fut.result()
+                except Exception:
+                    pass
 
     results = []
-    for sym, company, ipo_date_str, ipo_price, lockup_days, sector in _IPO_LIST:
-        ipo_date = datetime.strptime(ipo_date_str, "%Y-%m-%d").date()
-        lockup_date = ipo_date + timedelta(days=lockup_days)
-        days_since_ipo = (today - ipo_date).days
+    for f in filings:
+        q = quotes.get(f['ticker'], {})
+        ipo_price = q.get('ipoPrice')
+        current_price = q.get('currentPrice')
+        if ipo_price is None or current_price is None:
+            continue  # can't build a meaningful row without a price anchor
+        ipo_date = datetime.strptime(f['fileDate'], '%Y-%m-%d').date()
+        lockup_date = ipo_date + timedelta(days=_LOCKUP_DAYS)
         days_to_lockup = (lockup_date - today).days
-        current_price = prices.get(sym)
-        perf_pct = None
-        if current_price and ipo_price:
-            perf_pct = round((current_price - ipo_price) / ipo_price * 100, 1)
+        perf_pct = round((current_price - ipo_price) / ipo_price * 100, 1) if ipo_price else None
 
         results.append({
-            "symbol":          sym,
-            "company":         company,
-            "sector":          sector,
-            "ipoDate":         ipo_date_str,
-            "ipoPrice":        ipo_price,
-            "currentPrice":    current_price,
-            "perfPct":         perf_pct,
-            "lockupDate":      lockup_date.isoformat(),
-            "daysSinceIpo":    days_since_ipo,
-            "daysToLockup":    days_to_lockup,
-            "lockupExpired":   days_to_lockup < 0,
+            "symbol":        f['ticker'],
+            "company":       f['company'],
+            "sector":        f['sector'],
+            "ipoDate":       f['fileDate'],
+            "ipoPrice":      ipo_price,
+            "currentPrice":  current_price,
+            "perfPct":       perf_pct,
+            "lockupDate":    lockup_date.isoformat(),
+            "daysSinceIpo":  (today - ipo_date).days,
+            "daysToLockup":  days_to_lockup,
+            "lockupExpired": days_to_lockup < 0,
         })
 
     results.sort(key=lambda x: x["daysToLockup"] if x["daysToLockup"] >= 0 else 999999)
+    cache_set(cache_key, results)
+    return results
+
+
+@app.get("/api/market/ipo-pipeline")
+def ipo_pipeline():
+    """Companies that have filed to go public (S-1) but haven't priced yet --
+    the forward-looking counterpart to the lockup tracker above."""
+    cache_key = "market:ipo-pipeline"
+    cached = cache_get(cache_key, _IPO_TTL)
+    if cached is not None:
+        return cached
+
+    filings = _edgar_ipo_scan('S-1', days_back=60)
+    # Dedupe by CIK, keeping the most recent filing (S-1/A amendments common).
+    by_cik = {}
+    for f in filings:
+        cik = f['cik']
+        if cik not in by_cik or f['fileDate'] > by_cik[cik]['fileDate']:
+            by_cik[cik] = f
+    results = sorted(by_cik.values(), key=lambda f: f['fileDate'], reverse=True)
+
+    for r in results:
+        r['edgarUrl'] = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&filenum=&State=0&SIC=&dateb=&owner=include&count=1&search_text=&accession={r['accession'].replace('-', '')}"
+
     cache_set(cache_key, results)
     return results
 

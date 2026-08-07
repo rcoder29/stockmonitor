@@ -171,20 +171,23 @@ const GUIDE = [
       ]},
       { type: 'tip', text: 'Warning: short squeezes are highly unpredictable and can reverse violently. A high squeeze score is a risk signal, not a buy signal. Always size positions conservatively and set hard stops.' },
       { type: 'h3', text: 'IPO & Lockup Calendar' },
-      { type: 'p', text: 'Tracks recent IPOs with live price performance vs IPO price, and counts down to lockup expiration dates. Lockup expiry is a known catalyst — insiders can sell freely once it passes, which can create short-term selling pressure.' },
+      { type: 'p', text: 'Live from SEC EDGAR — no longer a hand-maintained list. Two feeds: recently-priced IPOs with a lockup-expiration countdown (built from 424B4 final-prospectus filings), and an upcoming pipeline of companies that have filed to go public but haven\'t priced yet (built from S-1 registrations). SPACs are excluded from both — see the SPACs module for those.' },
       { type: 'table', headers: ['Column', 'What it tells you'], rows: [
-        ['Since IPO %', 'Percentage gain or loss vs the IPO price. Green = above IPO price, red = below.'],
-        ['Days Since IPO', 'How long the stock has been trading publicly.'],
-        ['Lockup Progress bar', 'How far through the lockup period the stock is. Red = expiring ≤14 days, orange = ≤30 days, yellow = ≤60 days.'],
+        ['Day-1 Open', 'The stock\'s first trading day opening price — used as a proxy for the underwriting offer price, since EDGAR\'s search index doesn\'t expose the actual offer price.'],
+        ['Since IPO %', 'Percentage gain or loss vs. Day-1 Open. Green = above, red = below.'],
+        ['Days Since IPO', 'How long the stock has been trading publicly (measured from the 424B4 filing date).'],
+        ['Lockup Progress bar', 'How far through the (assumed 180-day) lockup period the stock is. Red = expiring ≤14 days, orange = ≤30 days, yellow = ≤60 days.'],
         ['Days to Lockup', 'Countdown to lockup expiry. Negative = already expired.'],
       ]},
       { type: 'bullets', items: [
+        '"Upcoming — Filed, Not Yet Priced" panel: S-1 registrations from the last 60 days, searchable by ticker or company. Click EDGAR to read the actual filing.',
         'Active Lockups tab: stocks where insiders are still restricted from selling.',
         'Expired tab: stocks where the lockup has passed — insiders may have sold.',
         'Summary cards show how many lockups are active, expiring within 30 days, and already expired.',
         'Stocks with strong post-IPO gains and an imminent lockup carry the highest insider-selling risk.',
       ]},
       { type: 'tip', text: 'Tip: combine IPO & Lockup Calendar with the Short Squeeze Scanner. A stock with high short interest and an imminent lockup expiry faces two opposing forces — shorts betting on post-lockup selling vs bulls expecting momentum to continue.' },
+      { type: 'tip', text: 'The 180-day lockup is the standard underwriting default, not a disclosed fact per company — actual terms occasionally differ. Day-1 Open is a close proxy for the offer price but can diverge meaningfully on IPOs that pop or drop hard on debut.' },
       { type: 'h3', text: 'Insider Trading Feed' },
       { type: 'p', text: 'A market-wide scanner of SEC Form 4 filings showing open-market purchases and sales by corporate insiders across ~150 large and mid-cap companies. Found under Markets → Insider Trading.' },
       { type: 'steps', items: [
@@ -1308,6 +1311,14 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-08-06 — IPO & Lockup Calendar: now live from EDGAR' },
+      { type: 'bullets', items: [
+        'Replaced the hand-maintained static IPO list (frozen since whenever it was last edited, going stale silently) with a live SEC EDGAR feed.',
+        'Lockup tracker now built from 424B4 (final prospectus) filings, with lockup date computed from filing date + the standard 180-day term. "IPO Price" relabeled "Day-1 Open" since it\'s now the real first-trading-day open price (proxy for the underwriting offer price, which isn\'t in EDGAR\'s search metadata) rather than a hand-entered value.',
+        'New "Upcoming — Filed, Not Yet Priced" panel from S-1 registrations (last 60 days) — the forward-looking counterpart the old static list never had.',
+        'SPACs excluded from both feeds via SIC code 6770 ("Blank Checks") plus a name-pattern fallback — they\'re covered by the dedicated SPACs module instead.',
+        'Sector labels derived from each filing\'s SIC code via a small SIC-range-to-sector mapping.',
+      ]},
       { type: 'h3', text: '2026-08-06 — Reddit Trending Stocks' },
       { type: 'bullets', items: [
         'New Reddit Trending page under Markets → Reddit Trending.',

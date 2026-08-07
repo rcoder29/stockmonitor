@@ -4,6 +4,28 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-06 — IPO & Lockup Calendar: now live from EDGAR
+
+Replaced the hand-maintained static IPO list with a live SEC EDGAR feed — the list was frozen at whatever was last hand-entered and would go stale silently.
+
+### New
+- **Lockup tracker** now built from 424B4 (final prospectus) filings instead of a static list. Lockup date computed from filing date + the standard 180-day term.
+- **"IPO Price" → "Day-1 Open"** — now the real first-trading-day open price fetched from Yahoo Finance (a proxy for the underwriting offer price, which isn't exposed in EDGAR's search metadata), replacing hand-entered values.
+- **New "Upcoming — Filed, Not Yet Priced" panel** from S-1 registrations (last 60 days) — the forward-looking pipeline the old static list never had.
+- SPACs excluded from both feeds via SIC code 6770 ("Blank Checks") plus a name-pattern fallback (`ACQUISITION CORP`, `BLANK CHECK`) — they're covered by the dedicated SPACs module.
+- Sector labels derived from each filing's SIC code via a small range-to-sector mapping (`_sic_to_sector`).
+
+### Backend
+- `GET /api/market/ipo-calendar` — now live-sourced (424B4 scan + reference-price enrichment) instead of iterating a hardcoded list. Same response shape, so no breaking change for callers.
+- `GET /api/market/ipo-pipeline` (new) — S-1 scan, deduped by CIK (keeps latest amendment).
+
+### Files changed
+- `backend/main.py` — replaced `_IPO_LIST` + `ipo_calendar()`; added `_edgar_ipo_scan`, `_sic_to_sector`, `_is_likely_spac`, `_fetch_ipo_reference_price`, `ipo_pipeline()`
+- `frontend/src/components/IpoCalendar.jsx` — new pipeline panel, relabeled Day-1 Open column, updated explainer copy
+- `frontend/src/components/UserGuide.jsx` — updated IPO & Lockup Calendar section + changelog entry
+
+---
+
 ## 2026-08-06 — Reddit Trending Stocks
 
 New Markets page: most-mentioned tickers across finance subreddits.
