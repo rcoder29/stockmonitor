@@ -6,6 +6,7 @@ import MarketSummary from './components/MarketSummary'
 import MarketRecommendations from './components/MarketRecommendations'
 import PortfolioTracker from './components/PortfolioTracker'
 import CppiAllocator from './components/CppiAllocator'
+import NetExposure from './components/NetExposure'
 import HomeDashboard from './components/HomeDashboard'
 import CommandPalette from './components/CommandPalette'
 import DayTrader from './components/DayTrader'
@@ -279,6 +280,7 @@ const NAV_GROUPS = [
       { id: 'attribution',       label: 'Attribution' },
       { id: 'journal',           label: 'Trade Journal' },
       { id: 'cppi',               label: 'CPPI Allocator' },
+      { id: 'netexposure',        label: 'Net Exposure' },
     ],
   },
   {
@@ -969,6 +971,7 @@ export default function App() {
           {activeTab === 'stresstest'         && <PortfolioStressTest />}
           {activeTab === 'attribution'        && <PortfolioAttribution />}
           {activeTab === 'cppi'               && <CppiAllocator />}
+          {activeTab === 'netexposure'        && <NetExposure />}
           {activeTab === 'correlationmatrix'  && <CorrelationMatrix watchlist={watchlist} />}
           {activeTab === 'seasonalpatterns'   && <SeasonalPatterns />}
           {activeTab === 'etfoverlap'         && <EtfOverlapAnalyzer />}

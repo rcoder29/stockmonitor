@@ -4,6 +4,32 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-17 — Net Market Exposure
+
+New Portfolio page rolling Stocks, Options, and CPPI into one beta-adjusted "how much market risk am I carrying right now" number — previously the app had five separate risk tools (Portfolio Risk, Stress Test, Merger Risk Matrix, SPAC Risk Matrix, CPPI) that never talked to each other, so there was no single aggregate view for someone running multiple strategies at once.
+
+### New
+- **Net Exposure** under Portfolio → Net Exposure. Shows total capital deployed, net beta-adjusted market exposure ($ and % of capital — over 100% means effectively levered to the market), a composition bar, and a per-sleeve breakdown table.
+- Stocks sleeve reuses the existing Portfolio Risk beta calc. Options sleeve computes delta via Black-Scholes from strike/expiry/IV (yfinance doesn't reliably supply live Greeks), converts to share-equivalent exposure, and beta-weights it by the underlying. CPPI sleeve uses the active strategy's live risky-sleeve value, beta-weighted by its risky asset.
+- Merger Arb and SPAC capital is shown as separate "event-driven" sleeves, deliberately excluded from the beta sum — their risk is deal completion / trust redemption, not market direction, so folding them into a beta number would misrepresent what they actually expose you to.
+- Stock-only VaR (95%/99%) carried through from the existing Portfolio Risk calc, labeled clearly as stocks-only rather than a fabricated unified figure (true cross-strategy VaR needs a correlation matrix this doesn't model).
+
+### Fixed
+- `/api/portfolio/risk` (existing Portfolio Risk tab) was crashing outright for portfolios containing a symbol with no usable 1-year price history (delisted tickers, non-equity tickers like `XAUUSD:CUR`, etc.) — `closes[sym].dropna().iloc[-1]` threw an out-of-bounds error instead of skipping the symbol. Also fixed `pct_change().dropna()` using `how="any"` across *all* holdings, which meant a single gappy symbol among many could wipe out nearly every row before returns were even computed. Both endpoints (Portfolio Risk and the new Net Exposure) share this calc and are fixed by the same change.
+- Same function could also return NaN floats (e.g. `beta` from a symbol with fewer than 2 overlapping trading days vs. SPY), which crashed JSON serialization outright. Now sanitized to `null`, and NaN betas are excluded from the portfolio-beta sum instead of poisoning it.
+
+### Backend
+- `GET /api/portfolio/net-exposure` (new, 2-min cache) — aggregates the stocks risk calc, a new Black-Scholes options delta helper (`_bs_delta`, `_net_exposure_options_sleeve`), the active CPPI strategy, and the existing Merger Arb / SPAC position summaries.
+- `_compute_portfolio_risk` (existing) — fixed empty-series crash, `dropna(how="all")`, NaN-safe beta, and a new `_sanitize_nan` recursive cleanup before caching/returning.
+
+### Files changed
+- `backend/main.py` — `_bs_delta`, `_norm_cdf`, `_net_exposure_options_sleeve`, `_sanitize_nan`, `GET /api/portfolio/net-exposure`; bug fixes in `_compute_portfolio_risk`
+- `frontend/src/components/NetExposure.jsx` — new component
+- `frontend/src/App.jsx` — import, nav item under Portfolio, route
+- `frontend/src/components/UserGuide.jsx` — new "Net Exposure" section
+
+---
+
 ## 2026-08-16 — Home Dashboard & Command Palette
 
 Two navigation/UX additions: a landing dashboard that aggregates your account state, and a ⌘K command palette to jump to any of the app's 90+ tools instantly. Neither existed before — the app opened straight into Markets → Overview with no cross-cutting summary, and there was no way to jump between tabs other than scrolling the sidebar.
