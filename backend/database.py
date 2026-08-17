@@ -206,6 +206,42 @@ class MergerAlertRule(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 
+# ── CPPI Allocator ────────────────────────────────────────────────────────────
+
+class CppiStrategy(Base):
+    """Single active CPPI (Constant Proportion Portfolio Insurance) strategy."""
+    __tablename__ = "cppi_strategy"
+    id                  = Column(Integer, primary_key=True, autoincrement=True)
+    risky_symbol        = Column(String(20), nullable=False)
+    safe_rate_pct       = Column(Float, nullable=False, default=4.5)    # annual safe-asset yield
+    initial_capital     = Column(Float, nullable=False)
+    floor_pct           = Column(Float, nullable=False, default=90.0)  # floor as % of initial capital
+    multiplier          = Column(Float, nullable=False, default=4.0)
+    rebalance_band_pct  = Column(Float, nullable=False, default=5.0)   # drift threshold to trigger rebalance
+    start_date          = Column(String(10), nullable=False)           # YYYY-MM-DD
+    risky_shares        = Column(Float, nullable=False, default=0.0)
+    safe_cash           = Column(Float, nullable=False, default=0.0)
+    last_rebalance_date = Column(String(10), nullable=False)           # YYYY-MM-DD
+    last_rebalance_price = Column(Float, nullable=False, default=0.0)
+    created_at          = Column(DateTime, default=datetime.utcnow)
+
+
+class CppiRebalanceLog(Base):
+    __tablename__ = "cppi_rebalance_log"
+    id                = Column(Integer, primary_key=True, autoincrement=True)
+    strategy_id       = Column(Integer, nullable=False, index=True)
+    date              = Column(String(10), nullable=False)   # YYYY-MM-DD
+    risky_price       = Column(Float, nullable=False)
+    portfolio_value   = Column(Float, nullable=False)
+    floor_value       = Column(Float, nullable=False)
+    cushion           = Column(Float, nullable=False)
+    exposure_before   = Column(Float, nullable=False)
+    exposure_after    = Column(Float, nullable=False)
+    trade_amount      = Column(Float, nullable=False)   # + = bought risky, - = sold risky
+    trigger           = Column(String(20), default='manual')  # manual | band | initial
+    created_at        = Column(DateTime, default=datetime.utcnow)
+
+
 # ── Generic key-value cache ───────────────────────────────────────────────────
 
 class CacheEntry(Base):
@@ -317,6 +353,33 @@ def migrate_db():
          "alert_type VARCHAR(30) NOT NULL, "
          "params TEXT DEFAULT '{}', "
          "active INTEGER DEFAULT 1, "
+         "created_at DATETIME)"),
+        ("CREATE TABLE IF NOT EXISTS cppi_strategy ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "risky_symbol VARCHAR(20) NOT NULL, "
+         "safe_rate_pct REAL NOT NULL DEFAULT 4.5, "
+         "initial_capital REAL NOT NULL, "
+         "floor_pct REAL NOT NULL DEFAULT 90.0, "
+         "multiplier REAL NOT NULL DEFAULT 4.0, "
+         "rebalance_band_pct REAL NOT NULL DEFAULT 5.0, "
+         "start_date VARCHAR(10) NOT NULL, "
+         "risky_shares REAL NOT NULL DEFAULT 0.0, "
+         "safe_cash REAL NOT NULL DEFAULT 0.0, "
+         "last_rebalance_date VARCHAR(10) NOT NULL, "
+         "last_rebalance_price REAL NOT NULL DEFAULT 0.0, "
+         "created_at DATETIME)"),
+        ("CREATE TABLE IF NOT EXISTS cppi_rebalance_log ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+         "strategy_id INTEGER NOT NULL, "
+         "date VARCHAR(10) NOT NULL, "
+         "risky_price REAL NOT NULL, "
+         "portfolio_value REAL NOT NULL, "
+         "floor_value REAL NOT NULL, "
+         "cushion REAL NOT NULL, "
+         "exposure_before REAL NOT NULL, "
+         "exposure_after REAL NOT NULL, "
+         "trade_amount REAL NOT NULL, "
+         "trigger VARCHAR(20) DEFAULT 'manual', "
          "created_at DATETIME)"),
     ]
     with engine.connect() as conn:

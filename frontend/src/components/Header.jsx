@@ -22,6 +22,7 @@ export default function Header({
   onRequestNotif,
   theme,
   onToggleTheme,
+  onOpenSearch,
 }) {
   const [input, setInput] = useState('')
 
@@ -59,6 +60,18 @@ export default function Header({
             + Add
           </button>
         </form>
+
+        {/* Search everything */}
+        <button
+          onClick={onOpenSearch}
+          className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-white px-2.5 py-1.5 text-xs rounded transition-colors border border-gray-700"
+        >
+          <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+            <path d="M11.2 10.1a5.5 5.5 0 10-1.1 1.1l3.1 3.1 1.1-1.1-3.1-3.1zm-4.7.9a4 4 0 110-8 4 4 0 010 8z"/>
+          </svg>
+          Search
+          <kbd className="text-[10px] text-gray-600 border border-gray-700 rounded px-1">⌘K</kbd>
+        </button>
 
         {/* Refresh interval */}
         <div className="flex items-center gap-2">

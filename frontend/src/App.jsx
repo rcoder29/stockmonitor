@@ -5,6 +5,9 @@ import ChartModal from './components/ChartModal'
 import MarketSummary from './components/MarketSummary'
 import MarketRecommendations from './components/MarketRecommendations'
 import PortfolioTracker from './components/PortfolioTracker'
+import CppiAllocator from './components/CppiAllocator'
+import HomeDashboard from './components/HomeDashboard'
+import CommandPalette from './components/CommandPalette'
 import DayTrader from './components/DayTrader'
 import AiBot from './components/AiBot'
 import FinancialAdvisor from './components/FinancialAdvisor'
@@ -139,6 +142,11 @@ const Icons = {
       <path d="M4.5 6l3.5 3.5L11.5 6"/>
     </svg>
   ),
+  home: (
+    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+      <path d="M8 1.5L1 7.5h2V14a1 1 0 001 1h3v-4.5h2V15h3a1 1 0 001-1V7.5h2L8 1.5z"/>
+    </svg>
+  ),
 }
 
 // ── Navigation groups ─────────────────────────────────────────────────────────
@@ -270,6 +278,7 @@ const NAV_GROUPS = [
       { id: 'stresstest',        label: 'Stress Test' },
       { id: 'attribution',       label: 'Attribution' },
       { id: 'journal',           label: 'Trade Journal' },
+      { id: 'cppi',               label: 'CPPI Allocator' },
     ],
   },
   {
@@ -306,6 +315,15 @@ const NAV_GROUPS = [
     ],
   },
 ]
+
+// Flat, searchable index of every tab — powers the command palette and the
+// Home dashboard's "recently visited" chips.
+const FLAT_NAV_ITEMS = [
+  { id: 'home', label: 'Home', group: 'Home' },
+  ...NAV_GROUPS.flatMap(g => g.items.map(i => ({ id: i.id, label: i.label, group: g.label }))),
+  { id: 'guide', label: 'User Guide', group: 'Help' },
+]
+const NAV_INDEX = Object.fromEntries(FLAT_NAV_ITEMS.map(i => [i.id, i]))
 
 // ── Watchlist selector bar ────────────────────────────────────────────────────
 
@@ -393,6 +411,21 @@ function Sidebar({ activeTab, onSelect, className }) {
   return (
     <aside className={className ?? 'w-52 shrink-0 bg-slate-900 border-r border-slate-700/60 overflow-y-auto'}>
       <div className="flex flex-col min-h-full">
+        {/* Pinned Home button */}
+        <div className="px-2 pt-2 pb-1">
+          <button
+            onClick={() => onSelect('home')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[11.5px] font-bold uppercase tracking-wider transition-colors ${
+              activeTab === 'home'
+                ? 'text-white bg-emerald-900/30 border border-emerald-700/40'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800 border border-transparent'
+            }`}
+          >
+            <span className={activeTab === 'home' ? 'text-emerald-400' : 'text-slate-400'}>{Icons.home}</span>
+            Home
+          </button>
+        </div>
+
         {/* Nav groups */}
         <div className="flex-1 py-1">
           {NAV_GROUPS.map(group => {
@@ -476,7 +509,7 @@ function Sidebar({ activeTab, onSelect, className }) {
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [activeTab, setActiveTab]   = useState('market')
+  const [activeTab, setActiveTab]   = useState('home')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [watchlist, setWatchlist]   = useState([])
   const [quotes, setQuotes]         = useState({})
@@ -495,6 +528,33 @@ export default function App() {
   const goToMerger = (tabId, dealId = null) => { setMergerFocusDealId(dealId); setActiveTab(tabId) }
   const [spacFocusId, setSpacFocusId] = useState(null)
   const goToSpac = (tabId, spacId = null) => { setSpacFocusId(spacId); setActiveTab(tabId) }
+
+  // ── Navigation (command palette + recently-visited tracking) ─────────────
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [recentTabs, setRecentTabs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sm-recent-tabs') || '[]') } catch { return [] }
+  })
+  const navigate = useCallback((id) => {
+    setActiveTab(id)
+    if (id !== 'home' && id !== 'guide') {
+      setRecentTabs(prev => {
+        const next = [id, ...prev.filter(x => x !== id)].slice(0, 8)
+        localStorage.setItem('sm-recent-tabs', JSON.stringify(next))
+        return next
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen(true)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // ── Theme ──────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('sm-theme') || 'dark')
@@ -780,6 +840,7 @@ export default function App() {
         onRequestNotif={requestNotifPermission}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onOpenSearch={() => setCommandPaletteOpen(true)}
       />
 
       {/* Mobile hamburger bar */}
@@ -805,7 +866,7 @@ export default function App() {
         {/* Desktop sidebar */}
         <Sidebar
           activeTab={activeTab}
-          onSelect={setActiveTab}
+          onSelect={navigate}
           className="hidden md:flex md:flex-col w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto"
         />
 
@@ -813,7 +874,7 @@ export default function App() {
         {sidebarOpen && (
           <Sidebar
             activeTab={activeTab}
-            onSelect={(id) => { setActiveTab(id); setSidebarOpen(false) }}
+            onSelect={(id) => { navigate(id); setSidebarOpen(false) }}
             className="fixed inset-y-0 left-0 z-40 w-64 bg-gray-900 border-r border-gray-800 overflow-y-auto flex flex-col"
           />
         )}
@@ -840,6 +901,18 @@ export default function App() {
                 earningsMap={earningsMap}
               />
             </div>
+          )}
+          {activeTab === 'home'            && (
+            <HomeDashboard
+              watchlist={watchlist}
+              quotes={quotes}
+              alerts={alerts}
+              earnings={earnings}
+              portfolioSymbols={portfolioSymbols}
+              navIndex={NAV_INDEX}
+              recentTabs={recentTabs}
+              onNavigate={navigate}
+            />
           )}
           {activeTab === 'market'          && <MarketSummary />}
           {activeTab === 'recommendations' && <MarketRecommendations />}
@@ -895,6 +968,7 @@ export default function App() {
           {activeTab === 'earningssurprise'   && <EarningsSurpriseTracker watchlist={watchlist} />}
           {activeTab === 'stresstest'         && <PortfolioStressTest />}
           {activeTab === 'attribution'        && <PortfolioAttribution />}
+          {activeTab === 'cppi'               && <CppiAllocator />}
           {activeTab === 'correlationmatrix'  && <CorrelationMatrix watchlist={watchlist} />}
           {activeTab === 'seasonalpatterns'   && <SeasonalPatterns />}
           {activeTab === 'etfoverlap'         && <EtfOverlapAnalyzer />}
@@ -952,6 +1026,14 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        items={FLAT_NAV_ITEMS}
+        recents={recentTabs}
+        onNavigate={(id) => { navigate(id); setCommandPaletteOpen(false) }}
+      />
     </div>
   )
 }

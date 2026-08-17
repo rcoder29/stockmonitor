@@ -4,6 +4,56 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-08-16 — Home Dashboard & Command Palette
+
+Two navigation/UX additions: a landing dashboard that aggregates your account state, and a ⌘K command palette to jump to any of the app's 90+ tools instantly. Neither existed before — the app opened straight into Markets → Overview with no cross-cutting summary, and there was no way to jump between tabs other than scrolling the sidebar.
+
+### New
+- **Home dashboard**, pinned above the sidebar groups and now the default landing tab. Shows: portfolio value, day P&L, and total P&L; a market pulse strip (SPY/QQQ/DIA + VIX with a Low/Elevated/High label); today's biggest portfolio movers; watchlist gainers/losers; earnings reporting in the next 7 days (portfolio + watchlist); active price alerts; and a "Recently Visited" row of your most-used tabs. Every section links out to the relevant full tab.
+- **Command palette** (⌘K / Ctrl+K, or the Search button in the header). Fuzzy-searches all nav items by label or group, ranks exact/prefix/substring matches, supports ↑/↓/Enter/Escape, and shows recently-visited tabs when the query is empty.
+- Recently-visited tracking: every tab navigation (sidebar or palette) is recorded to `localStorage`, deduped, capped at 8, and surfaced in both Home and the palette's empty-query state.
+
+### Backend
+- `GET /api/home/summary` (new) — one aggregator call: portfolio total/day P&L and top day movers (parallel fast_info fetch per position, no fundamentals), plus SPY/QQQ/DIA/VIX performance via the existing `_fetch_perf_one` helper. Everything else on Home (watchlist quotes, earnings, alerts) reuses state the app already fetches — no duplicate endpoints.
+
+### Files changed
+- `backend/main.py` — added `_fetch_day_quote`, `GET /api/home/summary`
+- `frontend/src/components/HomeDashboard.jsx` — new component
+- `frontend/src/components/CommandPalette.jsx` — new component
+- `frontend/src/App.jsx` — `FLAT_NAV_ITEMS`/`NAV_INDEX` (flattened, searchable nav index), pinned Home sidebar button, `navigate()` wrapper with recents tracking, global ⌘K/Ctrl+K listener, default tab changed to `home`
+- `frontend/src/components/Header.jsx` — Search button (`onOpenSearch` prop)
+- `frontend/src/components/UserGuide.jsx` — new "Home & Quick Search" section
+
+---
+
+## 2026-08-14 — CPPI Allocator
+
+New Portfolio page: Constant Proportion Portfolio Insurance — a systematic strategy that dynamically rebalances between a risky asset and a safe asset so the portfolio is designed to never fall below a floor value, with a live dashboard and a standalone historical backtest.
+
+### New
+- **CPPI Allocator** under Portfolio → CPPI Allocator. Configure a risky asset symbol, initial capital, floor % (protected portion of capital), multiplier, safe-asset annual yield, and a rebalance drift band.
+- Live dashboard: portfolio value, floor (grows at the safe rate), cushion, target vs. actual risky exposure, drift, and a specific buy/sell recommendation once drift exceeds the band. "Rebalance Now" executes the trade and logs it.
+- Rebalance log with every allocation event (including the initial split), price, portfolio value, floor, and trade size at that point.
+- **Backtest CPPI** panel: simulates the strategy over 6M-5Y of historical data for any symbol, rebalancing whenever simulated drift exceeds the band, and charts CPPI equity vs. buy & hold vs. the floor line. Reports total return, alpha, max drawdown (both series), rebalance count, and whether the floor was ever breached by an overnight gap (multiplier/gap risk).
+- Single active strategy at a time — starting a new one replaces the current one; "Reset strategy…" clears it.
+
+### Backend
+- New tables `cppi_strategy` (one active strategy) and `cppi_rebalance_log` (full history) in `backend/database.py`.
+- `GET /api/cppi` — active strategy config + live computed state (fetches current price, computes cushion/target exposure/drift) + rebalance log.
+- `POST /api/cppi` — start a strategy (replaces any existing one); computes the initial split from the CPPI formula.
+- `POST /api/cppi/rebalance` — recomputes target exposure at the current price and executes/logs the rebalance.
+- `DELETE /api/cppi` — clears the strategy and its log.
+- `POST /api/cppi/backtest` — stateless historical simulation (day-by-day CPPI mechanics with a growing floor and band-triggered rebalancing) vs. a buy & hold benchmark.
+
+### Files changed
+- `backend/database.py` — added `CppiStrategy`, `CppiRebalanceLog` models + migrate_db entries
+- `backend/main.py` — added CPPI section: config/state helpers, `GET/POST/DELETE /api/cppi`, `POST /api/cppi/rebalance`, `POST /api/cppi/backtest`
+- `frontend/src/components/CppiAllocator.jsx` — new component (setup form, live dashboard, allocation bars, rebalance log, backtest chart)
+- `frontend/src/App.jsx` — import, nav item under Portfolio, route
+- `frontend/src/components/UserGuide.jsx` — new CPPI Allocator section + updated Portfolio group summary
+
+---
+
 ## 2026-08-06 — IPO & Lockup Calendar: now live from EDGAR
 
 Replaced the hand-maintained static IPO list with a live SEC EDGAR feed — the list was frozen at whatever was last hand-entered and would go stale silently.
