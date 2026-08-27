@@ -2310,17 +2310,20 @@ def get_option_chain(symbol: str, expiry: str | None = None):
         def process_df(df, side):
             rows = []
             for _, row in df.iterrows():
-                vol = int(row.get("volume") or 0)
-                oi  = int(row.get("openInterest") or 0)
-                iv  = row.get("impliedVolatility")
+                # yfinance leaves volume/OI/IV/bid/ask as NaN (not None) for
+                # illiquid strikes — `x or 0` doesn't catch that since NaN is
+                # truthy, so int(NaN) used to blow up. _safe_float catches it.
+                vol = int(_safe_float(row.get("volume")) or 0)
+                oi  = int(_safe_float(row.get("openInterest")) or 0)
+                iv  = _safe_float(row.get("impliedVolatility"))
                 rows.append({
                     "strike":          round(float(row["strike"]), 2),
-                    "bid":             round(float(row.get("bid") or 0), 2),
-                    "ask":             round(float(row.get("ask") or 0), 2),
-                    "lastPrice":       round(float(row.get("lastPrice") or 0), 2),
+                    "bid":             round(_safe_float(row.get("bid")) or 0, 2),
+                    "ask":             round(_safe_float(row.get("ask")) or 0, 2),
+                    "lastPrice":       round(_safe_float(row.get("lastPrice")) or 0, 2),
                     "volume":          vol,
                     "openInterest":    oi,
-                    "impliedVolatility": round(float(iv) * 100, 1) if iv and not pd.isna(iv) else None,
+                    "impliedVolatility": round(iv * 100, 1) if iv else None,
                     "inTheMoney":      bool(row.get("inTheMoney", False)),
                     "unusual":         vol >= 500 and (oi == 0 or vol > oi * 2),
                 })
@@ -4648,6 +4651,7 @@ async def get_net_exposure():
         "stockVar95": stock_var95,
         "stockVar99": stock_var99,
     }
+    result = _sanitize_nan(result)
     cache_set("portfolio:net-exposure", result)
     return result
 
