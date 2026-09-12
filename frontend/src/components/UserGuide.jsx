@@ -1180,8 +1180,9 @@ const GUIDE = [
         ['BB', 'Bollinger Bands (20-period, 2 SD) — upper, mid, and lower bands', 'Blue (transparent)'],
         ['RSI', 'RSI(14) sub-pane below the chart with 30/70 reference lines', 'Violet'],
         ['MACD', 'MACD histogram + signal line sub-pane', 'Blue/Amber'],
+        ['VOL', '20-period average volume line on the volume histogram; bars with volume > 2× the average light up in full-brightness green/red instead of the default faded shade', 'Yellow'],
       ]},
-      { type: 'tip', text: 'Tip: a common combo — turn on SMA50 + SMA200 to identify the long-term trend, then enable RSI to find oversold entries within an uptrend.' },
+      { type: 'tip', text: 'Tip: a common combo — turn on SMA50 + SMA200 to identify the long-term trend, then enable RSI to find oversold entries within an uptrend. Turn on VOL alongside any setup to confirm a breakout or reversal is backed by real volume.' },
       { type: 'h3', text: 'Drawing Tools' },
       { type: 'bullets', items: [
         '─ S/R: click once on the chart to draw a horizontal support/resistance line at that price. The price label shows on the left edge.',

@@ -4,6 +4,21 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-12 — Volume Profile Overlay
+
+New chart indicator toggle: a 20-period average volume line on the volume histogram, with bars whose volume exceeds 2x that average lit up in full-brightness green/red instead of the default faded shade — the "is this move backed by real volume" signal from the product roadmap's chart-enhancements section.
+
+### New
+- **VOL** toggle in the Chart tab's indicator toolbar (alongside SMA/BB/RSI/MACD). Adds a thin amber line tracking the 20-period rolling average volume, drawn on the same price scale as the volume histogram.
+- Volume bars where `volume > 2 × 20-period average` render at full opacity (up = `#10b981`, down = `#ef4444`) instead of the normal ~33% opacity, so surges are visually obvious at a glance without a separate sub-pane.
+
+### Files changed
+- `frontend/src/components/ChartModal.jsx` — `calcAvgVolume` helper, `volavg` indicator flag, volume-series color logic, avg-volume `LineSeries`, toolbar button
+- `frontend/src/components/UserGuide.jsx` — VOL row added to the Technical Indicators table
+- `PRODUCT_ENHANCEMENTS.md` — refreshed to reflect current app state; Volume Profile moved from "remaining gaps" to shipped
+
+---
+
 ## 2026-08-17 — Net Market Exposure
 
 New Portfolio page rolling Stocks, Options, and CPPI into one beta-adjusted "how much market risk am I carrying right now" number — previously the app had five separate risk tools (Portfolio Risk, Stress Test, Merger Risk Matrix, SPAC Risk Matrix, CPPI) that never talked to each other, so there was no single aggregate view for someone running multiple strategies at once.

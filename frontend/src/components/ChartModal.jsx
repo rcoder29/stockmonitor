@@ -75,6 +75,13 @@ function calcSMA(closes, period) {
     return closes.slice(i - period + 1, i + 1).reduce((a, b) => a + b) / period
   })
 }
+
+function calcAvgVolume(volumes, period = 20) {
+  return volumes.map((_, i) => {
+    if (i < period - 1) return null
+    return volumes.slice(i - period + 1, i + 1).reduce((a, b) => a + b) / period
+  })
+}
 import { fmt } from '../utils/format'
 
 // ── Earnings history panel ────────────────────────────────────────────────────
@@ -247,7 +254,7 @@ export default function ChartModal({ symbol, quote, onClose }) {
   const [chartData, setChartData]   = useState(null)
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState(null)
-  const [indicators, setIndicators] = useState({ sma20: false, sma50: false, sma200: false, bb: false, rsi: false, macd: false })
+  const [indicators, setIndicators] = useState({ sma20: false, sma50: false, sma200: false, bb: false, rsi: false, macd: false, volavg: false })
   const chartContainerRef           = useRef(null)
   const chartWrapperRef             = useRef(null)
   const rsiContainerRef             = useRef(null)
@@ -314,7 +321,21 @@ export default function ChartModal({ symbol, quote, onClose }) {
 
     const volSeries = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'volume' })
     chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } })
-    volSeries.setData(chartData.data.map(d => ({ time: d.time, value: d.volume, color: d.close >= d.open ? '#10b98155' : '#ef444455' })))
+
+    // ── Volume Profile: 20-period avg volume + surge highlighting (>2x avg) ──
+    const avgVol = indicators.volavg ? calcAvgVolume(chartData.data.map(d => d.volume), 20) : null
+    volSeries.setData(chartData.data.map((d, i) => {
+      const isSurge = avgVol && avgVol[i] != null && d.volume > 2 * avgVol[i]
+      const up = d.close >= d.open
+      const color = isSurge ? (up ? '#10b981' : '#ef4444') : (up ? '#10b98155' : '#ef444455')
+      return { time: d.time, value: d.volume, color }
+    }))
+    if (avgVol) {
+      chart.addSeries(LineSeries, {
+        color: '#eab308a0', lineWidth: 1, priceScaleId: 'volume',
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      }).setData(chartData.data.map((d, i) => avgVol[i] != null ? { time: d.time, value: avgVol[i] } : null).filter(Boolean))
+    }
 
     // ── Bollinger Bands overlay ──
     if (indicators.bb) {
@@ -547,8 +568,8 @@ export default function ChartModal({ symbol, quote, onClose }) {
                 </div>
                 <div className="flex gap-1 ml-auto">
                   {(() => {
-                    const IND_COLORS = { sma20: 'bg-amber-600', sma50: 'bg-blue-600', sma200: 'bg-purple-700', bb: 'bg-purple-700', rsi: 'bg-purple-700', macd: 'bg-purple-700' }
-                    return [['sma20', 'SMA20'], ['sma50', 'SMA50'], ['sma200', 'SMA200'], ['bb', 'BB'], ['rsi', 'RSI'], ['macd', 'MACD']].map(([key, label]) => (
+                    const IND_COLORS = { sma20: 'bg-amber-600', sma50: 'bg-blue-600', sma200: 'bg-purple-700', bb: 'bg-purple-700', rsi: 'bg-purple-700', macd: 'bg-purple-700', volavg: 'bg-yellow-600' }
+                    return [['sma20', 'SMA20'], ['sma50', 'SMA50'], ['sma200', 'SMA200'], ['bb', 'BB'], ['rsi', 'RSI'], ['macd', 'MACD'], ['volavg', 'VOL']].map(([key, label]) => (
                       <button key={key}
                         onClick={() => setIndicators(prev => ({ ...prev, [key]: !prev[key] }))}
                         className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
