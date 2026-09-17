@@ -20,7 +20,7 @@ const GUIDE = [
       { type: 'p', text: 'The left sidebar organises all features into 9 groups. All groups start collapsed — click a group header to expand it. Only the group containing your current view opens automatically. Click any item to load that view. Home is pinned above the groups and the User Guide button is pinned below them. On mobile, tap ☰ to open the sidebar drawer.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
         ['Markets', 'Overview, Sentiment, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
-        ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
+        ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
         ['Watchlist', 'Watchlist, Heatmap, Correlation, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
         ['News', 'My News Feed'],
         ['Trading', 'Trade Ideas, Position Sizer, Wheel Tracker, Day Trader'],
@@ -722,6 +722,16 @@ const GUIDE = [
         ['CUSIP', 'Shown when no ticker is available. Common for bond holdings and private securities.'],
       ]},
       { type: 'tip', text: 'Tip: the N-PORT filing period is typically 60 days before the public can see it (regulatory delay). So a fund\'s December holdings appear in late February. Weight figures show what the fund held at the reporting date, not necessarily today.' },
+      { type: 'h3', text: 'Corporate Bonds' },
+      { type: 'p', text: 'Investment-grade and high-yield corporate bond research by issuer, built entirely on free SEC data since there\'s no free per-CUSIP bond pricing API. Found under Research → Corporate Bonds.' },
+      { type: 'steps', items: [
+        'Search by ticker or company name to find an issuer\'s bonds.',
+        'Bonds are found by scanning the latest N-PORT holdings of 7 major bond ETFs (LQD, VCIT, VCSH, USIG for investment grade; HYG, JNK, USHY for high yield) for matches to the issuer.',
+        'Click a bond to see CUSIP, ISIN, coupon rate & type (fixed/floating), maturity date, default flag, and every tracked fund currently holding it with its weight, market value, and an approximate clean price (market value ÷ par balance × 100).',
+        'If no tracked fund currently holds the issuer\'s bonds, the app falls back to the issuer\'s own 424B2/424B3/424B5/FWP prospectus filings, extracting "X.XX% Notes due YYYY" terms from the cover page — clearly labeled as terms at issuance, not live pricing, with a link to the source filing.',
+        'A separate Ratings Mentions panel full-text-searches the issuer\'s own 8-K/10-K/10-Q filings for rating-action language (agency name + downgraded/upgraded/affirmed/etc. in the same sentence), shown as excerpts with filing date and a link to the source filing.',
+      ]},
+      { type: 'tip', text: 'There\'s no free, live per-CUSIP bond pricing feed, so everything here is either (a) what a tracked bond ETF actually holds as of its last N-PORT filing, or (b) terms and ratings actions pulled straight from the issuer\'s own EDGAR filings — never a live quote.' },
       { type: 'h3', text: 'Activist Tracker' },
       { type: 'p', text: 'Scans EDGAR for Schedule 13D and 13G filings — the mandatory disclosure whenever an investor crosses 5% beneficial ownership of a public company. Found under Research → Activist Tracker.' },
       { type: 'steps', items: [
@@ -1337,6 +1347,14 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-16 — Corporate Bonds' },
+      { type: 'bullets', items: [
+        'New Corporate Bonds page under Research → Corporate Bonds.',
+        'No free per-CUSIP bond pricing API exists (unlike yfinance for equities), so this is built entirely on two public SEC data sources: N-PORT fund holdings for live characteristics, and full-text search over the issuer\'s own filings for everything a bulk data feed can\'t give for free.',
+        'Bond search scans the latest N-PORT filings from 7 major bond ETFs (LQD, VCIT, VCSH, USIG; HYG, JNK, USHY) for holdings matching the issuer, resolving each ETF ticker to its specific SEC fund series via the `company_tickers_mf.json` reference file.',
+        'When no tracked fund holds an issuer\'s bonds, falls back to the issuer\'s own 424B2/424B3/424B5/FWP prospectus filings, regex-extracting "X.XX% Notes due YYYY" terms from the cover page.',
+        'Ratings history comes from full-text-searching the issuer\'s own 8-K/10-K/10-Q filings for rating-action language, since the free NRSRO Rule 17g-7 disclosures only cover a rolling 12-24 month window.',
+      ]},
       { type: 'h3', text: '2026-08-06 — IPO & Lockup Calendar: now live from EDGAR' },
       { type: 'bullets', items: [
         'Replaced the hand-maintained static IPO list (frozen since whenever it was last edited, going stale silently) with a live SEC EDGAR feed.',

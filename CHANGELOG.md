@@ -4,6 +4,30 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-16 — Corporate Bonds
+
+New Research page for investment-grade and high-yield corporate bond research by issuer. There's no free per-CUSIP bond pricing API (unlike yfinance for equities), so this is built entirely on two public SEC data sources: N-PORT fund holdings for live characteristics, and full-text search over the issuer's own filings for everything a bulk data feed can't give for free.
+
+### New
+- **Corporate Bonds** under Research → Corporate Bonds. Search by ticker or company name to find an issuer's bonds.
+- **Bond search via bond ETF N-PORT holdings**: scans the latest N-PORT filings from 7 major bond ETFs (LQD, VCIT, VCSH, USIG for investment grade; HYG, JNK, USHY for high yield) for holdings matching the issuer, resolving each ETF ticker to its specific SEC fund series (many ETFs, e.g. all iShares funds, share one filer CIK with hundreds of sibling funds — the series ID is what lets us pull just that one fund's filings) via SEC's `company_tickers_mf.json` reference file.
+- **Bond characteristics on click**: CUSIP, ISIN, coupon rate & type (fixed/floating), maturity date, default flag, and every tracked fund currently holding it with its weight, market value, and an approximate clean price (market value ÷ par balance × 100).
+- **SEC prospectus fallback**: when no tracked fund currently holds an issuer's bonds, falls back to searching the issuer's own 424B2/424B3/424B5/FWP prospectus filings and regex-extracting "X.XX% Notes due YYYY" terms from the cover page — labeled clearly as terms at issuance, not live pricing, with a link to the source filing. Filings older than ~12 years and bonds whose parsed maturity has already passed are excluded.
+- **Credit rating mentions**: since NRSRO Rule 17g-7 disclosures (the only free ratings-history source) only cover a rolling 12–24 month window and aren't reliably scriptable, ratings history instead comes from full-text-searching the issuer's own 8-K/10-K/10-Q filings for rating-action language, requiring a named agency (Moody's/S&P/Fitch/DBRS/etc.) and an action word (downgraded/upgraded/affirmed/etc.) in the same sentence to filter out unrelated uses of "upgraded". Shown as excerpts with filing date and a link to the source filing.
+
+### Backend
+- `GET /api/bonds/search?q=` — aggregates matching bonds across the tracked bond ETF universe by CUSIP, falling back to prospectus search.
+- `GET /api/bonds/ratings-mentions/{ticker}` — rating-action excerpts mined from the issuer's own EDGAR filings.
+- `_parse_nport_xml` (existing, shared with Fund Holdings Explorer) extended to capture each debt holding's `debtSec` schedule (maturity, coupon type/rate, default flag, par balance).
+- `_load_mf_ticker_map`, `_series_latest_nport`, `_fetch_bond_fund_holdings`, `_search_bond_prospectus` — new EDGAR plumbing described above.
+
+### Files changed
+- `backend/main.py` — Corporate Bond Research section (search, prospectus fallback, ratings mentions); debt fields added to `_parse_nport_xml`
+- `frontend/src/components/CorporateBonds.jsx` — new component
+- `frontend/src/App.jsx` — import, nav item under Research, route
+
+---
+
 ## 2026-09-12 — Volume Profile Overlay
 
 New chart indicator toggle: a 20-period average volume line on the volume histogram, with bars whose volume exceeds 2x that average lit up in full-brightness green/red instead of the default faded shade — the "is this move backed by real volume" signal from the product roadmap's chart-enhancements section.
