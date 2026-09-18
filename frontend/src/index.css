@@ -199,3 +199,29 @@ html.light .focus\:ring-emerald-500:focus { --tw-ring-color: #10b981; }
 /* ── Animate pulse color fix ── */
 html.light .animate-pulse.bg-gray-700  { background-color: #e2e8f0; }
 html.light .animate-pulse.bg-gray-600  { background-color: #cbd5e1; }
+
+/* ── Export to PDF (window.print) ──────────────────────────────────────────
+   Prints the current page as-is (same theme/colors the user sees on screen)
+   rather than converting to a light print theme — this app is dark by
+   default and a from-scratch light-mode remap would need parity with every
+   Tailwind color utility in use across 100+ components. print-color-adjust
+   forces the browser to actually render background/text colors in the PDF
+   even with the browser's own "background graphics" print option off,
+   which otherwise silently produces invisible white-on-white text.
+   ────────────────────────────────────────────────────────────────────────── */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  .no-print { display: none !important; }
+  /* The app shell is a fixed-height flex layout (h-screen + overflow-y-auto
+     scroll regions) so only one viewport's worth of content would otherwise
+     print — relax it to natural document flow so everything prints. */
+  .app-shell, .app-body, .app-main {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body { background: #030712; }
+}

@@ -35,6 +35,9 @@ const GUIDE = [
       { type: 'h3', text: 'Live Price Feed' },
       { type: 'p', text: 'Prices update via WebSocket during market hours. The green dot in the header means the live feed is connected. If it turns grey the app falls back to REST polling at your chosen refresh interval (5s to 5m). Price changes flash green (up) or red (down) in the Watchlist.' },
       { type: 'tip', text: 'Tip: set the refresh interval to 5s during active trading hours and 5m when you\'re monitoring passively to reduce API calls.' },
+      { type: 'h3', text: 'Export to PDF' },
+      { type: 'p', text: 'Click "Export PDF" in the header (next to the refresh button) on any page to save its contents to a PDF, via your browser\'s native print dialog — choose "Save as PDF" as the destination. Available on every page.' },
+      { type: 'tip', text: 'The export preserves the app\'s exact dark theme and colors rather than converting to a light print layout. If a Chart Modal or the Command Palette is open when you export, whichever is on top gets captured, but a long modal isn\'t guaranteed to print in full — close it first for a full-page export of the underlying tab.' },
     ],
   },
   {
@@ -1368,6 +1371,13 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-17 — Export to PDF' },
+      { type: 'bullets', items: [
+        'New "Export PDF" button in the header (every page) — saves the active page to PDF via the browser\'s native print dialog, no new dependencies.',
+        'Preserves the app\'s exact dark theme/colors in the export via print-color-adjust, rather than converting to a separate light print theme.',
+        'Relaxes the app\'s fixed-height scroll-region layout to natural document flow under print, so the full page content prints across multiple PDF pages instead of clipping to one viewport.',
+        'Known limitation: a modal (Chart Modal, Command Palette) left open while exporting isn\'t guaranteed to print in full if its own content scrolls — close it first for a complete export of the underlying page.',
+      ]},
       { type: 'h3', text: '2026-09-17 — Corporate Bonds: Credit Spread vs. Treasury Curve' },
       { type: 'bullets', items: [
         'Corporate Bonds now computes an approximate yield-to-maturity for each fund-held bond and compares it against the Treasury par curve, interpolated at that bond\'s exact maturity.',

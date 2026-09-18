@@ -832,8 +832,17 @@ export default function App() {
   const earningsMap = Object.fromEntries(earnings.map(e => [e.symbol, e]))
   const allSymbols  = [...new Set([...watchlist, ...portfolioSymbols])]
 
+  const activeNavLabel = NAV_INDEX[activeTab]?.label || activeTab
+  const handleExportPdf = () => {
+    const prevTitle = document.title
+    document.title = `StockMonitor - ${activeNavLabel} - ${new Date().toISOString().slice(0, 10)}`
+    const restore = () => { document.title = prevTitle; window.removeEventListener('afterprint', restore) }
+    window.addEventListener('afterprint', restore)
+    window.print()
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-gray-100 overflow-hidden">
+    <div className="app-shell flex flex-col h-screen bg-gray-950 text-gray-100 overflow-hidden">
       <Header
         loading={loading}
         error={error}
@@ -849,10 +858,11 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onOpenSearch={() => setCommandPaletteOpen(true)}
+        onExportPdf={handleExportPdf}
       />
 
       {/* Mobile hamburger bar */}
-      <div className="md:hidden flex items-center px-4 py-2 border-b border-gray-800 bg-gray-900">
+      <div className="no-print md:hidden flex items-center px-4 py-2 border-b border-gray-800 bg-gray-900">
         <button
           onClick={() => setSidebarOpen(o => !o)}
           className="text-gray-400 hover:text-white transition-colors text-xl leading-none p-1"
@@ -862,11 +872,11 @@ export default function App() {
         </button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="app-body flex flex-1 overflow-hidden">
         {/* Mobile backdrop */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 bg-black/50 z-30 md:hidden"
+            className="no-print fixed inset-0 bg-black/50 z-30 md:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
@@ -875,7 +885,7 @@ export default function App() {
         <Sidebar
           activeTab={activeTab}
           onSelect={navigate}
-          className="hidden md:flex md:flex-col w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto"
+          className="no-print hidden md:flex md:flex-col w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto"
         />
 
         {/* Mobile sidebar drawer */}
@@ -883,11 +893,11 @@ export default function App() {
           <Sidebar
             activeTab={activeTab}
             onSelect={(id) => { navigate(id); setSidebarOpen(false) }}
-            className="fixed inset-y-0 left-0 z-40 w-64 bg-gray-900 border-r border-gray-800 overflow-y-auto flex flex-col"
+            className="no-print fixed inset-y-0 left-0 z-40 w-64 bg-gray-900 border-r border-gray-800 overflow-y-auto flex flex-col"
           />
         )}
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="app-main flex-1 overflow-y-auto">
           {activeTab === 'watchlist' && (
             <div className="p-4">
               <WatchlistBar

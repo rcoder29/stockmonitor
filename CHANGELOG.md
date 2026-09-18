@@ -4,6 +4,26 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-17 — Export to PDF
+
+New global "Export PDF" button (header, every page) that saves the currently active page's contents to a PDF via the browser's native print pipeline — no new dependencies, and it preserves the app's exact dark theme/colors in the exported file rather than converting to a light print theme.
+
+### New
+- **Export PDF** button in the header, next to the refresh button — visible on every page. Sets the browser tab title to `StockMonitor - <page name> - <date>` (used as the default filename in the print dialog), opens the browser's print dialog, and restores the original title afterward.
+- Print stylesheet hides the sidebar, header, and mobile chrome (`.no-print`) so only the active page's content is included.
+- `print-color-adjust: exact` forces the browser to render background/text colors exactly as shown on screen, even with the browser's own "background graphics" print option off — without this, a dark-themed page prints as invisible white-on-white text.
+- The app's fixed-height scroll-region layout (`h-screen` + internal `overflow-y-auto`) is relaxed to natural document flow under print, so the full page prints across multiple PDF pages instead of being clipped to one viewport's worth of content.
+
+### Known limitation
+- Exports the active main-content tab. If a fixed-position overlay (Chart Modal, Command Palette) is open, printing captures whichever is on top but neither has had its own internal scroll region relaxed for print, so a long modal may still clip to one viewport — not addressed in this pass.
+
+### Files changed
+- `frontend/src/index.css` — print media query (`no-print`, `app-shell`/`app-body`/`app-main` overflow reset, color-adjust)
+- `frontend/src/App.jsx` — `handleExportPdf`, `.no-print`/`.app-shell`/`.app-body`/`.app-main` classes on the layout wrappers
+- `frontend/src/components/Header.jsx` — Export PDF button, `onExportPdf` prop, `.no-print` on the header itself
+
+---
+
 ## 2026-09-17 — Corporate Bonds: Credit Spread vs. Treasury Curve
 
 Corporate Bonds now computes an approximate yield-to-maturity for each fund-held bond and compares it against the Treasury par curve, so a bond's price is shown in credit-spread terms (bps over/under the government curve at the same maturity) rather than just coupon + price in isolation.

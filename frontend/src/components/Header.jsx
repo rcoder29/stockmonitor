@@ -23,6 +23,7 @@ export default function Header({
   theme,
   onToggleTheme,
   onOpenSearch,
+  onExportPdf,
 }) {
   const [input, setInput] = useState('')
 
@@ -36,7 +37,7 @@ export default function Header({
   }
 
   return (
-    <header className="bg-gray-900 border-b border-gray-700 px-4 py-3">
+    <header className="no-print bg-gray-900 border-b border-gray-700 px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         {/* Brand */}
         <div className="flex items-center gap-2 shrink-0">
@@ -135,6 +136,19 @@ export default function Header({
             className="bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-400 hover:text-white px-3 py-1 text-xs rounded transition-colors"
           >
             ↻
+          </button>
+
+          {/* Export current page to PDF */}
+          <button
+            onClick={onExportPdf}
+            title="Export this page to PDF (opens your browser's print dialog — choose Save as PDF)"
+            className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white px-2.5 py-1.5 text-xs rounded transition-colors"
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor">
+              <path d="M4 0a1 1 0 00-1 1v11a1 1 0 001 1h1v2.5a.5.5 0 00.854.354L7.707 14H12a1 1 0 001-1V1a1 1 0 00-1-1H4zm2 12H4V1h8v11H7.5a.5.5 0 00-.354.146L6 13.293V12z"/>
+              <path d="M5.5 4.5a.5.5 0 01.5-.5h4a.5.5 0 010 1H6a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h4a.5.5 0 010 1H6a.5.5 0 01-.5-.5zm0 2a.5.5 0 01.5-.5h2a.5.5 0 010 1H6a.5.5 0 01-.5-.5z"/>
+            </svg>
+            Export PDF
           </button>
 
           {/* Theme toggle */}
