@@ -7,13 +7,15 @@ event-driven (deal completion / trust redemption), not a bet on market
 direction, so folding them into a beta sum would misrepresent what they
 actually expose you to.
 
-_compute_portfolio_risk / _fetch_day_quote / _fetch_fundamentals /
-_live_option_price / _sanitize_nan are core helpers used throughout main.py
-by many unrelated features — imported lazily inside the functions that need
-them below rather than at module level, since main.py imports this router
-(to register it) and importing main.py back at module level here would be
-circular. Safe because these are only called per-request, long after both
-modules have finished loading.
+_fetch_fundamentals / _live_option_price are core helpers still in main.py,
+used throughout by many unrelated features — imported lazily inside the
+functions that need them below rather than at module level, since main.py
+imports this router (to register it) and importing main.py back at module
+level here would be circular. Safe because these are only called
+per-request, long after both modules have finished loading.
+_fetch_day_quote and _compute_portfolio_risk/_sanitize_nan moved to
+routers/portfolio.py and routers/portfolio_risk_dashboard.py respectively,
+and are imported normally (no cycle — neither depends on this router).
 """
 import math
 import asyncio
@@ -26,6 +28,8 @@ from database import db_session, cache_get, cache_set, OptionsPosition, CppiStra
 from routers.cppi import _cppi_price, _cppi_state
 from routers.merger_arb import get_arb_positions
 from routers.spacs import get_spac_positions
+from routers.portfolio import _fetch_day_quote
+from routers.portfolio_risk_dashboard import _compute_portfolio_risk, _sanitize_nan
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -62,7 +66,7 @@ def _bs_delta(option_type: str, underlying_price, strike, years, iv, r: float = 
 
 
 async def _net_exposure_options_sleeve() -> dict:
-    from main import _fetch_day_quote, _fetch_fundamentals, _live_option_price
+    from main import _fetch_fundamentals, _live_option_price
 
     with db_session() as db:
         rows = db.query(OptionsPosition).all()
@@ -109,7 +113,7 @@ async def _net_exposure_options_sleeve() -> dict:
 
 @router.get("/api/portfolio/net-exposure")
 async def get_net_exposure():
-    from main import _compute_portfolio_risk, _fetch_fundamentals, _sanitize_nan
+    from main import _fetch_fundamentals
 
     cached = cache_get("portfolio:net-exposure", _NET_EXPOSURE_TTL)
     if cached is not None:

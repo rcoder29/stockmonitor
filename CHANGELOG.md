@@ -4,6 +4,54 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: Custom Screener, Multi-timeframe Technical Signals, Options Strategy Builder, Claude Trade Idea Generator, Portfolio Risk Dashboard
+
+Continued the router extraction (see prior entries below) with five more sections, and fixed a real regression found by auditing all cross-router deferred imports before starting: the previous batch moved `_fetch_day_quote` out of `main.py` into `routers/portfolio.py`, but `routers/net_exposure.py`'s deferred import (`from main import _fetch_day_quote, ...`) still pointed at `main` — silently broken until that endpoint was actually hit. Fixed by pointing it at `routers.portfolio` instead. This is now a mandatory check on every future batch: after moving anything out of `main.py`, grep every router for `from main import` and confirm each name still resolves there.
+
+Also moved `_calc_rsi` (a pure, dependency-free RSI calculation) into `edgar_utils.py` — it's shared by three sections (Screener, Multi-timeframe Technical Signals, Smart Alerts 2.0), so a shared home avoids yet another deferred import. And updated `routers/nlp_screener.py` to import `FilterCondition`/`CustomScreenRequest`/`run_custom_screener` from the new `routers/custom_screener.py` directly (no longer deferred through `main.py`, since neither router depends on the other).
+
+### New
+- `backend/routers/custom_screener.py` — `/api/screener/custom`, moved verbatim; deferred import of `_fetch_fundamentals` from `main.py`.
+- `backend/routers/technical_signals.py` — `/api/screener/signals`, moved verbatim; imports `_calc_rsi` from `edgar_utils.py`.
+- `backend/routers/options_strategy_builder.py` — `/api/options/strategies/{symbol}`, moved verbatim.
+- `backend/routers/trade_idea_generator.py` — `/api/trade-ideas`, moved verbatim.
+- `backend/routers/portfolio_risk_dashboard.py` — `/api/portfolio/risk`, moved verbatim; `_compute_portfolio_risk`/`_sanitize_nan` also consumed by `routers/net_exposure.py` (direct import, no circularity).
+
+### Fixed
+- `backend/routers/net_exposure.py` — stale `from main import _fetch_day_quote` (broken since the Watchlist/Portfolio/AI Chat/Financial Advisor batch moved `_fetch_day_quote` to `routers/portfolio.py`) now imports it from there instead; `_compute_portfolio_risk`/`_sanitize_nan` similarly switched from a deferred `main` import to a direct import from the new `routers/portfolio_risk_dashboard.py`.
+- `backend/routers/nlp_screener.py` — `FilterCondition`/`CustomScreenRequest`/`run_custom_screener` now imported directly from `routers/custom_screener.py` instead of deferred through `main.py`.
+
+### Verified
+- 52/52 backend tests; audited every `from main import` across all routers against main.py's current definitions before and after this batch; live smoke tests on all 6 new/touched endpoints including `/api/portfolio/net-exposure` (confirms the net_exposure.py fix) and `/api/screener/nlp` (confirms the custom_screener.py re-point, reaching the real Anthropic call and hitting only the pre-existing invalid API key); full route sweep, zero new regressions.
+
+### Files changed
+- `backend/routers/custom_screener.py`, `backend/routers/technical_signals.py`, `backend/routers/options_strategy_builder.py`, `backend/routers/trade_idea_generator.py`, `backend/routers/portfolio_risk_dashboard.py` — new
+- `backend/edgar_utils.py` — added `_calc_rsi` + `numpy` import
+- `backend/main.py` — all five sections removed; `_calc_rsi` now imported from `edgar_utils`; dead `math` import removed
+- `backend/routers/net_exposure.py` — deferred-import fixes described above
+- `backend/routers/nlp_screener.py` — import re-pointed to `routers/custom_screener.py`
+
+---
+
+## 2026-09-18 — Backend Modularization: Watchlist, Portfolio, AI Chat, Financial Advisor
+
+Continued the router extraction (see prior entries below) with four foundational sections, handled carefully given how core Watchlist and Portfolio are to the rest of the app. Portfolio's Home Summary endpoint needed the function-scoped deferred-import pattern for `_fetch_perf_one` (still in `main.py`, shared by several other not-yet-extracted sections). Also found and removed a dead duplicate: `_HOME_TTL` was left behind in `main.py`'s shared TTLs block after its only consumer (Home Summary) moved to `routers/portfolio.py` with its own local copy — pyflakes doesn't flag unused module-level constants, so this was caught by manual diffing.
+
+### New
+- `backend/routers/watchlist.py` — `/api/watchlists`, `/api/watchlist` (GET/POST/DELETE), moved verbatim.
+- `backend/routers/portfolio.py` — `/api/portfolio` (GET/POST/DELETE), `/api/home/summary`; deferred import of `_fetch_perf_one` from `main.py`.
+- `backend/routers/ai_chat.py` — `/api/ai-chat` (Gemini or Claude streaming chat), moved verbatim, including the `google.genai` optional-import guard.
+- `backend/routers/financial_advisor.py` — `/api/financial-plan` (CFP-persona streaming plan generator), moved verbatim.
+
+### Verified
+- 52/52 backend tests; live smoke tests on all 6 endpoints — `/api/home/summary` confirmed the deferred `_fetch_perf_one` import resolves correctly at request time with real SPY/QQQ/DIA/VIX data; `/api/ai-chat` and `/api/financial-plan` both reached their real external API calls (Gemini returned a pre-existing "model deprecated" 404, Anthropic hit the already-known invalid API key) — neither is a regression from this move; full route sweep, zero new regressions.
+
+### Files changed
+- `backend/routers/watchlist.py`, `backend/routers/portfolio.py`, `backend/routers/ai_chat.py`, `backend/routers/financial_advisor.py` — new
+- `backend/main.py` — all four sections removed; dead imports cleaned up (`WatchlistSymbol`, `WatchlistGroup`, the `google.genai` try/except guard); dead `_HOME_TTL` constant removed from the shared TTLs block
+
+---
+
 ## 2026-09-18 — Backend Modularization: Backtester, CSV Export/Import, SEC Filings, Options UOA, Portfolio Equity Curve, Earnings Play Calculator, NLP Screener
 
 Continued the router extraction (see the six prior entries below) with a larger, mixed batch of seven sections. Two of them needed the function-scoped deferred-import pattern established for CPPI/Net Exposure: Portfolio Equity Curve's snapshot endpoint calls `_fetch_quote` (still in `main.py`, too widely shared to move), and NLP Screener calls `FilterCondition`/`CustomScreenRequest`/`run_custom_screener` (the Custom Screener's shared filter-execution core).

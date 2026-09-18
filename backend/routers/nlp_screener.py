@@ -1,12 +1,9 @@
 """NLP Screener — Research → Screener (NLP mode).
 
 Converts a natural-language query into filter conditions via Claude, then
-runs them through the Custom Screener.
-
-FilterCondition/CustomScreenRequest/run_custom_screener live in main.py's
-Custom Screener section (shared with the regular filter-builder screener) —
-imported with a function-scoped deferred import since main.py imports this
-router to register it, which would otherwise cycle.
+runs them through the Custom Screener (routers/custom_screener.py) — a
+plain module-level import, no circularity since that module doesn't depend
+on this one.
 """
 import os
 import json
@@ -14,6 +11,8 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from anthropic import Anthropic
+
+from routers.custom_screener import FilterCondition, CustomScreenRequest, run_custom_screener
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -50,8 +49,6 @@ class NLPScreenRequest(BaseModel):
 
 @router.post("/api/screener/nlp")
 async def screener_nlp(req: NLPScreenRequest):
-    from main import FilterCondition, CustomScreenRequest, run_custom_screener
-
     try:
         client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
         msg = client.messages.create(

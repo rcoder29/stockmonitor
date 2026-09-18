@@ -10,6 +10,7 @@ import logging
 import xml.etree.ElementTree as ET
 from datetime import timedelta
 from curl_cffi import requests as curl_requests
+import numpy as np
 import yfinance as yf
 
 from database import cache_get, cache_set
@@ -35,6 +36,16 @@ def _safe_float(val) -> float | None:
         return None if (f is None or f != f) else f  # f != f catches NaN
     except (TypeError, ValueError):
         return None
+
+
+def _calc_rsi(prices, period=14):
+    """RSI (Wilder-style, simple rolling mean). Shared by Screener,
+    Multi-timeframe Technical Signals, and Smart Alerts 2.0."""
+    delta = prices.diff()
+    gain  = delta.clip(lower=0).rolling(period).mean()
+    loss  = (-delta.clip(upper=0)).rolling(period).mean()
+    rs    = gain / loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
 
 
 def _finite_or_none(v):

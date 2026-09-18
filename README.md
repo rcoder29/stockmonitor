@@ -215,11 +215,11 @@ Bypass for a specific commit with `git commit --no-verify` if you hit a false po
 ```
 stockmonitor/
 ├── backend/
-│   ├── main.py              FastAPI app (~7,050 lines) — most endpoints still live here;
+│   ├── main.py              FastAPI app (~6,000 lines) — most endpoints still live here;
 │   │                        being split into routers/ incrementally (see below)
-│   ├── edgar_utils.py       Shared SEC/EDGAR helpers (_get_cik, _edgar_req, _build_ticker_map,
-│   │                        _parse_nport_xml, _fetch_opp_quote, …) — imported by main.py and
-│   │                        every router below with no circular dependency
+│   ├── edgar_utils.py       Shared SEC/EDGAR + generic helpers (_get_cik, _edgar_req,
+│   │                        _build_ticker_map, _parse_nport_xml, _fetch_opp_quote, _calc_rsi, …)
+│   │                        — imported by main.py and every router below with no circular dependency
 │   ├── routers/             Feature areas extracted out of main.py as FastAPI APIRouters
 │   │   ├── corporate_bonds.py    Research → Corporate Bonds
 │   │   ├── convertible_bonds.py  Research → Convertible Bonds
@@ -246,9 +246,22 @@ stockmonitor/
 │   │   │                          back into main.py's _fetch_quote with a function-scoped
 │   │   │                          deferred import (same reason as net_exposure.py above)
 │   │   ├── earnings_play_calculator.py  Chart modal → Earnings tab play calculator
-│   │   └── nlp_screener.py       Research → Screener (NLP mode) — reaches back into
-│   │                              main.py's FilterCondition/CustomScreenRequest/
-│   │                              run_custom_screener with a function-scoped deferred import
+│   │   ├── nlp_screener.py       Research → Screener (NLP mode) — reaches back into
+│   │   │                          main.py's FilterCondition/CustomScreenRequest/
+│   │   │                          run_custom_screener with a function-scoped deferred import
+│   │   ├── watchlist.py          Sidebar watchlist + named sub-lists (CRUD)
+│   │   ├── portfolio.py          Portfolio core CRUD + Home dashboard summary — the
+│   │   │                          summary endpoint reaches back into main.py's
+│   │   │                          _fetch_perf_one with a function-scoped deferred import
+│   │   ├── ai_chat.py            AI Chat (general finance assistant, Gemini or Claude)
+│   │   ├── financial_advisor.py  Financial Advisor (CFP-persona investment plan generator)
+│   │   ├── custom_screener.py    Research → Screener (filter-builder mode) — also imported
+│   │   │                          directly by nlp_screener.py for its NLP mode
+│   │   ├── technical_signals.py  Research → Screener (Signals tab, multi-timeframe)
+│   │   ├── options_strategy_builder.py  Chart modal → Options tab (strategy suggestions)
+│   │   ├── trade_idea_generator.py      Watchlist → trade ideas panel (Claude-generated)
+│   │   └── portfolio_risk_dashboard.py  Portfolio → Risk view — _compute_portfolio_risk/
+│   │                                     _sanitize_nan also consumed directly by net_exposure.py
 │   ├── ruff.toml            Lint gate config — see "Lint gate" below
 │   ├── requirements.txt
 │   ├── requirements-dev.txt Dev-only deps (ruff, pytest) — not deployed
