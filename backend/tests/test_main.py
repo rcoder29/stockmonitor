@@ -446,7 +446,7 @@ class TestChart:
     def test_valid_period_returns_bars(self):
         t = MagicMock()
         t.history.return_value = self._mock_hist()
-        with patch("main.yf.Ticker", return_value=t):
+        with patch("routers.chart.yf.Ticker", return_value=t):
             r = client.get("/api/chart/AAPL?period=1mo")
         assert r.status_code == 200
         body = r.json()
@@ -456,7 +456,7 @@ class TestChart:
     def test_bar_fields(self):
         t = MagicMock()
         t.history.return_value = self._mock_hist()
-        with patch("main.yf.Ticker", return_value=t):
+        with patch("routers.chart.yf.Ticker", return_value=t):
             body = client.get("/api/chart/AAPL?period=1mo").json()
         bar = body["data"][0]
         for f in ("time", "open", "high", "low", "close", "volume"):

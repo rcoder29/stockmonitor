@@ -4,6 +4,60 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: Backtester, CSV Export/Import, SEC Filings, Options UOA, Portfolio Equity Curve, Earnings Play Calculator, NLP Screener
+
+Continued the router extraction (see the six prior entries below) with a larger, mixed batch of seven sections. Two of them needed the function-scoped deferred-import pattern established for CPPI/Net Exposure: Portfolio Equity Curve's snapshot endpoint calls `_fetch_quote` (still in `main.py`, too widely shared to move), and NLP Screener calls `FilterCondition`/`CustomScreenRequest`/`run_custom_screener` (the Custom Screener's shared filter-execution core).
+
+### New
+- `backend/routers/backtester.py` — `/api/backtest`, moved verbatim (MA Crossover / RSI Reversal / Bollinger Bands vs. buy & hold).
+- `backend/routers/csv_export_import.py` — `/api/portfolio/export`, `/api/portfolio/import`, `/api/journal/export`, moved verbatim.
+- `backend/routers/sec_filings.py` — `/api/filings/{symbol}`, moved verbatim.
+- `backend/routers/unusual_options.py` — `/api/market/options-uoa`, moved verbatim.
+- `backend/routers/portfolio_equity_curve.py` — `/api/portfolio/snapshots`, `/api/portfolio/snapshot`; deferred import of `_fetch_quote` from `main.py`.
+- `backend/routers/earnings_play_calculator.py` — `/api/earnings/play/{symbol}`, moved verbatim (fixed a self-inflicted duplicate `_PLAY_TTL` introduced during extraction, already defined in the original section body).
+- `backend/routers/nlp_screener.py` — `/api/screener/nlp`; deferred import of `FilterCondition`/`CustomScreenRequest`/`run_custom_screener` from `main.py`.
+
+### Verified
+- 52/52 backend tests; live smoke tests on all 7 endpoints with real data (backtest equity curve on AAPL, portfolio/journal CSV export, AAPL SEC filings, options UOA scan, a real portfolio snapshot write, AAPL earnings play straddle calc); both deferred imports confirmed resolving correctly at actual request time, not just at module import — NLP Screener's request reached the Anthropic API call itself and failed only on the pre-existing invalid API key, not a `NameError`; full route sweep, zero new regressions (all failures pre-existing endpoints needing query params/POST bodies).
+
+### Files changed
+- `backend/routers/backtester.py`, `backend/routers/csv_export_import.py`, `backend/routers/sec_filings.py`, `backend/routers/unusual_options.py`, `backend/routers/portfolio_equity_curve.py`, `backend/routers/earnings_play_calculator.py`, `backend/routers/nlp_screener.py` — new
+- `backend/main.py` — all seven sections removed; dead imports cleaned up (`Response` from `fastapi.responses`, `csv`, `io`, `PortfolioSnapshot`, `TradeJournalEntry`)
+- `backend/tests/test_main.py` — no changes needed this batch
+
+---
+
+## 2026-09-18 — Backend Modularization: Chart, News, Analyst History, Earnings Calendar, Portfolio Risk Data, Price Alerts, Portfolio Performance, Earnings History, Pre-Market Movers, Trade Journal, Economic Calendar, Institutional Ownership
+
+Continued the router extraction with a 12-section batch across the Chart Modal, Watchlist, and Portfolio areas. Found and fixed a real, pre-existing test bug in the same pass: `TestChart`'s two tests patched `main.yf.Ticker`, which silently stopped mocking anything once Chart's code moved to `routers/chart.py` (which has its own separate `yfinance` import) — the test was quietly hitting live/cached real data instead of the mock. Caught by actually running the suite after the move, not by any static check.
+
+### New
+- `backend/routers/chart.py` — `/api/chart/{symbol}`, moved verbatim.
+- `backend/routers/news.py` — `/api/news/{symbol}`, moved verbatim.
+- `backend/routers/analyst_history.py` — `/api/analyst-history/{symbol}`, moved verbatim.
+- `backend/routers/earnings_calendar.py` — `/api/earnings/upcoming`, moved verbatim.
+- `backend/routers/portfolio_risk_data.py` — `/api/market/risk-data`, moved verbatim.
+- `backend/routers/price_alerts.py` — `/api/alerts` (GET/POST/DELETE/PATCH), moved verbatim.
+- `backend/routers/portfolio_performance.py` — `/api/portfolio/performance`, moved verbatim.
+- `backend/routers/earnings_history.py` — `/api/earnings/history/{symbol}`, moved verbatim.
+- `backend/routers/premarket_movers.py` — `/api/market/premarket-movers`, moved verbatim.
+- `backend/routers/trade_journal.py` — `/api/journal` (GET/POST/DELETE) + `/api/journal/stats`, moved verbatim.
+- `backend/routers/economic_calendar.py` — `/api/market/economic-calendar`, moved verbatim.
+- `backend/routers/institutional_ownership.py` — `/api/institutional/{symbol}`, moved verbatim.
+
+### Fixed
+- `backend/tests/test_main.py` — `TestChart::test_valid_period_returns_bars` and `test_bar_fields` now patch `routers.chart.yf.Ticker` instead of the now-stale `main.yf.Ticker`.
+
+### Verified
+- 52/52 backend tests (after the mock-target fix); live smoke tests on all 12 endpoints with real data; full route sweep with no new regressions.
+
+### Files changed
+- The 12 router files above — new
+- `backend/main.py` — all twelve sections removed
+- `backend/tests/test_main.py` — `TestChart` mock target fix
+
+---
+
 ## 2026-09-18 — Backend Modularization: Seasonal Patterns, ETF Overlap, Relative Strength
 
 Continued the router extraction (see the five prior entries below) with three adjacent Research-group scanners — all clean, zero external cross-references, and this time not even any dead imports left behind in `main.py` (their shared dependencies like `pd`/`yf`/`_safe_float` are heavily used elsewhere).

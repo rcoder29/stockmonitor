@@ -215,7 +215,7 @@ Bypass for a specific commit with `git commit --no-verify` if you hit a false po
 ```
 stockmonitor/
 ├── backend/
-│   ├── main.py              FastAPI app (~8,400 lines) — most endpoints still live here;
+│   ├── main.py              FastAPI app (~7,050 lines) — most endpoints still live here;
 │   │                        being split into routers/ incrementally (see below)
 │   ├── edgar_utils.py       Shared SEC/EDGAR helpers (_get_cik, _edgar_req, _build_ticker_map,
 │   │                        _parse_nport_xml, _fetch_opp_quote, …) — imported by main.py and
@@ -237,7 +237,18 @@ stockmonitor/
 │   │   ├── reddit_trending.py    Markets → Reddit Trending
 │   │   ├── seasonal_patterns.py  Research → Seasonal Patterns
 │   │   ├── etf_overlap.py        Research → ETF Overlap
-│   │   └── relative_strength.py  Research → Relative Strength
+│   │   ├── relative_strength.py  Research → Relative Strength
+│   │   ├── backtester.py         Backtester (MA Crossover / RSI Reversal / Bollinger Bands)
+│   │   ├── csv_export_import.py  Portfolio/Journal CSV export + portfolio CSV import
+│   │   ├── sec_filings.py        Chart modal → SEC Filings tab
+│   │   ├── unusual_options.py    Markets → Options Unusual Activity scanner
+│   │   ├── portfolio_equity_curve.py  Portfolio → Equity Curve — snapshot endpoint reaches
+│   │   │                          back into main.py's _fetch_quote with a function-scoped
+│   │   │                          deferred import (same reason as net_exposure.py above)
+│   │   ├── earnings_play_calculator.py  Chart modal → Earnings tab play calculator
+│   │   └── nlp_screener.py       Research → Screener (NLP mode) — reaches back into
+│   │                              main.py's FilterCondition/CustomScreenRequest/
+│   │                              run_custom_screener with a function-scoped deferred import
 │   ├── ruff.toml            Lint gate config — see "Lint gate" below
 │   ├── requirements.txt
 │   ├── requirements-dev.txt Dev-only deps (ruff, pytest) — not deployed
