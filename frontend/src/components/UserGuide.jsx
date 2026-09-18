@@ -20,7 +20,7 @@ const GUIDE = [
       { type: 'p', text: 'The left sidebar organises all features into 9 groups. All groups start collapsed — click a group header to expand it. Only the group containing your current view opens automatically. Click any item to load that view. Home is pinned above the groups and the User Guide button is pinned below them. On mobile, tap ☰ to open the sidebar drawer.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
         ['Markets', 'Overview, Sentiment, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
-        ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
+        ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Convertible Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
         ['Watchlist', 'Watchlist, Heatmap, Correlation, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
         ['News', 'My News Feed'],
         ['Trading', 'Trade Ideas, Position Sizer, Wheel Tracker, Day Trader'],
@@ -732,6 +732,17 @@ const GUIDE = [
         'A separate Ratings Mentions panel full-text-searches the issuer\'s own 8-K/10-K/10-Q filings for rating-action language (agency name + downgraded/upgraded/affirmed/etc. in the same sentence), shown as excerpts with filing date and a link to the source filing.',
       ]},
       { type: 'tip', text: 'There\'s no free, live per-CUSIP bond pricing feed, so everything here is either (a) what a tracked bond ETF actually holds as of its last N-PORT filing, or (b) terms and ratings actions pulled straight from the issuer\'s own EDGAR filings — never a live quote.' },
+      { type: 'h3', text: 'Convertible Bonds' },
+      { type: 'p', text: 'Convertible corporate bond research by issuer, mirroring Corporate Bonds. Found under Research → Convertible Bonds.' },
+      { type: 'steps', items: [
+        'Search by ticker or company name to find an issuer\'s convertible bonds.',
+        'Bonds are found by scanning the latest N-PORT holdings of 3 major convertible bond ETFs (ICVT, CWB, FCVT) for matches to the issuer — same approach as Corporate Bonds.',
+        'Click a bond to see CUSIP, ISIN, coupon, maturity, and every tracked fund currently holding it (weight, market value, approximate clean price).',
+        'Conversion Terms are pulled from the issuer\'s own XBRL-tagged filings: conversion price, conversion ratio, shares issuable on conversion, call-trigger stock-price % and trading-day thresholds, if-converted value over principal, and outstanding balance — each with its source filing and as-of date. Coverage varies by issuer since these aren\'t mandatory tags the way balance-sheet items are.',
+        'If no tracked fund or prospectus match exists but the issuer has disclosed conversion terms anyway (common for older or already-converted issues), the page shows an issuer profile with those XBRL terms and ratings mentions directly instead of an empty result.',
+        'Credit Rating Mentions works exactly like Corporate Bonds — full-text search of the issuer\'s own 8-K/10-K/10-Q filings for rating-action language.',
+      ]},
+      { type: 'tip', text: 'Conversion price and ratio are a defined part of the US-GAAP XBRL taxonomy — unlike credit ratings, which aren\'t standardized at all — so when an issuer tags them, it\'s real structured data straight from their own filing, not a text-mined guess.' },
       { type: 'h3', text: 'Activist Tracker' },
       { type: 'p', text: 'Scans EDGAR for Schedule 13D and 13G filings — the mandatory disclosure whenever an investor crosses 5% beneficial ownership of a public company. Found under Research → Activist Tracker.' },
       { type: 'steps', items: [
@@ -1347,6 +1358,14 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-17 — Convertible Bonds' },
+      { type: 'bullets', items: [
+        'New Convertible Bonds page under Research → Convertible Bonds, alongside Corporate Bonds.',
+        'Reuses Corporate Bonds\' fund N-PORT holdings + prospectus fallback pattern, scanning ICVT, CWB, and FCVT instead of the investment-grade/high-yield universe.',
+        'Adds a third source unique to converts: conversion price, ratio, call-trigger thresholds, and if-converted value are a defined part of the US-GAAP XBRL taxonomy, so a single companyfacts call per issuer can pull real structured terms when the issuer tagged them — no scraping needed, unlike credit ratings.',
+        'When no fund or prospectus match exists but the issuer disclosed conversion terms anyway, shows a standalone issuer profile with those terms and ratings mentions instead of an empty result.',
+        'Reuses the existing bond ratings-mentions endpoint unchanged for Credit Rating Mentions.',
+      ]},
       { type: 'h3', text: '2026-09-16 — Corporate Bonds' },
       { type: 'bullets', items: [
         'New Corporate Bonds page under Research → Corporate Bonds.',

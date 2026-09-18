@@ -4,6 +4,30 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-17 — Convertible Bonds
+
+New Research page for convertible corporate bond research by issuer, alongside Corporate Bonds. Reuses the Corporate Bonds pattern (fund N-PORT holdings + prospectus fallback), plus a third free source specific to converts: conversion economics (conversion price/ratio, call-trigger thresholds, if-converted value) are a defined part of the US-GAAP XBRL taxonomy, unlike credit ratings — so an issuer that tagged them exposes real structured terms straight from `data.sec.gov`'s company-facts API, no scraping required. Coverage still varies by issuer since tagging conversion terms isn't mandatory the way balance-sheet line items are.
+
+### New
+- **Convertible Bonds** under Research → Convertible Bonds. Search by ticker or company name to find an issuer's convertible bonds.
+- **Bond search via convertible bond ETF N-PORT holdings**: scans the latest N-PORT filings from 3 major convertible bond ETFs (ICVT, CWB, FCVT) for holdings matching the issuer, reusing the exact same N-PORT/series-resolution plumbing built for Corporate Bonds.
+- **Conversion terms from XBRL**: pulls the issuer's `companyfacts` XBRL data once and extracts a curated allowlist of convertible-debt concepts (conversion price, conversion ratio, shares issuable on conversion, call-trigger stock-price % and trading-day thresholds, if-converted value over principal, outstanding balance, proceeds/repayments) — each shown with its source filing and as-of date. Deliberately excludes convertible-*preferred stock* XBRL concepts, which are a different instrument.
+- **SEC prospectus fallback**: same 424B2/3/5/FWP mining as Corporate Bonds, filtered to only keep matches whose note-type phrase mentions "convertible" so it doesn't surface an issuer's plain debt.
+- **Standalone issuer profile**: when no tracked fund or prospectus match exists but the issuer has tagged conversion terms in its own filings (common for older or already-converted issues, e.g. Palo Alto Networks' 2014-2015 converts), the page shows those XBRL terms and ratings mentions directly instead of an empty "no bonds found" state.
+- **Credit rating mentions**: reuses the existing `/api/bonds/ratings-mentions/{ticker}` endpoint from Corporate Bonds as-is — same company, same filings, no new backend needed.
+
+### Backend
+- `GET /api/convertibles/search?q=` — aggregates matching convertible bonds across the tracked convertible ETF universe by CUSIP, falling back to prospectus search, plus issuer XBRL conversion terms.
+- `_fetch_convertible_xbrl_terms` — new helper: one `companyfacts` call per issuer, filtered against a curated allowlist of ~15 convertible-debt US-GAAP concepts.
+- `_search_bond_prospectus` extended with a `require_convertible` flag to filter prospectus matches by note-type phrase, shared with Corporate Bonds' existing (default-off) behavior.
+
+### Files changed
+- `backend/main.py` — Convertible Bond Research section (search, XBRL terms, prospectus filter); `_search_bond_prospectus` extended
+- `frontend/src/components/ConvertibleBonds.jsx` — new component
+- `frontend/src/App.jsx` — import, nav item under Research, route
+
+---
+
 ## 2026-09-16 — Corporate Bonds
 
 New Research page for investment-grade and high-yield corporate bond research by issuer. There's no free per-CUSIP bond pricing API (unlike yfinance for equities), so this is built entirely on two public SEC data sources: N-PORT fund holdings for live characteristics, and full-text search over the issuer's own filings for everything a bulk data feed can't give for free.
