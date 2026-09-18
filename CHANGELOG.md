@@ -4,6 +4,28 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Investor Education: Onion Map + Live Data Snapshots
+
+Enriched the Investor Education module (see prior entry below) with two additions: a visual "onion map" landing view, and live data grounding six of the topics in real current numbers.
+
+The module now opens on a concentric-circle diagram — outermost ring Macro & Geography, innermost Risk & Valuation — literally the "layers of an onion" framing from the original request, alongside a clickable card per layer. Clicking a ring or card drops into that layer's drill-down tree (the existing sidebar/breadcrumb browsing from the first version); a "◎ Onion Map" button returns to it from anywhere.
+
+Six topics — Currencies (DXY), Central Banks (Fed funds target + next FOMC odds), Treasuries & the Risk-Free Rate (10Y yield + curve inversion), Going Public (count of tracked IPOs), Crypto (BTC price/24h change), and Volatility & Beta (VIX) — now show a small "Live" stat card pulled from the app's own existing endpoints (`/api/market/rates`, `/api/market/fed-watch`, `/api/market/crypto`, `/api/market/ipo-calendar`, `/api/home/summary`) rather than only linking out. Each topic's `liveStat.parse(json)` returns `null` on missing/malformed data so the block disappears cleanly instead of showing a broken stat.
+
+### New
+- `InvestorEducation.jsx`: `OnionMap` (SVG concentric circles + legend cards) and `LiveStat` (fetch-on-mount, loading/error/empty states) components; a `view` state (`'map' | 'topic'`) makes the map the default landing screen; `LAYER_COLORS` gives each layer a consistent accent (sky/violet/emerald/amber) across the map, sidebar layer picker, and topic header badge.
+- `investorEducationTopics.js`: `liveStat: { endpoint, parse }` added to the 6 topics above.
+
+### Verified
+- Hit all 4 backend endpoints directly with curl and confirmed every field each `parse` function reads (`dxy`, `yields.t10y`, `inverted`, `spread_10y_13w`, `currentTarget`, `meetings[].status/date/cutProb/holdProb/hikeProb`, `coins[].symbol/price/change24h`, IPO array length, `market.vix.price/label`) matches the real live response shape — not just the code that produces it.
+- `npx vite build` — new Tailwind fill/hover classes for the SVG rings (`fill-sky-700`, `fill-violet-700`, `fill-emerald-700`, `fill-amber-700` + hover variants) confirmed present in the built CSS, since dynamically-interpolated class names wouldn't have been picked up by Tailwind's scanner.
+- `npx vitest run` — 90/90 existing frontend tests still pass.
+
+### Files changed
+- `frontend/src/components/InvestorEducation.jsx`, `frontend/src/data/investorEducationTopics.js` — modified
+
+---
+
 ## 2026-09-18 — Investor Education module
 
 A new "Learn" area (pinned in the sidebar, next to User Guide) teaching financial-market concepts as a navigable graph rather than a flat article list — four layers (Macro & Geography, Market Structure, Asset Classes, Risk & Valuation), each a parent/child drill-down tree you can traverse top-down (broad concept → specifics) or bottom-up (via breadcrumbs back to broader context), plus lateral "Related Concepts" links that cross layers (e.g. Credit Spread → Corporate Bonds, Currencies → Currencies as an Asset Class). Where a live tool already exists for a concept, the topic links straight to it — e.g. Treasury bonds/risk-free rate link to the Yield Curve tab, IPOs link to the IPO & Lockup Calendar, SPACs link to the SPACs module, credit spread links to Corporate Bonds' credit-spread-vs-Treasury feature.

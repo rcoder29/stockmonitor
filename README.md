@@ -306,9 +306,10 @@ stockmonitor/
 │           ├── PriceAlerts.jsx         Alert modal + toast notifications
 │           ├── EarningsCalendar.jsx    Inline earnings countdown
 │           ├── UserGuide.jsx           In-app documentation
-│           └── InvestorEducation.jsx   Investor education — layered concept graph
-│                                        (data/investorEducationTopics.js), links out
-│                                        to the live tabs that match each concept
+│           └── InvestorEducation.jsx   Investor education — onion-map landing view +
+│                                        layered concept graph (data/investorEducationTopics.js),
+│                                        with live data snapshots on 6 topics and deep
+│                                        links out to the live tabs that match each concept
 ├── CHANGELOG.md             Full feature history
 └── README.md
 ```

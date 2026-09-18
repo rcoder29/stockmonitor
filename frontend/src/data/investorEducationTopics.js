@@ -3,7 +3,11 @@
 // Valuation). Each topic has a parent/children (top-down / bottom-up
 // drill path) plus lateral `relatedIds` that cross layers, and an optional
 // `linkTab` that deep-links to the live tool built for that concept
-// elsewhere in the app. Pure data — no component logic here.
+// elsewhere in the app. A handful of topics also carry `liveStat`: an
+// endpoint plus a `parse(json)` function returning {label, value, sub} to
+// ground the concept in a real, current number — return null from parse to
+// hide the block instead of showing an empty stat. Pure data — no rendering
+// logic here beyond these small parse functions.
 
 export const LAYERS = [
   { id: 'macro',     label: 'Macro & Geography', subtitle: 'Economy → regions → countries → currencies' },
@@ -58,6 +62,14 @@ export const TOPICS = {
     ],
     parentId: 'countries', childIds: [], relatedIds: ['central-banks', 'currencies-fx'],
     linkTab: 'rates', linkLabel: 'See DXY on the Yield Curve & Rates tab',
+    liveStat: {
+      endpoint: '/api/market/rates',
+      parse: (d) => (d.dxy == null ? null : {
+        label: 'US Dollar Index (DXY)',
+        value: d.dxy.toFixed(2),
+        sub: 'Tracks the dollar against a basket of major currencies',
+      }),
+    },
   },
   'central-banks': {
     id: 'central-banks', layer: 'macro', title: 'Central Banks & Interest Rate Policy',
@@ -70,6 +82,19 @@ export const TOPICS = {
     ],
     parentId: 'global-economy', childIds: [], relatedIds: ['currencies', 'risk-free-rate'],
     linkTab: 'fedwatch', linkLabel: 'Open Fed Watch',
+    liveStat: {
+      endpoint: '/api/market/fed-watch',
+      parse: (d) => {
+        const next = (d.meetings || []).find(m => m.status === 'upcoming')
+        return {
+          label: 'Current Fed Funds Target',
+          value: d.currentTarget || '—',
+          sub: next
+            ? `Next FOMC meeting ${next.date}: ${next.cutProb ?? '—'}% cut / ${next.holdProb ?? '—'}% hold / ${next.hikeProb ?? '—'}% hike priced in`
+            : undefined,
+        }
+      },
+    },
   },
 
   // ── Market Structure ──────────────────────────────────────────────────────
@@ -117,6 +142,14 @@ export const TOPICS = {
     ],
     parentId: 'private-markets', childIds: ['secondary-markets'], relatedIds: ['spacs-concept'],
     linkTab: 'ipocalendar', linkLabel: 'Open IPO & Lockup Calendar',
+    liveStat: {
+      endpoint: '/api/market/ipo-calendar',
+      parse: (d) => (!Array.isArray(d) ? null : {
+        label: 'Recently Priced IPOs Tracked',
+        value: String(d.length),
+        sub: 'From SEC 424B4 filings, with live lockup-expiration countdowns',
+      }),
+    },
   },
   'spacs-concept': {
     id: 'spacs-concept', layer: 'structure', title: 'SPACs: A Shortcut to Public Markets',
@@ -203,6 +236,16 @@ export const TOPICS = {
     ],
     parentId: 'fixed-income', childIds: [], relatedIds: ['risk-free-rate'],
     linkTab: 'treasurybonds', linkLabel: 'Open Treasury Bonds',
+    liveStat: {
+      endpoint: '/api/market/rates',
+      parse: (d) => (d.yields?.t10y == null ? null : {
+        label: '10-Year Treasury Yield',
+        value: `${d.yields.t10y.toFixed(2)}%`,
+        sub: d.inverted
+          ? 'Yield curve currently INVERTED (10Y below 13-week)'
+          : d.spread_10y_13w != null ? `10Y − 13-week spread: ${d.spread_10y_13w.toFixed(2)} pts` : undefined,
+      }),
+    },
   },
   'corporate-bonds': {
     id: 'corporate-bonds', layer: 'assets', title: 'Corporate Bonds',
@@ -283,6 +326,18 @@ export const TOPICS = {
     ],
     parentId: 'asset-classes-overview', childIds: [], relatedIds: [],
     linkTab: 'crypto', linkLabel: 'Open Crypto',
+    liveStat: {
+      endpoint: '/api/market/crypto',
+      parse: (d) => {
+        const btc = (d.coins || []).find(c => c.symbol === 'BTC-USD')
+        if (!btc || btc.price == null) return null
+        return {
+          label: 'Bitcoin (BTC)',
+          value: `$${btc.price.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+          sub: btc.change24h != null ? `${btc.change24h >= 0 ? '+' : ''}${btc.change24h}% (24h)` : undefined,
+        }
+      },
+    },
   },
 
   // ── Risk & Valuation ──────────────────────────────────────────────────────
@@ -297,6 +352,14 @@ export const TOPICS = {
     ],
     parentId: null, childIds: ['credit-spread'], relatedIds: ['treasuries', 'central-banks'],
     linkTab: 'rates', linkLabel: 'Open Yield Curve & Rates',
+    liveStat: {
+      endpoint: '/api/market/rates',
+      parse: (d) => (d.yields?.t10y == null ? null : {
+        label: 'Current Risk-Free Rate (10Y Treasury)',
+        value: `${d.yields.t10y.toFixed(2)}%`,
+        sub: 'The baseline every DCF discount rate and credit spread builds on',
+      }),
+    },
   },
   'credit-spread': {
     id: 'credit-spread', layer: 'risk', title: 'Credit Spread',
@@ -332,6 +395,18 @@ export const TOPICS = {
     ],
     parentId: 'duration-risk', childIds: ['liquidity-risk'], relatedIds: [],
     linkTab: 'portfolio', linkLabel: 'Open Portfolio → Risk view',
+    liveStat: {
+      endpoint: '/api/home/summary',
+      parse: (d) => {
+        const vix = d.market?.vix
+        if (!vix || vix.price == null) return null
+        return {
+          label: 'VIX (Volatility Index)',
+          value: vix.price.toFixed(2),
+          sub: vix.label ? `Regime: ${vix.label}` : undefined,
+        }
+      },
+    },
   },
   'liquidity-risk': {
     id: 'liquidity-risk', layer: 'risk', title: 'Liquidity Risk',
