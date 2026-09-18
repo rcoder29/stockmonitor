@@ -4,6 +4,25 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: Fund Holdings Explorer
+
+Continued the router extraction (see the two 2026-09-17 entries below) with Fund Holdings Explorer — cleaner than Merger Arb/SPACs since a thorough cross-reference check found zero external dependencies either direction before moving anything.
+
+### New
+- `backend/routers/fund_holdings.py` — `/api/edgar/fund-search`, `/api/edgar/fund-holdings`, `/api/edgar/popular-funds`, moved from `main.py`.
+
+### Fixed
+- A dead duplicate `_EDGAR_ASSET_CATS` dict got copied into the new router file (leftover from when `_parse_nport_xml` moved to `edgar_utils.py` earlier) — `ruff`/`pyflakes` don't flag unused *module-level* constants, only unused imports and undefined names, so this needed a manual diff against `edgar_utils.py`'s own top-level names to catch. Removed, along with 4 now-genuinely-dead imports in `main.py` that ruff did catch (`re`, `_edgar_filing_xml`, `_build_ticker_map`, `_parse_nport_xml`).
+
+### Verified
+- 52/52 backend tests; live smoke test on all 3 routes including the full holdings pipeline (SPY → 504 holdings, correctly enriched with live price/52-week range/performance); full 105-route sweep with no fund-holdings-related regressions.
+
+### Files changed
+- `backend/routers/fund_holdings.py` — new
+- `backend/main.py` — Fund Holdings Explorer section removed; dead imports cleaned up
+
+---
+
 ## 2026-09-18 — Lint Gate
 
 New pre-commit hook that catches a specific bug class a modular codebase invites: a refactor that moves code between files can leave a name undefined at a call site that only executes on a request path tests don't happen to exercise — `python -c "import main"` and even a passing test suite can look clean while that path is still broken. Found and fixed 6 real instances of exactly this during the backend modularization work below before adding the gate.
