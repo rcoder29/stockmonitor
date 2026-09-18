@@ -730,8 +730,9 @@ const GUIDE = [
         'Click a bond to see CUSIP, ISIN, coupon rate & type (fixed/floating), maturity date, default flag, and every tracked fund currently holding it with its weight, market value, and an approximate clean price (market value ÷ par balance × 100).',
         'If no tracked fund currently holds the issuer\'s bonds, the app falls back to the issuer\'s own 424B2/424B3/424B5/FWP prospectus filings, extracting "X.XX% Notes due YYYY" terms from the cover page — clearly labeled as terms at issuance, not live pricing, with a link to the source filing.',
         'A separate Ratings Mentions panel full-text-searches the issuer\'s own 8-K/10-K/10-Q filings for rating-action language (agency name + downgraded/upgraded/affirmed/etc. in the same sentence), shown as excerpts with filing date and a link to the source filing.',
+        'A "vs. Treasury Curve" panel shows an approximate yield-to-maturity for the bond, the Treasury par curve interpolated at that exact maturity, and the spread in basis points — plus a small chart plotting the bond\'s YTM against the Treasury curve at its actual years-to-maturity. Only available for fund-held bonds, since computing YTM needs a live price.',
       ]},
-      { type: 'tip', text: 'There\'s no free, live per-CUSIP bond pricing feed, so everything here is either (a) what a tracked bond ETF actually holds as of its last N-PORT filing, or (b) terms and ratings actions pulled straight from the issuer\'s own EDGAR filings — never a live quote.' },
+      { type: 'tip', text: 'There\'s no free, live per-CUSIP bond pricing feed, so everything here is either (a) what a tracked bond ETF actually holds as of its last N-PORT filing, or (b) terms and ratings actions pulled straight from the issuer\'s own EDGAR filings — never a live quote. The YTM behind the credit-spread panel has no accrued-interest adjustment, so treat spreads as directional, not exact to the basis point.' },
       { type: 'h3', text: 'Convertible Bonds' },
       { type: 'p', text: 'Convertible corporate bond research by issuer, mirroring Corporate Bonds. Found under Research → Convertible Bonds.' },
       { type: 'steps', items: [
@@ -1367,6 +1368,12 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-17 — Corporate Bonds: Credit Spread vs. Treasury Curve' },
+      { type: 'bullets', items: [
+        'Corporate Bonds now computes an approximate yield-to-maturity for each fund-held bond and compares it against the Treasury par curve, interpolated at that bond\'s exact maturity.',
+        'New "vs. Treasury Curve" panel per bond: YTM, comparable Treasury yield, and the spread in basis points, plus a small chart plotting the bond against the Treasury curve on a continuous years-to-maturity axis.',
+        'YTM solved via bisection (semiannual compounding, clean price, no accrued-interest adjustment) from coupon, maturity, and the largest holder\'s implied price — only available for fund-held bonds, since prospectus-only bonds have no live price to solve from.',
+      ]},
       { type: 'h3', text: '2026-09-17 — Treasury Bonds' },
       { type: 'bullets', items: [
         'New standalone Treasury Bonds page under Research → Treasury Bonds: current rates across all 14 tracked maturities, a per-maturity historical trend chart, and a multi-curve yield curve view.',

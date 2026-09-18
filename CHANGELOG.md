@@ -4,6 +4,25 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-17 — Corporate Bonds: Credit Spread vs. Treasury Curve
+
+Corporate Bonds now computes an approximate yield-to-maturity for each fund-held bond and compares it against the Treasury par curve, so a bond's price is shown in credit-spread terms (bps over/under the government curve at the same maturity) rather than just coupon + price in isolation.
+
+### New
+- **vs. Treasury Curve** panel in each bond's expanded detail: approximate YTM, the Treasury yield interpolated at that bond's exact maturity, and the spread in basis points.
+- Small chart plotting the current Treasury curve as a line with the bond's YTM marked as a point at its actual years-to-maturity — a continuous-years axis (not the ordinal tenor axis used on the Treasury Bonds page), since an arbitrary corporate maturity rarely lands on a published Treasury tenor.
+
+### Backend
+- `_bond_ytm` / `_bond_price_from_ytm` — bisection-based YTM solver (semiannual compounding, clean price, no accrued-interest adjustment) from coupon, maturity, and the largest holder's implied price.
+- `_interpolate_treasury_yield` — linear interpolation of the current Treasury par curve at an arbitrary maturity in years.
+- `/api/bonds/search` now returns `ytm`, `treasuryYield`, and `spreadBps` per fund-held bond, plus a `treasuryCurve` field (reusing `/api/treasury/current`) so the frontend doesn't need a second fetch. Prospectus-only bonds are skipped — YTM needs a live price.
+
+### Files changed
+- `backend/main.py` — YTM solver, curve interpolation, `bonds_search` extended
+- `frontend/src/components/CorporateBonds.jsx` — `SpreadStats`, `TreasurySpreadChart` components, threaded `treasuryCurve` through `BondsTable`/`BondDetail`
+
+---
+
 ## 2026-09-17 — Treasury Bonds
 
 New standalone Research page for U.S. Treasury yields — current rates across the full curve, a historical trend chart per maturity, and a multi-curve yield curve view. Unlike corporate/convertible bonds, Treasury yields have a genuinely free, no-API-key, official daily source: the U.S. Treasury's own "Daily Treasury Par Yield Curve Rates" CSV — the same underlying data FRED's DGS* series are derived from, fetched straight from `home.treasury.gov` rather than through a paid/key-gated API (this app's `FRED_API_KEY` isn't configured, so building on the Treasury's own source instead of FRED avoids a dependency that wouldn't work out of the box).

@@ -97,7 +97,70 @@ function RatingsMentions({ ticker }) {
   )
 }
 
-function BondDetail({ bond, resolvedTicker }) {
+function SpreadStats({ bond }) {
+  if (bond.ytm == null) return null
+  return (
+    <div className="grid grid-cols-3 gap-3 mb-2">
+      <div className="bg-slate-800/60 rounded-lg px-3 py-2">
+        <div className="text-[10px] text-slate-600 uppercase tracking-wider">Approx. YTM</div>
+        <div className="text-sm text-white font-mono">{bond.ytm.toFixed(2)}%</div>
+      </div>
+      <div className="bg-slate-800/60 rounded-lg px-3 py-2">
+        <div className="text-[10px] text-slate-600 uppercase tracking-wider">Treasury (same maturity)</div>
+        <div className="text-sm text-white font-mono">{bond.treasuryYield != null ? `${bond.treasuryYield.toFixed(2)}%` : '—'}</div>
+      </div>
+      <div className="bg-slate-800/60 rounded-lg px-3 py-2">
+        <div className="text-[10px] text-slate-600 uppercase tracking-wider">Credit Spread</div>
+        <div className={`text-sm font-mono ${bond.spreadBps != null && bond.spreadBps < 0 ? 'text-amber-400' : 'text-white'}`}>
+          {bond.spreadBps != null ? `${bond.spreadBps > 0 ? '+' : ''}${bond.spreadBps} bps` : '—'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TreasurySpreadChart({ treasuryCurve, bond }) {
+  if (!treasuryCurve || treasuryCurve.length === 0 || bond.ytm == null) return null
+  const pts = [...treasuryCurve].filter(p => p.yield != null).sort((a, b) => a.years - b.years)
+  if (pts.length < 2) return null
+
+  const bondYears = yearsToMaturity(bond.maturityDate)
+  if (bondYears == null) return null
+  const maxYears = Math.max(pts[pts.length - 1].years, bondYears) * 1.08
+  const allY = [...pts.map(p => p.yield), bond.ytm]
+  const yMin = Math.floor(Math.min(...allY) * 2) / 2 - 0.25
+  const yMax = Math.ceil(Math.max(...allY) * 2) / 2 + 0.25
+
+  const W = 460, H = 150
+  const padL = 34, padR = 10, padT = 10, padB = 18
+  const plotW = W - padL - padR, plotH = H - padT - padB
+  const xFor = yrs => padL + Math.min(yrs, maxYears) / maxYears * plotW
+  const yFor = v => padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH
+  const linePts = pts.map(p => `${xFor(p.years)},${yFor(p.yield)}`).join(' ')
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 170 }}>
+        <text x={padL - 6} y={yFor(yMax) + 3} textAnchor="end" fontSize="9" fill="#64748b">{yMax.toFixed(1)}%</text>
+        <text x={padL - 6} y={yFor(yMin) + 3} textAnchor="end" fontSize="9" fill="#64748b">{yMin.toFixed(1)}%</text>
+        <line x1={padL} x2={W - padR} y1={padT} y2={padT} stroke="#1e293b" strokeWidth="1" />
+        <line x1={padL} x2={W - padR} y1={H - padB} y2={H - padB} stroke="#1e293b" strokeWidth="1" />
+        <polyline points={linePts} fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <line x1={xFor(bondYears)} x2={xFor(bondYears)} y1={padT} y2={H - padB} stroke="#475569" strokeWidth="1" strokeDasharray="2,3" />
+        <circle cx={xFor(bondYears)} cy={yFor(bond.ytm)} r="4" fill="#f59e0b" />
+        <text x={xFor(bondYears)} y={yFor(bond.ytm) - 8} textAnchor="middle" fontSize="10" fill="#fbbf24">{bond.ytm.toFixed(2)}%</text>
+        <text x={padL} y={H - 4} fontSize="9" fill="#64748b">0y</text>
+        <text x={W - padR} y={H - 4} textAnchor="end" fontSize="9" fill="#64748b">{maxYears.toFixed(0)}y</text>
+      </svg>
+      <div className="flex items-center gap-4 justify-center text-[10px] text-slate-500 mt-0.5">
+        <span className="flex items-center gap-1"><svg width="14" height="6"><line x1="0" y1="3" x2="14" y2="3" stroke="#64748b" strokeWidth="2" /></svg> Treasury curve (today)</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-amber-500" /> This bond (approx. YTM)</span>
+      </div>
+    </div>
+  )
+}
+
+function BondDetail({ bond, resolvedTicker, treasuryCurve }) {
   return (
     <div className="bg-slate-950 border-t border-slate-800 p-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
@@ -156,6 +219,19 @@ function BondDetail({ bond, resolvedTicker }) {
         </div>
       )}
 
+      {bond.ytm != null && (
+        <div className="mb-3">
+          <div className="text-xs text-slate-500 uppercase tracking-wider mb-1.5">vs. Treasury Curve</div>
+          <p className="text-[11px] text-slate-600 mb-2">
+            Approximate YTM from this bond's coupon, maturity, and the largest holder's implied price — no
+            accrued-interest adjustment, so treat this as directional, not exact. Compared against the
+            Treasury par curve interpolated at the same maturity.
+          </p>
+          <SpreadStats bond={bond} />
+          <TreasurySpreadChart treasuryCurve={treasuryCurve} bond={bond} />
+        </div>
+      )}
+
       <RatingsMentions ticker={resolvedTicker} />
     </div>
   )
@@ -163,7 +239,7 @@ function BondDetail({ bond, resolvedTicker }) {
 
 // ── Results table ─────────────────────────────────────────────────────────────
 
-function BondsTable({ bonds, resolvedTicker }) {
+function BondsTable({ bonds, resolvedTicker, treasuryCurve }) {
   const [expanded, setExpanded] = useState(null)
 
   return (
@@ -218,7 +294,7 @@ function BondsTable({ bonds, resolvedTicker }) {
                 {isOpen && (
                   <tr>
                     <td colSpan={7} className="p-0">
-                      <BondDetail bond={b} resolvedTicker={resolvedTicker} />
+                      <BondDetail bond={b} resolvedTicker={resolvedTicker} treasuryCurve={treasuryCurve} />
                     </td>
                   </tr>
                 )}
@@ -325,7 +401,7 @@ export default function CorporateBonds() {
               No bonds found for "{data.query}" in tracked fund holdings or SEC prospectus filings.
             </div>
           ) : (
-            <BondsTable bonds={data.bonds} resolvedTicker={data.resolvedTicker} />
+            <BondsTable bonds={data.bonds} resolvedTicker={data.resolvedTicker} treasuryCurve={data.treasuryCurve} />
           )}
         </>
       )}

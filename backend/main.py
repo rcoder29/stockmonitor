@@ -9410,6 +9410,61 @@ def _bond_price_per_100(h: dict):
     return round(val / bal * 100, 2)
 
 
+def _bond_price_from_ytm(ytm_pct: float, coupon_pct: float, n_periods: int, face: float = 100.0) -> float:
+    y = ytm_pct / 200  # per-period rate from an annualized %, semiannual compounding
+    c = coupon_pct / 200 * face  # coupon cash flow per period
+    pv = sum(c / (1 + y) ** t for t in range(1, n_periods + 1))
+    pv += face / (1 + y) ** n_periods
+    return pv
+
+
+def _bond_ytm(price: float, coupon_pct: float, years: float, face: float = 100.0) -> float | None:
+    """Approximate annualized yield-to-maturity (semiannual compounding) via
+    bisection on the searched credit-spread page. Uses the same approximate
+    clean price (N-PORT market value ÷ par) already shown elsewhere on this
+    page, with no accrued-interest adjustment — a real bond math engine would
+    need settlement-date accrued interest, but that's not available here."""
+    if not price or not years or years <= 0 or coupon_pct is None:
+        return None
+    n = max(1, round(years * 2))
+    lo, hi = -10.0, 50.0
+    try:
+        f_lo = _bond_price_from_ytm(lo, coupon_pct, n, face) - price
+        f_hi = _bond_price_from_ytm(hi, coupon_pct, n, face) - price
+    except (OverflowError, ZeroDivisionError):
+        return None
+    if f_lo * f_hi > 0:
+        return None  # price not representable for this coupon/maturity in [-10%, 50%]
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        f_mid = _bond_price_from_ytm(mid, coupon_pct, n, face) - price
+        if abs(f_mid) < 1e-5:
+            return round(mid, 4)
+        if (f_lo < 0) == (f_mid < 0):
+            lo, f_lo = mid, f_mid
+        else:
+            hi = mid
+    return round((lo + hi) / 2, 4)
+
+
+def _interpolate_treasury_yield(years: float, treasury_rates: list[dict]) -> float | None:
+    """Linear interpolation of the current Treasury par curve at an arbitrary
+    maturity in years, for computing a credit spread vs. the nearest point on
+    the government curve rather than only the 14 published tenors."""
+    pts = sorted((r for r in treasury_rates if r.get('yield') is not None), key=lambda r: r['years'])
+    if not pts:
+        return None
+    if years <= pts[0]['years']:
+        return pts[0]['yield']
+    if years >= pts[-1]['years']:
+        return pts[-1]['yield']
+    for a, b in zip(pts, pts[1:]):
+        if a['years'] <= years <= b['years']:
+            frac = (years - a['years']) / (b['years'] - a['years'])
+            return round(a['yield'] + frac * (b['yield'] - a['yield']), 4)
+    return None
+
+
 @app.get('/api/bonds/search')
 def bonds_search(q: str):
     """Search for an issuer's corporate bonds across major IG/HY bond ETF holdings,
@@ -9506,7 +9561,37 @@ def bonds_search(q: str):
             bonds = prospectus_bonds
             source = 'prospectus'
 
-    result = {'query': q, 'bonds': bonds[:40], 'source': source, 'resolvedTicker': ticker_for_prospectus}
+    # Credit spread vs. the current Treasury curve — only for fund-held bonds,
+    # since computing YTM needs a live price (prospectus-only bonds have none).
+    treasury_rates = treasury_current().get('rates', [])
+    today = datetime.utcnow().date()
+    for bond in bonds:
+        if bond.get('source') != 'fund' or not bond.get('heldBy'):
+            continue
+        price = bond['heldBy'][0].get('price')
+        coupon = bond.get('couponRate')
+        maturity = bond.get('maturityDate')
+        if price is None or coupon is None or not maturity:
+            continue
+        try:
+            years = (datetime.strptime(maturity, '%Y-%m-%d').date() - today).days / 365.25
+        except ValueError:
+            continue
+        ytm = _bond_ytm(price, coupon, years)
+        if ytm is None:
+            continue
+        treasury_yield = _interpolate_treasury_yield(years, treasury_rates)
+        bond['ytm'] = ytm
+        bond['treasuryYield'] = treasury_yield
+        bond['spreadBps'] = round((ytm - treasury_yield) * 100) if treasury_yield is not None else None
+
+    result = {
+        'query':          q,
+        'bonds':          bonds[:40],
+        'source':         source,
+        'resolvedTicker': ticker_for_prospectus,
+        'treasuryCurve':  [{'years': r['years'], 'label': r['label'], 'yield': r['yield']} for r in treasury_rates],
+    }
     cache_set(cache_key, result)
     return result
 
