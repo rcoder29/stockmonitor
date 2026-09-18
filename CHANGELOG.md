@@ -4,6 +4,23 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: CPPI Allocator & Net Exposure
+
+Continued the router extraction (see the three prior entries below) with CPPI Allocator and Net Market Exposure — the pair surfaced a genuine architectural wrinkle the earlier extractions didn't: Net Exposure depends on 5 core helpers (`_compute_portfolio_risk`, `_fetch_day_quote`, `_fetch_fundamentals`, `_live_option_price`, `_sanitize_nan`) that live in `main.py` and are used by many unrelated features elsewhere, too widely-shared to move in this pass.
+
+### New
+- `backend/routers/cppi.py` — full CPPI Allocator (config, live state, rebalance, backtest), moved verbatim.
+- `backend/routers/net_exposure.py` — Net Market Exposure, moved verbatim. Imports `_cppi_price`/`_cppi_state` from `routers.cppi` and `get_arb_positions`/`get_spac_positions` from `routers.merger_arb`/`routers.spacs` at module level (no circularity, same pattern as before). The 5 main.py-only helpers are imported with a **function-scoped deferred import** instead (`from main import ...` inside the route handler, not at module level) — the standard fix when a genuine two-way dependency exists: main.py needs to import this router to register it, and the router needs things from main.py, so deferring the import to request-time (long after both modules finish loading) breaks the cycle without moving the 5 shared helpers.
+
+### Verified
+- 52/52 backend tests; created a real CPPI strategy, confirmed `/api/cppi` computed correct live state, confirmed Net Exposure's CPPI sleeve picked it up correctly through the full cross-router chain, then deleted it with no residue left; backtest endpoint verified separately; full 105-route sweep — cleanest yet, zero new failures.
+
+### Files changed
+- `backend/routers/cppi.py`, `backend/routers/net_exposure.py` — new
+- `backend/main.py` — CPPI Allocator and Net Market Exposure sections removed; 2 dead imports (`CppiStrategy`, `CppiRebalanceLog`) cleaned up
+
+---
+
 ## 2026-09-18 — Backend Modularization: Fund Holdings Explorer
 
 Continued the router extraction (see the two 2026-09-17 entries below) with Fund Holdings Explorer — cleaner than Merger Arb/SPACs since a thorough cross-reference check found zero external dependencies either direction before moving anything.
