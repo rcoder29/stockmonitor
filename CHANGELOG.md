@@ -4,6 +4,24 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: Seasonal Patterns, ETF Overlap, Relative Strength
+
+Continued the router extraction (see the five prior entries below) with three adjacent Research-group scanners — all clean, zero external cross-references, and this time not even any dead imports left behind in `main.py` (their shared dependencies like `pd`/`yf`/`_safe_float` are heavily used elsewhere).
+
+### New
+- `backend/routers/seasonal_patterns.py` — `/api/market/seasonal`, moved verbatim.
+- `backend/routers/etf_overlap.py` — `/api/market/etf-overlap`, moved verbatim.
+- `backend/routers/relative_strength.py` — `/api/market/relative-strength`, moved verbatim.
+
+### Verified
+- 52/52 backend tests; live smoke tests with real data on all three (AAPL 5yr seasonality, SPY/QQQ overlap correctly finding NVDA at ~8% weight in both, AAPL/MSFT/NVDA ranked by composite RS vs. SPY); full 105-route sweep — cleanest yet, only the pre-existing invalid Anthropic API key issue remains.
+
+### Files changed
+- `backend/routers/seasonal_patterns.py`, `backend/routers/etf_overlap.py`, `backend/routers/relative_strength.py` — new
+- `backend/main.py` — all three sections removed
+
+---
+
 ## 2026-09-18 — Backend Modularization: Activist Tracker & Reddit Trending
 
 Continued the router extraction (see the four prior entries below) with 13D/13G Activist Tracker and Reddit Trending Stocks — both clean, self-contained single-route scanners with zero external cross-references either direction.
