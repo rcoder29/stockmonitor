@@ -125,6 +125,17 @@ Open [http://localhost:5173](http://localhost:5173).
 
 > **Corporate / VPN users:** If behind a proxy with a self-signed certificate, run `npm config set strict-ssl false` before `npm install`.
 
+### Lint gate (one-time setup)
+
+A pre-commit hook runs `ruff check --select F` (undefined names, unused imports, duplicate definitions) on staged backend files — catches the class of bug where a refactor leaves a name undefined on a code path tests don't happen to exercise. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+pip install ruff   # if not already installed
+```
+
+Bypass for a specific commit with `git commit --no-verify` if you hit a false positive.
+
 ---
 
 ## Key API Endpoints
@@ -204,8 +215,21 @@ Open [http://localhost:5173](http://localhost:5173).
 ```
 stockmonitor/
 ├── backend/
-│   ├── main.py              FastAPI app (~5,500 lines) — all endpoints, helpers, cache, WebSocket
+│   ├── main.py              FastAPI app (~9,600 lines) — most endpoints still live here;
+│   │                        being split into routers/ incrementally (see below)
+│   ├── edgar_utils.py       Shared SEC/EDGAR helpers (_get_cik, _edgar_req, _build_ticker_map,
+│   │                        _parse_nport_xml, _fetch_opp_quote, …) — imported by main.py and
+│   │                        every router below with no circular dependency
+│   ├── routers/             Feature areas extracted out of main.py as FastAPI APIRouters
+│   │   ├── corporate_bonds.py    Research → Corporate Bonds
+│   │   ├── convertible_bonds.py  Research → Convertible Bonds
+│   │   ├── treasury.py           Research → Treasury Bonds
+│   │   ├── merger_arb.py         Merger Arb (deals, positions, alerts, opportunity scan)
+│   │   └── spacs.py              SPACs (deals, positions, alerts, discovery)
+│   ├── ruff.toml            Lint gate config — see "Lint gate" below
 │   ├── requirements.txt
+│   ├── requirements-dev.txt Dev-only deps (ruff, pytest) — not deployed
+│   ├── tests/               pytest suite (52 tests)
 │   └── stockmonitor.db      SQLite database (auto-created on first run)
 ├── frontend/
 │   ├── index.html

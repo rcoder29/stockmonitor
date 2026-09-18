@@ -1,94 +1,101 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import Header from './components/Header'
 import StockTable from './components/StockTable'
 import ChartModal from './components/ChartModal'
-import MarketSummary from './components/MarketSummary'
-import MarketRecommendations from './components/MarketRecommendations'
-import PortfolioTracker from './components/PortfolioTracker'
-import CppiAllocator from './components/CppiAllocator'
-import NetExposure from './components/NetExposure'
 import HomeDashboard from './components/HomeDashboard'
 import CommandPalette from './components/CommandPalette'
-import DayTrader from './components/DayTrader'
-import AiBot from './components/AiBot'
-import FinancialAdvisor from './components/FinancialAdvisor'
-import Screener from './components/Screener'
-import TradeJournal from './components/TradeJournal'
-import MacroCalendar from './components/MacroCalendar'
-import SectorDashboard from './components/SectorDashboard'
-import StockComparison from './components/StockComparison'
-import Backtester from './components/Backtester'
 import { AlertModal, AlertToast } from './components/PriceAlerts'
 import EarningsCalendar from './components/EarningsCalendar'
-import TechnicalSignals from './components/TechnicalSignals'
-import TradeIdeas from './components/TradeIdeas'
-import SmartAlerts from './components/SmartAlerts'
-import PositionSizer from './components/PositionSizer'
-import RichEarningsCalendar from './components/RichEarningsCalendar'
-import NewsSentiment from './components/NewsSentiment'
-import OptionsTracker from './components/OptionsTracker'
-import SectorMomentum from './components/SectorMomentum'
-import MarketBreadth from './components/MarketBreadth'
-import FundamentalComparison from './components/FundamentalComparison'
-import PriceTargets from './components/PriceTargets'
-import DcfCalculator from './components/DcfCalculator'
-import YieldCurve from './components/YieldCurve'
-import UnusualOptions from './components/UnusualOptions'
-import UserGuide from './components/UserGuide'
-import IndexHeatmap from './components/IndexHeatmap'
-import FireCalculator from './components/FireCalculator'
-import MonteCarlo from './components/MonteCarlo'
-import CoastFire from './components/CoastFire'
-import SocialSecurity from './components/SocialSecurity'
-import EarlyRetirementHealth from './components/EarlyRetirementHealth'
-import RothConversionPlanner from './components/RothConversionPlanner'
-import CustomNews from './components/CustomNews'
-import TaxAdvisor from './components/TaxAdvisor'
-import ShortSqueeze from './components/ShortSqueeze'
-import IpoCalendar from './components/IpoCalendar'
-import FedWatch from './components/FedWatch'
-import MorningBriefing from './components/MorningBriefing'
-import WheelTracker from './components/WheelTracker'
-import TaxLotManager from './components/TaxLotManager'
-import MedicareEstimator from './components/MedicareEstimator'
-import EstateRmdProjector from './components/EstateRmdProjector'
-import InsiderFeed from './components/InsiderFeed'
-import CryptoDashboard from './components/CryptoDashboard'
-import PortfolioReview from './components/PortfolioReview'
-import EconomicDashboard from './components/EconomicDashboard'
-import StockAnalyzer from './components/StockAnalyzer'
-import DividendTracker from './components/DividendTracker'
-import WatchlistHeatmap from './components/WatchlistHeatmap'
-import EarningsSurpriseTracker from './components/EarningsSurpriseTracker'
-import PortfolioStressTest from './components/PortfolioStressTest'
-import CorrelationMatrix from './components/CorrelationMatrix'
-import SeasonalPatterns from './components/SeasonalPatterns'
-import EtfOverlapAnalyzer from './components/EtfOverlapAnalyzer'
-import RelativeStrengthRanker from './components/RelativeStrengthRanker'
-import PortfolioAttribution from './components/PortfolioAttribution'
-import EarningsStrategyAnalyzer from './components/EarningsStrategyAnalyzer'
-import MarketSentimentDashboard from './components/MarketSentimentDashboard'
-import AnalystRatingTracker from './components/AnalystRatingTracker'
-import FundHoldingsExplorer from './components/FundHoldingsExplorer'
-import ActivistTracker from './components/ActivistTracker'
-import CorporateBonds from './components/CorporateBonds'
-import ConvertibleBonds from './components/ConvertibleBonds'
-import TreasuryBonds from './components/TreasuryBonds'
-import RedditTrending from './components/RedditTrending'
-import MergerArbOverview from './components/MergerArbOverview'
-import MergerDealDashboard from './components/MergerDealDashboard'
-import MergerOpportunityScanner from './components/MergerOpportunityScanner'
-import MergerDealAnalyzer from './components/MergerDealAnalyzer'
-import MergerArbPortfolio from './components/MergerArbPortfolio'
-import MergerRiskMatrix from './components/MergerRiskMatrix'
-import MergerAlerts from './components/MergerAlerts'
-import SpacOverview from './components/SpacOverview'
-import SpacTracker from './components/SpacTracker'
-import SpacDiscovery from './components/SpacDiscovery'
-import SpacDealAnalyzer from './components/SpacDealAnalyzer'
-import SpacPortfolio from './components/SpacPortfolio'
-import SpacAlerts from './components/SpacAlerts'
-import SpacRiskMatrix from './components/SpacRiskMatrix'
+
+// Lazy-loaded: only one tab renders at a time, so there's no benefit to
+// bundling all ~85 of these into the initial JS payload (this used to be a
+// single 1.55MB chunk). The imports above stay static/eager because they're
+// either always mounted (Header, ChartModal, CommandPalette) or part of the
+// most-visited tabs (Home, Watchlist), where a lazy-load flash would just be
+// annoying for no real payload savings.
+const MarketSummary = lazy(() => import('./components/MarketSummary'))
+const MarketRecommendations = lazy(() => import('./components/MarketRecommendations'))
+const PortfolioTracker = lazy(() => import('./components/PortfolioTracker'))
+const CppiAllocator = lazy(() => import('./components/CppiAllocator'))
+const NetExposure = lazy(() => import('./components/NetExposure'))
+const DayTrader = lazy(() => import('./components/DayTrader'))
+const AiBot = lazy(() => import('./components/AiBot'))
+const FinancialAdvisor = lazy(() => import('./components/FinancialAdvisor'))
+const Screener = lazy(() => import('./components/Screener'))
+const TradeJournal = lazy(() => import('./components/TradeJournal'))
+const MacroCalendar = lazy(() => import('./components/MacroCalendar'))
+const SectorDashboard = lazy(() => import('./components/SectorDashboard'))
+const StockComparison = lazy(() => import('./components/StockComparison'))
+const Backtester = lazy(() => import('./components/Backtester'))
+const TechnicalSignals = lazy(() => import('./components/TechnicalSignals'))
+const TradeIdeas = lazy(() => import('./components/TradeIdeas'))
+const SmartAlerts = lazy(() => import('./components/SmartAlerts'))
+const PositionSizer = lazy(() => import('./components/PositionSizer'))
+const RichEarningsCalendar = lazy(() => import('./components/RichEarningsCalendar'))
+const NewsSentiment = lazy(() => import('./components/NewsSentiment'))
+const OptionsTracker = lazy(() => import('./components/OptionsTracker'))
+const SectorMomentum = lazy(() => import('./components/SectorMomentum'))
+const MarketBreadth = lazy(() => import('./components/MarketBreadth'))
+const FundamentalComparison = lazy(() => import('./components/FundamentalComparison'))
+const PriceTargets = lazy(() => import('./components/PriceTargets'))
+const DcfCalculator = lazy(() => import('./components/DcfCalculator'))
+const YieldCurve = lazy(() => import('./components/YieldCurve'))
+const UnusualOptions = lazy(() => import('./components/UnusualOptions'))
+const UserGuide = lazy(() => import('./components/UserGuide'))
+const IndexHeatmap = lazy(() => import('./components/IndexHeatmap'))
+const FireCalculator = lazy(() => import('./components/FireCalculator'))
+const MonteCarlo = lazy(() => import('./components/MonteCarlo'))
+const CoastFire = lazy(() => import('./components/CoastFire'))
+const SocialSecurity = lazy(() => import('./components/SocialSecurity'))
+const EarlyRetirementHealth = lazy(() => import('./components/EarlyRetirementHealth'))
+const RothConversionPlanner = lazy(() => import('./components/RothConversionPlanner'))
+const CustomNews = lazy(() => import('./components/CustomNews'))
+const TaxAdvisor = lazy(() => import('./components/TaxAdvisor'))
+const ShortSqueeze = lazy(() => import('./components/ShortSqueeze'))
+const IpoCalendar = lazy(() => import('./components/IpoCalendar'))
+const FedWatch = lazy(() => import('./components/FedWatch'))
+const MorningBriefing = lazy(() => import('./components/MorningBriefing'))
+const WheelTracker = lazy(() => import('./components/WheelTracker'))
+const TaxLotManager = lazy(() => import('./components/TaxLotManager'))
+const MedicareEstimator = lazy(() => import('./components/MedicareEstimator'))
+const EstateRmdProjector = lazy(() => import('./components/EstateRmdProjector'))
+const InsiderFeed = lazy(() => import('./components/InsiderFeed'))
+const CryptoDashboard = lazy(() => import('./components/CryptoDashboard'))
+const PortfolioReview = lazy(() => import('./components/PortfolioReview'))
+const EconomicDashboard = lazy(() => import('./components/EconomicDashboard'))
+const StockAnalyzer = lazy(() => import('./components/StockAnalyzer'))
+const DividendTracker = lazy(() => import('./components/DividendTracker'))
+const WatchlistHeatmap = lazy(() => import('./components/WatchlistHeatmap'))
+const EarningsSurpriseTracker = lazy(() => import('./components/EarningsSurpriseTracker'))
+const PortfolioStressTest = lazy(() => import('./components/PortfolioStressTest'))
+const CorrelationMatrix = lazy(() => import('./components/CorrelationMatrix'))
+const SeasonalPatterns = lazy(() => import('./components/SeasonalPatterns'))
+const EtfOverlapAnalyzer = lazy(() => import('./components/EtfOverlapAnalyzer'))
+const RelativeStrengthRanker = lazy(() => import('./components/RelativeStrengthRanker'))
+const PortfolioAttribution = lazy(() => import('./components/PortfolioAttribution'))
+const EarningsStrategyAnalyzer = lazy(() => import('./components/EarningsStrategyAnalyzer'))
+const MarketSentimentDashboard = lazy(() => import('./components/MarketSentimentDashboard'))
+const AnalystRatingTracker = lazy(() => import('./components/AnalystRatingTracker'))
+const FundHoldingsExplorer = lazy(() => import('./components/FundHoldingsExplorer'))
+const ActivistTracker = lazy(() => import('./components/ActivistTracker'))
+const CorporateBonds = lazy(() => import('./components/CorporateBonds'))
+const ConvertibleBonds = lazy(() => import('./components/ConvertibleBonds'))
+const TreasuryBonds = lazy(() => import('./components/TreasuryBonds'))
+const RedditTrending = lazy(() => import('./components/RedditTrending'))
+const MergerArbOverview = lazy(() => import('./components/MergerArbOverview'))
+const MergerDealDashboard = lazy(() => import('./components/MergerDealDashboard'))
+const MergerOpportunityScanner = lazy(() => import('./components/MergerOpportunityScanner'))
+const MergerDealAnalyzer = lazy(() => import('./components/MergerDealAnalyzer'))
+const MergerArbPortfolio = lazy(() => import('./components/MergerArbPortfolio'))
+const MergerRiskMatrix = lazy(() => import('./components/MergerRiskMatrix'))
+const MergerAlerts = lazy(() => import('./components/MergerAlerts'))
+const SpacOverview = lazy(() => import('./components/SpacOverview'))
+const SpacTracker = lazy(() => import('./components/SpacTracker'))
+const SpacDiscovery = lazy(() => import('./components/SpacDiscovery'))
+const SpacDealAnalyzer = lazy(() => import('./components/SpacDealAnalyzer'))
+const SpacPortfolio = lazy(() => import('./components/SpacPortfolio'))
+const SpacAlerts = lazy(() => import('./components/SpacAlerts'))
+const SpacRiskMatrix = lazy(() => import('./components/SpacRiskMatrix'))
 
 const DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA']
 
@@ -898,6 +905,9 @@ export default function App() {
         )}
 
         <main className="app-main flex-1 overflow-y-auto">
+         <Suspense fallback={
+           <div className="p-12 text-center text-gray-500 text-sm animate-pulse">Loading…</div>
+         }>
           {activeTab === 'watchlist' && (
             <div className="p-4">
               <WatchlistBar
@@ -1015,6 +1025,7 @@ export default function App() {
           {activeTab === 'spacportfolio'      && <SpacPortfolio />}
           {activeTab === 'spacalerts'         && <SpacAlerts />}
           {activeTab === 'spacrisk'           && <SpacRiskMatrix />}
+         </Suspense>
         </main>
       </div>
 

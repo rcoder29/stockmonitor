@@ -200,6 +200,90 @@ html.light .focus\:ring-emerald-500:focus { --tw-ring-color: #10b981; }
 html.light .animate-pulse.bg-gray-700  { background-color: #e2e8f0; }
 html.light .animate-pulse.bg-gray-600  { background-color: #cbd5e1; }
 
+/* ── Light Theme: slate-* parity ───────────────────────────────────────────
+   Newer components (Corporate/Convertible/Treasury Bonds and 55+ others)
+   use Tailwind's slate-* palette instead of gray-*, which the block above
+   never covered — toggling to light theme silently did nothing on those
+   pages. Same shade-number → target-color mapping as the gray-* rules above,
+   so both families render identically in light mode.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ── Backgrounds ── */
+html.light .bg-slate-950      { background-color: #f1f5f9; }
+html.light .bg-slate-900      { background-color: #ffffff; }
+html.light .bg-slate-800      { background-color: #f1f5f9; }
+html.light .bg-slate-700      { background-color: #e2e8f0; }
+html.light .bg-slate-600      { background-color: #cbd5e1; }
+html.light .bg-slate-500      { background-color: #94a3b8; }
+
+/* Opacity variants — bg-slate-900/N */
+html.light .bg-slate-900\/10  { background-color: rgba(248,250,252,0.4) !important; }
+html.light .bg-slate-900\/15  { background-color: rgba(248,250,252,0.45) !important; }
+html.light .bg-slate-900\/20  { background-color: rgba(241,245,249,0.5) !important; }
+html.light .bg-slate-900\/40  { background-color: rgba(241,245,249,0.7) !important; }
+html.light .bg-slate-900\/60  { background-color: rgba(241,245,249,0.8) !important; }
+
+/* Opacity variants — bg-slate-800/N */
+html.light .bg-slate-800\/20  { background-color: rgba(241,245,249,0.4) !important; }
+html.light .bg-slate-800\/30  { background-color: rgba(241,245,249,0.5) !important; }
+html.light .bg-slate-800\/40  { background-color: rgba(241,245,249,0.6) !important; }
+html.light .bg-slate-800\/50  { background-color: rgba(241,245,249,0.7) !important; }
+html.light .bg-slate-800\/60  { background-color: rgba(226,232,240,0.75) !important; }
+html.light .bg-slate-800\/80  { background-color: rgba(226,232,240,0.85) !important; }
+
+/* Opacity variants — bg-slate-700/N and bg-slate-600/N */
+html.light .bg-slate-700\/30  { background-color: rgba(226,232,240,0.5) !important; }
+html.light .bg-slate-700\/50  { background-color: rgba(226,232,240,0.65) !important; }
+html.light .bg-slate-700\/60  { background-color: rgba(226,232,240,0.7) !important; }
+html.light .bg-slate-600\/40  { background-color: rgba(203,213,225,0.5) !important; }
+
+/* ── Text ── */
+html.light .text-slate-200    { color: #334155; }
+html.light .text-slate-300    { color: #475569; }
+html.light .text-slate-400    { color: #64748b; }
+html.light .text-slate-500    { color: #94a3b8; }
+html.light .text-slate-600    { color: #94a3b8; }
+html.light .text-slate-700    { color: #cbd5e1; }
+html.light .text-slate-800    { color: #e2e8f0; }
+html.light .text-slate-900    { color: #f1f5f9; }
+
+/* ── Borders ── */
+html.light .border-slate-800        { border-color: #e2e8f0; }
+html.light .border-slate-700        { border-color: #cbd5e1; }
+html.light .border-slate-600        { border-color: #94a3b8; }
+html.light .border-slate-500        { border-color: #64748b; }
+html.light .border-slate-400        { border-color: #475569; }
+
+/* Border opacity variants */
+html.light .border-slate-800\/60    { border-color: rgba(226,232,240,0.8) !important; }
+html.light .border-slate-700\/40    { border-color: rgba(203,213,225,0.6) !important; }
+html.light .border-slate-700\/50    { border-color: rgba(203,213,225,0.7) !important; }
+html.light .border-slate-700\/60    { border-color: rgba(203,213,225,0.8) !important; }
+html.light .border-slate-500\/40    { border-color: rgba(148,163,184,0.5) !important; }
+
+/* ── Hover states ── */
+html.light .hover\:bg-slate-600:hover      { background-color: #cbd5e1; }
+html.light .hover\:bg-slate-700:hover      { background-color: #e2e8f0; }
+html.light .hover\:bg-slate-800\/30:hover  { background-color: rgba(241,245,249,0.5); }
+html.light .hover\:bg-slate-800\/50:hover  { background-color: rgba(241,245,249,0.7); }
+html.light .hover\:bg-slate-700\/20:hover  { background-color: rgba(226,232,240,0.4); }
+html.light .hover\:bg-slate-700\/30:hover  { background-color: rgba(226,232,240,0.5); }
+html.light .hover\:text-slate-300:hover    { color: #475569; }
+html.light .hover\:text-slate-400:hover    { color: #64748b; }
+html.light .hover\:border-slate-500:hover  { border-color: #64748b; }
+
+/* ── Inputs / placeholders ── */
+html.light .placeholder-slate-500::placeholder { color: #94a3b8 !important; }
+html.light .placeholder-slate-400::placeholder { color: #94a3b8 !important; }
+
+/* ── Divide (table rows) ── */
+html.light .divide-slate-700\/50 > * + * { border-color: rgba(203,213,225,0.7); }
+
+/* Known gap: hover:bg-slate-750 (ActivistTracker.jsx, AnalystRatingTracker.jsx,
+   and others) isn't a real Tailwind shade and isn't defined in
+   tailwind.config.js, so it generates no CSS in either theme — a pre-existing
+   dark-theme bug, not something toggling themes can fix. */
+
 /* ── Export to PDF (window.print) ──────────────────────────────────────────
    Prints the current page as-is (same theme/colors the user sees on screen)
    rather than converting to a light print theme — this app is dark by

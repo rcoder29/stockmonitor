@@ -4,6 +4,67 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Lint Gate
+
+New pre-commit hook that catches a specific bug class a modular codebase invites: a refactor that moves code between files can leave a name undefined at a call site that only executes on a request path tests don't happen to exercise — `python -c "import main"` and even a passing test suite can look clean while that path is still broken. Found and fixed 6 real instances of exactly this during the backend modularization work below before adding the gate.
+
+### New
+- `.githooks/pre-commit` runs `ruff check --select F` (undefined names, unused imports, duplicate definitions) on staged `backend/*.py` files, blocking the commit on failure. Enable once per clone: `git config core.hooksPath .githooks`.
+- `backend/ruff.toml` scopes the rule set to `F` only — this codebase wasn't written to a style guide, so a broader rule set would flood with unrelated findings unrelated to what's actually being committed.
+- `backend/requirements-dev.txt` (ruff, pytest) kept separate from `requirements.txt` so nothing extra ships to the Render deploy.
+
+### Fixed
+- Two dead local variables (`total_reported` in Fund Holdings Explorer, a `ff_dollars`/`ff_acct_pct` chain in Position Sizer) and a Python-level naming collision (`get_correlation` was reused by two unrelated routes — `/api/portfolio/correlation` and `/api/market/correlation` — renamed the latter to `get_market_correlation`, no route/URL change).
+
+### Files changed
+- `.githooks/pre-commit` (new), `backend/ruff.toml` (new), `backend/requirements-dev.txt` (new)
+- `backend/main.py` — 3 pre-existing lint findings fixed
+- `README.md` — new "Lint gate" setup section
+
+---
+
+## 2026-09-17 — Backend Modularization: Merger Arb & SPACs
+
+Continued the backend split (see 2026-09-17 entry below) into Merger Arb and SPACs — the largest remaining chunk, and the one that surfaced how interconnected this file actually was: a static grep for known shared function names missed several real cross-references that only `pyflakes`/actually exercising every route caught (see Lint Gate above).
+
+### New
+- `backend/routers/merger_arb.py`, `backend/routers/spacs.py` — full CRUD (deals, positions, alerts, scan) for both features, moved verbatim from `main.py`.
+- `edgar_utils.py` gained `_finite_or_none` and `_TICKER_RE`/`_fetch_opp_quote` — turned out to be shared not just within Merger Arb but with IPO & Lockup Calendar, Activist Tracker, and Reddit Trending Stocks in `main.py`, none of which were touched otherwise.
+- `main.py`'s Net Market Exposure calls `get_arb_positions()`/`get_spac_positions()` directly as Python functions (not over HTTP) to report Merger Arb/SPAC capital as separate event-driven sleeves — now imported explicitly from the two new routers.
+
+### Verified
+- All 52 backend tests pass; full CRUD round-trip tested on both features' deals and alerts (create → update → verify → delete) with no residue left in the database; a systematic sweep of all 105 GET routes app-wide confirmed no regressions in unrelated features.
+
+### Files changed
+- `backend/main.py` — Merger Arb (807 lines) and SPACs (691 lines) sections removed; imports added for `get_arb_positions`/`get_spac_positions`/`_TICKER_RE`/`_fetch_opp_quote`/`_finite_or_none`
+- `backend/edgar_utils.py` — `_finite_or_none`, `_TICKER_RE`, `_fetch_opp_quote` added
+- `backend/routers/merger_arb.py`, `backend/routers/spacs.py` — new
+
+---
+
+## 2026-09-17 — Technical Refactor: Modularization, Code-Splitting, Light Theme
+
+Three maintainability passes requested before building more features: `main.py` had grown to 12,269 lines in one file, the frontend shipped one 1.55MB JS bundle regardless of which tab was open, and the app's light/dark theme toggle silently did nothing on 55+ components that use Tailwind's `slate-*` palette instead of `gray-*`.
+
+### New
+- **Backend modularization (Phase 1)**: `backend/edgar_utils.py` — shared SEC/EDGAR helpers (`_get_cik`, `_edgar_req`, `_build_ticker_map`, `_parse_nport_xml`, etc.) extracted so both `main.py` and a new `backend/routers/` package can import them without a circular dependency. First routers extracted: `corporate_bonds.py`, `convertible_bonds.py`, `treasury.py` (~930 lines).
+- **Frontend code-splitting**: 83 of 90 tab components in `App.jsx` converted to `React.lazy()` behind one `<Suspense>` boundary. Main bundle: 1.55MB → 447KB, split into ~85 per-tab chunks. Header/StockTable/ChartModal/HomeDashboard/CommandPalette/EarningsCalendar stay eager (always-mounted or highest-traffic tabs).
+- **Light theme `slate-*` parity**: ~50 new CSS rules in `index.css` mirroring the existing `gray-*` light-theme mapping, so Corporate/Convertible/Treasury Bonds and 55+ other slate-based components now respect the theme toggle.
+
+### Verified
+- 52 backend tests + 90 frontend tests pass throughout; all 6 bond/treasury endpoints re-verified byte-identical to pre-refactor responses; 4 independent untouched features (Fund Holdings Explorer, SEC Filings, IPO Calendar, and others) spot-checked to confirm the shared-helper extraction didn't break anything outside its own scope.
+
+### Known gap
+- `hover:bg-slate-750` (used in `ActivistTracker.jsx`, `AnalystRatingTracker.jsx`, others) isn't a real Tailwind shade and generates no CSS in either theme — a pre-existing dark-theme bug, noted but not fixed here (out of scope for the light-theme parity work).
+
+### Files changed
+- `backend/edgar_utils.py`, `backend/routers/{corporate_bonds,convertible_bonds,treasury}.py` — new
+- `backend/main.py` — Corporate/Convertible/Treasury Bonds sections removed, replaced with `app.include_router(...)`
+- `frontend/src/App.jsx` — lazy imports, `<Suspense>` boundary
+- `frontend/src/index.css` — `slate-*` light-theme rules
+
+---
+
 ## 2026-09-17 — Export to PDF
 
 New global "Export PDF" button (header, every page) that saves the currently active page's contents to a PDF via the browser's native print pipeline — no new dependencies, and it preserves the app's exact dark theme/colors in the exported file rather than converting to a light print theme.

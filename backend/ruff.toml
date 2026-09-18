@@ -1,0 +1,9 @@
+# Matches the pre-commit lint gate (.githooks/pre-commit): pyflakes-only
+# checks (undefined names, unused imports, duplicate definitions). Deliberately
+# not enabling style/formatting rules (E/W/I, etc.) — this codebase wasn't
+# written to a style guide, and a broad rule set would surface hundreds of
+# pre-existing findings unrelated to what someone is actually committing.
+line-length = 200
+
+[lint]
+select = ["F"]

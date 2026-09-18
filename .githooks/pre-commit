@@ -1,0 +1,43 @@
+#!/bin/sh
+# Lint gate: catches undefined names, unused imports, and duplicate function
+# definitions in staged backend Python files before they're committed.
+#
+# This exists because a refactor that moves code between files can silently
+# leave a name undefined at a call site that only executes on a specific
+# request path — `python -c "import main"` and even pytest can pass clean
+# while that path is still broken. ruff's pyflakes rules (F-series) catch
+# this class of bug by checking every name reference, not just import-time
+# ones.
+#
+# Setup (once per clone): git config core.hooksPath .githooks
+
+STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM -- 'backend/*.py')
+
+if [ -z "$STAGED_PY" ]; then
+  exit 0
+fi
+
+if ! command -v ruff >/dev/null 2>&1 && ! python3 -m ruff --version >/dev/null 2>&1; then
+  echo "⚠️  ruff not installed — skipping lint gate. Install with: pip3 install ruff"
+  exit 0
+fi
+
+RUFF_CMD="ruff"
+if ! command -v ruff >/dev/null 2>&1; then
+  RUFF_CMD="python3 -m ruff"
+fi
+
+echo "Running lint gate (ruff --select F) on staged backend files..."
+$RUFF_CMD check --select F $STAGED_PY
+STATUS=$?
+
+if [ $STATUS -ne 0 ]; then
+  echo ""
+  echo "❌ Lint gate failed — undefined names, unused imports, or duplicate"
+  echo "   definitions found in staged files (see above). Fix and re-stage,"
+  echo "   or bypass with 'git commit --no-verify' if you're certain it's a"
+  echo "   false positive."
+  exit 1
+fi
+
+exit 0
