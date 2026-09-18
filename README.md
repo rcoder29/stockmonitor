@@ -215,7 +215,7 @@ Bypass for a specific commit with `git commit --no-verify` if you hit a false po
 ```
 stockmonitor/
 ├── backend/
-│   ├── main.py              FastAPI app (~8,900 lines) — most endpoints still live here;
+│   ├── main.py              FastAPI app (~8,700 lines) — most endpoints still live here;
 │   │                        being split into routers/ incrementally (see below)
 │   ├── edgar_utils.py       Shared SEC/EDGAR helpers (_get_cik, _edgar_req, _build_ticker_map,
 │   │                        _parse_nport_xml, _fetch_opp_quote, …) — imported by main.py and
@@ -228,11 +228,13 @@ stockmonitor/
 │   │   ├── spacs.py              SPACs (deals, positions, alerts, discovery)
 │   │   ├── fund_holdings.py      Research → Fund Holdings (EDGAR N-PORT explorer)
 │   │   ├── cppi.py               Portfolio → CPPI Allocator
-│   │   └── net_exposure.py       Portfolio → Net Exposure — imports from cppi.py/merger_arb.py/
-│   │                              spacs.py at module level, but reaches back into main.py's
-│   │                              _compute_portfolio_risk/_fetch_fundamentals/etc. with a
-│   │                              function-scoped deferred import (main.py imports this router
-│   │                              to register it, so a module-level import back would cycle)
+│   │   ├── net_exposure.py       Portfolio → Net Exposure — imports from cppi.py/merger_arb.py/
+│   │   │                          spacs.py at module level, but reaches back into main.py's
+│   │   │                          _compute_portfolio_risk/_fetch_fundamentals/etc. with a
+│   │   │                          function-scoped deferred import (main.py imports this router
+│   │   │                          to register it, so a module-level import back would cycle)
+│   │   ├── activist_tracker.py   Research → Activist Tracker (13D/13G filings)
+│   │   └── reddit_trending.py    Markets → Reddit Trending
 │   ├── ruff.toml            Lint gate config — see "Lint gate" below
 │   ├── requirements.txt
 │   ├── requirements-dev.txt Dev-only deps (ruff, pytest) — not deployed

@@ -4,6 +4,23 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: Activist Tracker & Reddit Trending
+
+Continued the router extraction (see the four prior entries below) with 13D/13G Activist Tracker and Reddit Trending Stocks — both clean, self-contained single-route scanners with zero external cross-references either direction.
+
+### New
+- `backend/routers/activist_tracker.py` — `/api/activist/tracker`, moved verbatim.
+- `backend/routers/reddit_trending.py` — `/api/reddit/trending`, moved verbatim.
+
+### Verified
+- 52/52 backend tests; live smoke tests with real data (120 current 13D/13G filings with correct ticker extraction, live r/wallstreetbets mention data), both with price enrichment working; full 105-route sweep with no new regressions (one 400 on `/api/portfolio/risk` turned out to be a legitimate, unrelated "not enough overlapping price history" error for the current portfolio holdings).
+
+### Files changed
+- `backend/routers/activist_tracker.py`, `backend/routers/reddit_trending.py` — new
+- `backend/main.py` — both sections removed; 3 now-dead imports cleaned up (`urllib.parse`, `html`, `_fetch_opp_quote`)
+
+---
+
 ## 2026-09-18 — Backend Modularization: CPPI Allocator & Net Exposure
 
 Continued the router extraction (see the three prior entries below) with CPPI Allocator and Net Market Exposure — the pair surfaced a genuine architectural wrinkle the earlier extractions didn't: Net Exposure depends on 5 core helpers (`_compute_portfolio_risk`, `_fetch_day_quote`, `_fetch_fundamentals`, `_live_option_price`, `_sanitize_nan`) that live in `main.py` and are used by many unrelated features elsewhere, too widely-shared to move in this pass.
