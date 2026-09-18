@@ -305,7 +305,10 @@ stockmonitor/
 │           ├── FinancialAdvisor.jsx    AI financial planning
 │           ├── PriceAlerts.jsx         Alert modal + toast notifications
 │           ├── EarningsCalendar.jsx    Inline earnings countdown
-│           └── UserGuide.jsx           In-app documentation
+│           ├── UserGuide.jsx           In-app documentation
+│           └── InvestorEducation.jsx   Investor education — layered concept graph
+│                                        (data/investorEducationTopics.js), links out
+│                                        to the live tabs that match each concept
 ├── CHANGELOG.md             Full feature history
 └── README.md
 ```

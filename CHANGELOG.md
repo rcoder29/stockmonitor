@@ -4,6 +4,26 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Investor Education module
+
+A new "Learn" area (pinned in the sidebar, next to User Guide) teaching financial-market concepts as a navigable graph rather than a flat article list — four layers (Macro & Geography, Market Structure, Asset Classes, Risk & Valuation), each a parent/child drill-down tree you can traverse top-down (broad concept → specifics) or bottom-up (via breadcrumbs back to broader context), plus lateral "Related Concepts" links that cross layers (e.g. Credit Spread → Corporate Bonds, Currencies → Currencies as an Asset Class). Where a live tool already exists for a concept, the topic links straight to it — e.g. Treasury bonds/risk-free rate link to the Yield Curve tab, IPOs link to the IPO & Lockup Calendar, SPACs link to the SPACs module, credit spread links to Corporate Bonds' credit-spread-vs-Treasury feature.
+
+Content is hand-authored static data (not AI-generated) to keep it fast, free, and accurate — 28 topics tracing global economy → regions → countries → currencies; public/private markets → issuer concept → private placement/VC → IPO/SPAC → secondary markets → M&A; the 7 major asset classes framed by liquid vs. illiquid; and risk-free rate → credit spread → duration → volatility/beta → liquidity risk.
+
+### New
+- `frontend/src/data/investorEducationTopics.js` — the topic graph (`LAYERS` + `TOPICS`), pure data.
+- `frontend/src/components/InvestorEducation.jsx` — layer picker, nested outline sidebar (desktop) / dropdowns (mobile), breadcrumb trail, "Go Deeper" children, "Related Concepts" cross-links, and deep-links into existing tabs via the same `navigate()` used by the Home dashboard.
+
+### Verified
+- `npx vite build` — new component code-splits into its own lazy chunk, no errors.
+- `npx vitest run` — 90/90 existing frontend tests still pass.
+
+### Files changed
+- `frontend/src/data/investorEducationTopics.js`, `frontend/src/components/InvestorEducation.jsx` — new
+- `frontend/src/App.jsx` — lazy import, `learn` nav entry, pinned sidebar button next to User Guide, render branch
+
+---
+
 ## 2026-09-18 — Backend Modularization: Custom Screener, Multi-timeframe Technical Signals, Options Strategy Builder, Claude Trade Idea Generator, Portfolio Risk Dashboard
 
 Continued the router extraction (see prior entries below) with five more sections, and fixed a real regression found by auditing all cross-router deferred imports before starting: the previous batch moved `_fetch_day_quote` out of `main.py` into `routers/portfolio.py`, but `routers/net_exposure.py`'s deferred import (`from main import _fetch_day_quote, ...`) still pointed at `main` — silently broken until that endpoint was actually hit. Fixed by pointing it at `routers.portfolio` instead. This is now a mandatory check on every future batch: after moving anything out of `main.py`, grep every router for `from main import` and confirm each name still resolves there.

@@ -42,6 +42,7 @@ const DcfCalculator = lazy(() => import('./components/DcfCalculator'))
 const YieldCurve = lazy(() => import('./components/YieldCurve'))
 const UnusualOptions = lazy(() => import('./components/UnusualOptions'))
 const UserGuide = lazy(() => import('./components/UserGuide'))
+const InvestorEducation = lazy(() => import('./components/InvestorEducation'))
 const IndexHeatmap = lazy(() => import('./components/IndexHeatmap'))
 const FireCalculator = lazy(() => import('./components/FireCalculator'))
 const MonteCarlo = lazy(() => import('./components/MonteCarlo'))
@@ -337,6 +338,7 @@ const FLAT_NAV_ITEMS = [
   { id: 'home', label: 'Home', group: 'Home' },
   ...NAV_GROUPS.flatMap(g => g.items.map(i => ({ id: i.id, label: i.label, group: g.label }))),
   { id: 'guide', label: 'User Guide', group: 'Help' },
+  { id: 'learn', label: 'Investor Education', group: 'Help' },
 ]
 const NAV_INDEX = Object.fromEntries(FLAT_NAV_ITEMS.map(i => [i.id, i]))
 
@@ -500,8 +502,8 @@ function Sidebar({ activeTab, onSelect, className }) {
           })}
         </div>
 
-        {/* Pinned User Guide button */}
-        <div className="border-t border-slate-700/60 p-2">
+        {/* Pinned User Guide / Investor Education buttons */}
+        <div className="border-t border-slate-700/60 p-2 space-y-1">
           <button
             onClick={() => onSelect('guide')}
             className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
@@ -514,6 +516,20 @@ function Sidebar({ activeTab, onSelect, className }) {
               <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 11a1 1 0 110-2 1 1 0 010 2zm1-3.5c0 .28-.22.5-.5.5h-1a.5.5 0 01-.5-.5v-.25C7 7.01 8.5 6.5 8.5 5.5c0-.55-.45-1-1-1s-1 .45-1 1H5c0-1.65 1.35-3 3-3s3 1.35 3 3c0 1.5-1.5 2-1.5 3.5H9z"/>
             </svg>
             User Guide
+          </button>
+          <button
+            onClick={() => onSelect('learn')}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+              activeTab === 'learn'
+                ? 'text-white bg-emerald-900/30 border border-emerald-700/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+              <path d="M8 2.5C6.5 1.5 4 1 2 1.5v10c2-.5 4.5 0 6 1 1.5-1 4-1.5 6-1v-10c-2-.5-4.5 0-6 1z" fillOpacity="0" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+              <path d="M8 2.5v10.5" stroke="currentColor" strokeWidth="1.3"/>
+            </svg>
+            Investor Education
           </button>
         </div>
       </div>
@@ -970,6 +986,7 @@ export default function App() {
           {activeTab === 'dcf'             && <DcfCalculator />}
           {activeTab === 'uoa'             && <UnusualOptions symbols={watchlist} />}
           {activeTab === 'guide'           && <UserGuide />}
+          {activeTab === 'learn'           && <InvestorEducation onNavigate={navigate} />}
           {activeTab === 'fire'           && <FireCalculator />}
           {activeTab === 'montecarlo'     && <MonteCarlo />}
           {activeTab === 'coastfire'      && <CoastFire />}
