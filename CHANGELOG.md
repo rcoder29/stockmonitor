@@ -13,9 +13,10 @@ New standalone Research page for U.S. Treasury yields — current rates across t
 - **Current Rates table**: all 14 tracked maturities (1 Mo through 30 Yr, including 1.5 Month and 4 Month once those bills existed) with today's yield and 1-day change. Click a row to chart that maturity below.
 - **Historical Trend chart**: per-maturity yield history (1M/6M/1Y/5Y/10Y/Max ranges) as a time-series line chart.
 - **Yield Curve chart**: yield vs. maturity, overlaying Today against ~1 Month Ago and ~1 Year Ago on one chart — the standard "how has the curve's shape changed" view (e.g. watching an inversion resolve), with a hover crosshair showing all three curves' values at any maturity.
+- **2s10s spread badge** next to the Yield Curve heading — 10Y minus 2Y par yield, green "Normal" or red "Inverted" depending on sign — the classic recession-watch indicator, computed fresh on every `/api/treasury/current` call.
 
 ### Backend
-- `GET /api/treasury/current` — latest yield + 1-day change for every tracked maturity.
+- `GET /api/treasury/current` — latest yield + 1-day change for every tracked maturity, plus the 2s10s spread.
 - `GET /api/treasury/history?maturity=&rng=` — historical yield series for one maturity.
 - `GET /api/treasury/yield-curve` — today's curve plus 1-month-ago and 1-year-ago comparison curves.
 - `_fetch_treasury_year_csv` — fetches and parses one calendar year of Treasury.gov's par yield curve CSV (cached per year; past years cached long, current year short since today's row updates).

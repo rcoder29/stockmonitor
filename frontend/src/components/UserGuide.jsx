@@ -749,6 +749,7 @@ const GUIDE = [
         'The Current Rates table shows all 14 tracked maturities (1 Month through 30 Year) with today\'s yield and the 1-day change. Click a row to load that maturity into the Historical Trend chart below.',
         'The Yield Curve chart plots yield against maturity, overlaying Today against ~1 Month Ago and ~1 Year Ago on one chart — hover anywhere to see all three curves\' values at that maturity in a tooltip.',
         'The Historical Trend chart shows one maturity\'s yield over time — pick the maturity via the Current Rates table or the pills above the chart, and the time range (1M/6M/1Y/5Y/10Y/Max) via the range buttons.',
+        'A 2s10s badge (10Y − 2Y spread) sits next to the Yield Curve heading — green "Normal" when positive, red "Inverted" when the 2-Year yields more than the 10-Year, the classic recession-watch signal.',
       ]},
       { type: 'tip', text: 'Data comes straight from the U.S. Treasury\'s own "Daily Treasury Par Yield Curve Rates" — the same source FRED\'s DGS* series are derived from — fetched directly with no API key required, unlike the Economic Dashboard\'s FRED-based series.' },
       { type: 'h3', text: 'Activist Tracker' },
@@ -1372,6 +1373,7 @@ const GUIDE = [
         'Sourced from the U.S. Treasury\'s own official daily par yield curve CSV (home.treasury.gov) rather than FRED — genuinely free with no API key, and this app\'s FRED_API_KEY isn\'t configured anyway.',
         'Yield Curve chart overlays Today, ~1 Month Ago, and ~1 Year Ago with a hover crosshair — a custom SVG chart since the x-axis is ordinal maturity, not calendar time, which the app\'s lightweight-charts library doesn\'t support.',
         'Historical Trend chart uses lightweight-charts (matching the main Chart Modal) since that view genuinely is a time series.',
+        'Added a 2s10s spread badge (10Y − 2Y) next to the Yield Curve chart, green/"Normal" or red/"Inverted" depending on sign — the classic recession-watch indicator.',
       ]},
       { type: 'h3', text: '2026-09-17 — Convertible Bonds' },
       { type: 'bullets', items: [
@@ -1388,6 +1390,31 @@ const GUIDE = [
         'Bond search scans the latest N-PORT filings from 7 major bond ETFs (LQD, VCIT, VCSH, USIG; HYG, JNK, USHY) for holdings matching the issuer, resolving each ETF ticker to its specific SEC fund series via the `company_tickers_mf.json` reference file.',
         'When no tracked fund holds an issuer\'s bonds, falls back to the issuer\'s own 424B2/424B3/424B5/FWP prospectus filings, regex-extracting "X.XX% Notes due YYYY" terms from the cover page.',
         'Ratings history comes from full-text-searching the issuer\'s own 8-K/10-K/10-Q filings for rating-action language, since the free NRSRO Rule 17g-7 disclosures only cover a rolling 12-24 month window.',
+      ]},
+      { type: 'h3', text: '2026-09-12 — Volume Profile Overlay' },
+      { type: 'bullets', items: [
+        'New VOL toggle in the Chart tab\'s indicator toolbar (alongside SMA/BB/RSI/MACD).',
+        'Adds a thin amber line tracking the 20-period rolling average volume, drawn on the volume histogram\'s scale.',
+        'Volume bars where volume > 2× the 20-period average render at full opacity (green/red) instead of the normal faded shade, so surges backed by real volume are obvious at a glance.',
+      ]},
+      { type: 'h3', text: '2026-08-17 — Net Market Exposure' },
+      { type: 'bullets', items: [
+        'New Net Exposure page under Portfolio → Net Exposure, rolling Stocks, Options, and CPPI into one beta-adjusted "how much market risk am I carrying right now" number.',
+        'Options delta is computed via Black-Scholes from strike/expiry/IV (yfinance doesn\'t reliably supply live Greeks) and beta-weighted by the underlying; CPPI uses the active strategy\'s live risky-sleeve value.',
+        'Merger Arb and SPAC capital shown as separate "event-driven" sleeves, deliberately excluded from the beta sum — their risk is deal completion/trust redemption, not market direction.',
+        'Bug fix: the underlying Portfolio Risk beta/VaR calc was crashing outright for portfolios containing a symbol with no usable 1-year price history (delisted tickers, non-equity symbols); fixed for both Portfolio Risk and this new page.',
+      ]},
+      { type: 'h3', text: '2026-08-16 — Home Dashboard & Command Palette' },
+      { type: 'bullets', items: [
+        'New Home dashboard, pinned above the sidebar groups and now the default landing tab — portfolio P&L, a market pulse strip (SPY/QQQ/DIA + VIX), today\'s biggest movers, upcoming earnings, active alerts, and a Recently Visited row.',
+        'New ⌘K / Ctrl+K command palette (or the header Search button) — fuzzy-searches all 90+ tools by name or group, with recently-visited tabs shown on an empty query.',
+        'Every tab navigation is now recorded to localStorage (deduped, capped at 8) to power both the Recently Visited row and the palette\'s empty state.',
+      ]},
+      { type: 'h3', text: '2026-08-14 — CPPI Allocator' },
+      { type: 'bullets', items: [
+        'New CPPI Allocator under Portfolio → CPPI Allocator — Constant Proportion Portfolio Insurance, dynamically rebalancing between a risky and safe asset so the portfolio is designed to never fall below a floor value.',
+        'Live dashboard tracks portfolio value, growing floor, cushion, target vs. actual exposure, and drift, with a one-click "Rebalance Now" once drift exceeds the band.',
+        'Backtest CPPI panel simulates the strategy over 6M-5Y of history vs. buy & hold, reporting alpha, max drawdown, and whether the floor was ever breached by an overnight gap.',
       ]},
       { type: 'h3', text: '2026-08-06 — IPO & Lockup Calendar: now live from EDGAR' },
       { type: 'bullets', items: [
