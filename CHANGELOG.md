@@ -4,6 +4,29 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-17 — Treasury Bonds
+
+New standalone Research page for U.S. Treasury yields — current rates across the full curve, a historical trend chart per maturity, and a multi-curve yield curve view. Unlike corporate/convertible bonds, Treasury yields have a genuinely free, no-API-key, official daily source: the U.S. Treasury's own "Daily Treasury Par Yield Curve Rates" CSV — the same underlying data FRED's DGS* series are derived from, fetched straight from `home.treasury.gov` rather than through a paid/key-gated API (this app's `FRED_API_KEY` isn't configured, so building on the Treasury's own source instead of FRED avoids a dependency that wouldn't work out of the box).
+
+### New
+- **Treasury Bonds** under Research → Treasury Bonds.
+- **Current Rates table**: all 14 tracked maturities (1 Mo through 30 Yr, including 1.5 Month and 4 Month once those bills existed) with today's yield and 1-day change. Click a row to chart that maturity below.
+- **Historical Trend chart**: per-maturity yield history (1M/6M/1Y/5Y/10Y/Max ranges) as a time-series line chart.
+- **Yield Curve chart**: yield vs. maturity, overlaying Today against ~1 Month Ago and ~1 Year Ago on one chart — the standard "how has the curve's shape changed" view (e.g. watching an inversion resolve), with a hover crosshair showing all three curves' values at any maturity.
+
+### Backend
+- `GET /api/treasury/current` — latest yield + 1-day change for every tracked maturity.
+- `GET /api/treasury/history?maturity=&rng=` — historical yield series for one maturity.
+- `GET /api/treasury/yield-curve` — today's curve plus 1-month-ago and 1-year-ago comparison curves.
+- `_fetch_treasury_year_csv` — fetches and parses one calendar year of Treasury.gov's par yield curve CSV (cached per year; past years cached long, current year short since today's row updates).
+
+### Files changed
+- `backend/main.py` — Treasury Bonds section (three endpoints, CSV fetch/parse/cache)
+- `frontend/src/components/TreasuryBonds.jsx` — new component (current-rates table, custom SVG yield curve chart, lightweight-charts history chart)
+- `frontend/src/App.jsx` — import, nav item under Research, route
+
+---
+
 ## 2026-09-17 — Convertible Bonds
 
 New Research page for convertible corporate bond research by issuer, alongside Corporate Bonds. Reuses the Corporate Bonds pattern (fund N-PORT holdings + prospectus fallback), plus a third free source specific to converts: conversion economics (conversion price/ratio, call-trigger thresholds, if-converted value) are a defined part of the US-GAAP XBRL taxonomy, unlike credit ratings — so an issuer that tagged them exposes real structured terms straight from `data.sec.gov`'s company-facts API, no scraping required. Coverage still varies by issuer since tagging conversion terms isn't mandatory the way balance-sheet line items are.

@@ -20,7 +20,7 @@ const GUIDE = [
       { type: 'p', text: 'The left sidebar organises all features into 9 groups. All groups start collapsed — click a group header to expand it. Only the group containing your current view opens automatically. Click any item to load that view. Home is pinned above the groups and the User Guide button is pinned below them. On mobile, tap ☰ to open the sidebar drawer.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
         ['Markets', 'Overview, Sentiment, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
-        ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Convertible Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
+        ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Convertible Bonds, Treasury Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
         ['Watchlist', 'Watchlist, Heatmap, Correlation, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
         ['News', 'My News Feed'],
         ['Trading', 'Trade Ideas, Position Sizer, Wheel Tracker, Day Trader'],
@@ -743,6 +743,14 @@ const GUIDE = [
         'Credit Rating Mentions works exactly like Corporate Bonds — full-text search of the issuer\'s own 8-K/10-K/10-Q filings for rating-action language.',
       ]},
       { type: 'tip', text: 'Conversion price and ratio are a defined part of the US-GAAP XBRL taxonomy — unlike credit ratings, which aren\'t standardized at all — so when an issuer tags them, it\'s real structured data straight from their own filing, not a text-mined guess.' },
+      { type: 'h3', text: 'Treasury Bonds' },
+      { type: 'p', text: 'Current U.S. Treasury yields, historical trends, and the full yield curve — a standalone page, separate from Corporate/Convertible Bonds since Treasuries have a genuinely free official source. Found under Research → Treasury Bonds.' },
+      { type: 'steps', items: [
+        'The Current Rates table shows all 14 tracked maturities (1 Month through 30 Year) with today\'s yield and the 1-day change. Click a row to load that maturity into the Historical Trend chart below.',
+        'The Yield Curve chart plots yield against maturity, overlaying Today against ~1 Month Ago and ~1 Year Ago on one chart — hover anywhere to see all three curves\' values at that maturity in a tooltip.',
+        'The Historical Trend chart shows one maturity\'s yield over time — pick the maturity via the Current Rates table or the pills above the chart, and the time range (1M/6M/1Y/5Y/10Y/Max) via the range buttons.',
+      ]},
+      { type: 'tip', text: 'Data comes straight from the U.S. Treasury\'s own "Daily Treasury Par Yield Curve Rates" — the same source FRED\'s DGS* series are derived from — fetched directly with no API key required, unlike the Economic Dashboard\'s FRED-based series.' },
       { type: 'h3', text: 'Activist Tracker' },
       { type: 'p', text: 'Scans EDGAR for Schedule 13D and 13G filings — the mandatory disclosure whenever an investor crosses 5% beneficial ownership of a public company. Found under Research → Activist Tracker.' },
       { type: 'steps', items: [
@@ -1358,6 +1366,13 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-17 — Treasury Bonds' },
+      { type: 'bullets', items: [
+        'New standalone Treasury Bonds page under Research → Treasury Bonds: current rates across all 14 tracked maturities, a per-maturity historical trend chart, and a multi-curve yield curve view.',
+        'Sourced from the U.S. Treasury\'s own official daily par yield curve CSV (home.treasury.gov) rather than FRED — genuinely free with no API key, and this app\'s FRED_API_KEY isn\'t configured anyway.',
+        'Yield Curve chart overlays Today, ~1 Month Ago, and ~1 Year Ago with a hover crosshair — a custom SVG chart since the x-axis is ordinal maturity, not calendar time, which the app\'s lightweight-charts library doesn\'t support.',
+        'Historical Trend chart uses lightweight-charts (matching the main Chart Modal) since that view genuinely is a time series.',
+      ]},
       { type: 'h3', text: '2026-09-17 — Convertible Bonds' },
       { type: 'bullets', items: [
         'New Convertible Bonds page under Research → Convertible Bonds, alongside Corporate Bonds.',

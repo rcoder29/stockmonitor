@@ -73,6 +73,7 @@ import FundHoldingsExplorer from './components/FundHoldingsExplorer'
 import ActivistTracker from './components/ActivistTracker'
 import CorporateBonds from './components/CorporateBonds'
 import ConvertibleBonds from './components/ConvertibleBonds'
+import TreasuryBonds from './components/TreasuryBonds'
 import RedditTrending from './components/RedditTrending'
 import MergerArbOverview from './components/MergerArbOverview'
 import MergerDealDashboard from './components/MergerDealDashboard'
@@ -194,6 +195,7 @@ const NAV_GROUPS = [
       { id: 'fundholdings',        label: 'Fund Holdings' },
       { id: 'corporatebonds',      label: 'Corporate Bonds' },
       { id: 'convertiblebonds',    label: 'Convertible Bonds' },
+      { id: 'treasurybonds',       label: 'Treasury Bonds' },
       { id: 'activisttracker',     label: 'Activist Tracker' },
       { id: 'relativestrengthr',   label: 'Relative Strength' },
       { id: 'seasonalpatterns',    label: 'Seasonal Patterns' },
@@ -987,6 +989,7 @@ export default function App() {
           {activeTab === 'fundholdings'       && <FundHoldingsExplorer />}
           {activeTab === 'corporatebonds'     && <CorporateBonds />}
           {activeTab === 'convertiblebonds'   && <ConvertibleBonds />}
+          {activeTab === 'treasurybonds'      && <TreasuryBonds />}
           {activeTab === 'activisttracker'    && <ActivistTracker />}
           {activeTab === 'mergeroverview'      && <MergerArbOverview onNavigate={goToMerger} />}
           {activeTab === 'mergerdashboard'    && <MergerDealDashboard focusDealId={mergerFocusDealId} onFocusConsumed={() => setMergerFocusDealId(null)} />}
