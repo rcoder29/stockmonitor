@@ -33,6 +33,22 @@ function changeColor(v) {
   return v > 0 ? 'text-green-400' : v < 0 ? 'text-red-400' : 'text-slate-400'
 }
 
+// ── Spread / inversion badge ─────────────────────────────────────────────────
+
+function SpreadBadge({ spread }) {
+  if (!spread) return null
+  const cls = spread.inverted
+    ? 'bg-red-900/40 border-red-700 text-red-300'
+    : 'bg-green-900/30 border-green-800 text-green-300'
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium ${cls}`}>
+      <span>{spread.label}</span>
+      <span className="font-mono">{spread.value > 0 ? '+' : ''}{spread.value.toFixed(2)}%</span>
+      <span className="text-[10px] uppercase tracking-wide opacity-80">{spread.inverted ? 'Inverted' : 'Normal'}</span>
+    </div>
+  )
+}
+
 // ── Current rates table ──────────────────────────────────────────────────────
 
 function CurrentRatesTable({ rates, selected, onSelect }) {
@@ -299,7 +315,12 @@ export default function TreasuryBonds() {
               <div className="text-[11px] text-slate-600 mt-1.5">Click a row to chart its history below.</div>
             </div>
             <div className="lg:col-span-3">
-              <div className="text-sm font-semibold text-slate-300 mb-2">Yield Curve</div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div className="text-sm font-semibold text-slate-300">Yield Curve</div>
+                <div className="flex flex-wrap gap-2">
+                  {(current?.spreads || []).map(s => <SpreadBadge key={s.key} spread={s} />)}
+                </div>
+              </div>
               <div className="bg-slate-800 rounded-xl border border-slate-700 p-3">
                 <YieldCurveChart curves={curveData?.curves || []} />
               </div>

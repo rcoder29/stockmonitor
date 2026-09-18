@@ -10023,7 +10023,20 @@ def treasury_current():
             'change': round(val - prev_val, 3) if prev_val is not None else None,
         })
 
-    result = {'date': latest['date'], 'prevDate': prev['date'] if prev else None, 'rates': rates}
+    # 2s10s — the classic recession-watch spread (10Y minus 2Y par yield).
+    # Negative means the curve is inverted at that segment.
+    y2, y10 = latest.get('2yr'), latest.get('10yr')
+    spreads = []
+    if y2 is not None and y10 is not None:
+        spread_val = round(y10 - y2, 3)
+        spreads.append({
+            'key':      '2s10s',
+            'label':    '2s10s (10Y − 2Y)',
+            'value':    spread_val,
+            'inverted': spread_val < 0,
+        })
+
+    result = {'date': latest['date'], 'prevDate': prev['date'] if prev else None, 'rates': rates, 'spreads': spreads}
     cache_set(cache_key, result)
     return result
 
