@@ -4,6 +4,32 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: Insider Transactions, Analyst Ratings, Insider Trading Feed, Analyst Rating Tracker (the `_ANALYST_TTL`/`_INSIDER_TTL` cluster)
+
+Finally tackled the cluster that had been deliberately deferred across every prior batch: four sections sharing `_ANALYST_TTL`/`_INSIDER_TTL`, including the known pre-existing bug where `_ANALYST_TTL` was defined twice in `main.py` with different values (`hours=4` near Insider Transactions, `hours=6` near Analyst Rating Tracker) — Python module-level execution meant the later assignment silently won everywhere, so `hours=6` was already the value actually in effect at runtime for both consumers. Moved both TTLs into `edgar_utils.py` as a single source of truth (kept at `hours=6`/`hours=4` respectively, preserving actual current behavior rather than "fixing" it to a guessed original intent) — this makes the whole class of bug structurally impossible going forward.
+
+Also found and fixed a second, more serious pre-existing bug while reading these sections closely: `routers/analyst_ratings.py`'s `/api/analyst/{symbol}` and `routers/analyst_rating_tracker.py`'s `/api/market/analyst-ratings` used the **identical** cache key (`analyst:{symbol}`) despite returning completely different response shapes — whichever endpoint was hit first would silently poison the cache for the other for up to 6 hours. Fixed by giving the tracker its own `analyst_tracker:{symbol}` key. Verified live: hit both endpoints, confirmed each now caches under its own key with its own correct shape.
+
+Also discovered and fixed a smaller mistake from two batches ago: a `sed` line-range deletion for Smart Alerts 2.0 had collaterally swallowed the `# ── News Sentiment Engine ──` header comment on the following section — the actual code was untouched and fully functional, just its label was gone, which had been silently corrupting the section-boundary triage script's counts. Restored the header; added a note to the standing deferred-import-audit process to catch this class of mistake going forward (an unexpected jump in an adjacent section's line/def count after a batch is the tell).
+
+### New
+- `backend/routers/insider_transactions.py`, `analyst_ratings.py`, `insider_trading_feed.py`, `analyst_rating_tracker.py` — new
+
+### Fixed
+- `backend/edgar_utils.py` — added `_INSIDER_TTL`/`_ANALYST_TTL` as the single source of truth, eliminating the double-definition bug.
+- `backend/routers/analyst_rating_tracker.py` — cache key changed from the colliding `analyst:{symbol}` to `analyst_tracker:{symbol}`.
+- `backend/main.py` — restored the `# ── News Sentiment Engine ──` header comment lost in a previous batch's deletion.
+
+### Verified
+- 52/52 backend tests; cleared all `analyst:*`/`insider:*` cache rows before testing (some were already populated with pre-fix, possibly-collided data) and confirmed both analyst endpoints now cache independently with correct shapes; live smoke tests on all 4 endpoints; full route sweep, zero new regressions.
+
+### Files changed
+- The 4 new router files above — new
+- `backend/edgar_utils.py` — `_INSIDER_TTL`, `_ANALYST_TTL` added
+- `backend/main.py` — all four sections removed; News Sentiment Engine header restored
+
+---
+
 ## 2026-09-18 — Backend Modularization: AI Stocks, AI Analyst Actions, Day Trader Scanners, Screener, Options Chain, Dividends, Correlation Matrix, Sector Rotation, WebSocket Live Quotes, Smart Alerts 2.0
 
 Continued the router extraction (see prior entries below) with 10 more sections. `routers/ai_analyst_actions.py` imports `_AI_STOCKS` directly from the new `routers/ai_stocks.py` (module-level, no cycle) rather than deferring through `main.py` — the same trick used earlier for Custom Screener/NLP Screener. `_fetch_screener_quotes` and `_fetch_feed` (Day Trader Scanners) and `_fetch_fundamentals` (Screener) are still main.py-anchored, so those got the usual function-scoped deferred import.

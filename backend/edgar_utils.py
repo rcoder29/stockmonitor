@@ -29,6 +29,15 @@ _EDGAR_ASSET_CATS = {
     'STIV': 'Short-Term', 'RE': 'Real Estate',
 }
 
+# Shared by Insider Transactions, Insider Trading Feed, Analyst Ratings, and
+# Analyst Rating Tracker. _ANALYST_TTL was previously defined twice in
+# main.py with different values (hours=4 and hours=6) — since Python
+# module-level execution means the later assignment silently won everywhere,
+# hours=6 was already the value actually in effect at runtime; kept as-is
+# here (a single source of truth now) to avoid a behavior change.
+_INSIDER_TTL  = timedelta(hours=4)
+_ANALYST_TTL  = timedelta(hours=6)
+
 
 SCREENER_UNIVERSE = [
     "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","LLY","V","JPM",

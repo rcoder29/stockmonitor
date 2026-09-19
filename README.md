@@ -215,7 +215,7 @@ Bypass for a specific commit with `git commit --no-verify` if you hit a false po
 ```
 stockmonitor/
 ├── backend/
-│   ├── main.py              FastAPI app (~4,000 lines) — most endpoints still live here;
+│   ├── main.py              FastAPI app (~3,500 lines) — most endpoints still live here;
 │   │                        being split into routers/ incrementally (see below)
 │   ├── edgar_utils.py       Shared SEC/EDGAR + generic helpers (_get_cik, _edgar_req,
 │   │                        _build_ticker_map, _parse_nport_xml, _fetch_opp_quote, _calc_rsi,
@@ -288,7 +288,14 @@ stockmonitor/
 │   │   │                                 remains in main.py, pending extraction as market_correlation.py)
 │   │   ├── sector_rotation.py           Markets → Sector Rotation
 │   │   ├── websocket_quotes.py          /ws/quotes — real-time price feed powering the whole app
-│   │   └── smart_alerts.py              Watchlist → Smart Alerts (rule-based scanner)
+│   │   ├── smart_alerts.py              Watchlist → Smart Alerts (rule-based scanner)
+│   │   ├── insider_transactions.py      Chart modal → Insider tab (per-symbol)
+│   │   ├── analyst_ratings.py           Chart modal → Analysts tab (per-symbol) — cache key
+│   │   │                                 "analyst:{symbol}" is scoped to this endpoint only
+│   │   ├── insider_trading_feed.py      Markets → Insider Trading (market-wide feed)
+│   │   └── analyst_rating_tracker.py    Research → Analyst Ratings (multi-symbol tracker) —
+│   │                                     cache key "analyst_tracker:{symbol}", changed during
+│   │                                     extraction to stop colliding with analyst_ratings.py
 │   ├── ruff.toml            Lint gate config — see "Lint gate" below
 │   ├── requirements.txt
 │   ├── requirements-dev.txt Dev-only deps (ruff, pytest) — not deployed
