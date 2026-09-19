@@ -215,11 +215,12 @@ Bypass for a specific commit with `git commit --no-verify` if you hit a false po
 ```
 stockmonitor/
 ├── backend/
-│   ├── main.py              FastAPI app (~6,000 lines) — most endpoints still live here;
+│   ├── main.py              FastAPI app (~4,700 lines) — most endpoints still live here;
 │   │                        being split into routers/ incrementally (see below)
 │   ├── edgar_utils.py       Shared SEC/EDGAR + generic helpers (_get_cik, _edgar_req,
-│   │                        _build_ticker_map, _parse_nport_xml, _fetch_opp_quote, _calc_rsi, …)
-│   │                        — imported by main.py and every router below with no circular dependency
+│   │                        _build_ticker_map, _parse_nport_xml, _fetch_opp_quote, _calc_rsi,
+│   │                        _SECTOR_ETFS, SCREENER_UNIVERSE, …) — imported by main.py and
+│   │                        every router below with no circular dependency
 │   ├── routers/             Feature areas extracted out of main.py as FastAPI APIRouters
 │   │   ├── corporate_bonds.py    Research → Corporate Bonds
 │   │   ├── convertible_bonds.py  Research → Convertible Bonds
@@ -260,8 +261,21 @@ stockmonitor/
 │   │   ├── technical_signals.py  Research → Screener (Signals tab, multi-timeframe)
 │   │   ├── options_strategy_builder.py  Chart modal → Options tab (strategy suggestions)
 │   │   ├── trade_idea_generator.py      Watchlist → trade ideas panel (Claude-generated)
-│   │   └── portfolio_risk_dashboard.py  Portfolio → Risk view — _compute_portfolio_risk/
-│   │                                     _sanitize_nan also consumed directly by net_exposure.py
+│   │   ├── portfolio_risk_dashboard.py  Portfolio → Risk view — _compute_portfolio_risk/
+│   │   │                                 _sanitize_nan also consumed directly by net_exposure.py
+│   │   ├── position_sizing.py           Trading → Position Sizer
+│   │   ├── portfolio_optimizer.py       Portfolio → Optimizer (efficient frontier)
+│   │   ├── rich_earnings_calendar.py    Watchlist → Earnings+
+│   │   ├── options_pnl_tracker.py       Portfolio → Options P&L — _live_option_price also
+│   │   │                                 consumed directly by net_exposure.py
+│   │   ├── portfolio_xray.py            Portfolio → X-Ray
+│   │   ├── sector_momentum.py           Markets → Sector Momentum
+│   │   ├── market_breadth.py            Markets → Breadth
+│   │   ├── fundamental_comparison.py    Research → Chart Compare
+│   │   ├── price_target_tracker.py      Watchlist → Price Targets
+│   │   ├── earnings_call_summarizer.py  Chart modal → Earnings tab (AI summary)
+│   │   ├── dcf_valuation.py             Research → DCF Valuation
+│   │   └── yield_curve.py               Markets → Yield Curve
 │   ├── ruff.toml            Lint gate config — see "Lint gate" below
 │   ├── requirements.txt
 │   ├── requirements-dev.txt Dev-only deps (ruff, pytest) — not deployed

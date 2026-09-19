@@ -30,6 +30,34 @@ _EDGAR_ASSET_CATS = {
 }
 
 
+SCREENER_UNIVERSE = [
+    "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","LLY","V","JPM",
+    "XOM","UNH","MA","JNJ","AVGO","PG","MRK","HD","COST","ABBV",
+    "CVX","CRM","BAC","NFLX","AMD","KO","PEP","TMO","WMT","ACN",
+    "MCD","CSCO","DIS","ADBE","INTC","CMCSA","WFC","IBM","ORCL","INTU",
+    "GE","CAT","UBER","BKNG","GS","AXP","SPGI","ISRG","NOW","TXN",
+    "NEE","HON","PM","AMGN","SYK","BLK","LOW","UNP","MS","BMY",
+    "PLD","RTX","C","SCHW","DE","ADI","VRTX","GILD","AMAT","ZTS",
+    "ETN","PANW","BSX","MU","NKE","CB","MDLZ","SO","KLAC","LRCX",
+    "SNPS","CDNS","MAR","ELV","TGT","CI","PNC","CME","APH","FCX",
+    "NSC","MMC","EMR","TJX","WELL","AON","FTNT","SHW","FICO","SPOT",
+]
+
+_SECTOR_ETFS = [
+    {"symbol": "XLK",  "name": "Technology"},
+    {"symbol": "XLF",  "name": "Financials"},
+    {"symbol": "XLE",  "name": "Energy"},
+    {"symbol": "XLV",  "name": "Health Care"},
+    {"symbol": "XLI",  "name": "Industrials"},
+    {"symbol": "XLY",  "name": "Consumer Discr."},
+    {"symbol": "XLP",  "name": "Consumer Staples"},
+    {"symbol": "XLU",  "name": "Utilities"},
+    {"symbol": "XLB",  "name": "Materials"},
+    {"symbol": "XLRE", "name": "Real Estate"},
+    {"symbol": "XLC",  "name": "Comm. Services"},
+]
+
+
 def _safe_float(val) -> float | None:
     try:
         f = float(val) if val is not None else None

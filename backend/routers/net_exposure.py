@@ -7,15 +7,17 @@ event-driven (deal completion / trust redemption), not a bet on market
 direction, so folding them into a beta sum would misrepresent what they
 actually expose you to.
 
-_fetch_fundamentals / _live_option_price are core helpers still in main.py,
-used throughout by many unrelated features — imported lazily inside the
-functions that need them below rather than at module level, since main.py
-imports this router (to register it) and importing main.py back at module
-level here would be circular. Safe because these are only called
-per-request, long after both modules have finished loading.
-_fetch_day_quote and _compute_portfolio_risk/_sanitize_nan moved to
-routers/portfolio.py and routers/portfolio_risk_dashboard.py respectively,
-and are imported normally (no cycle — neither depends on this router).
+_fetch_fundamentals is a core helper still in main.py, used throughout by
+many unrelated features — imported lazily inside the function that needs
+it below rather than at module level, since main.py imports this router
+(to register it) and importing main.py back at module level here would be
+circular. Safe because it's only called per-request, long after both
+modules have finished loading.
+_fetch_day_quote, _compute_portfolio_risk/_sanitize_nan, and
+_live_option_price moved to routers/portfolio.py,
+routers/portfolio_risk_dashboard.py, and routers/options_pnl_tracker.py
+respectively, and are imported normally (no cycle — none of them depend
+on this router).
 """
 import math
 import asyncio
@@ -30,6 +32,7 @@ from routers.merger_arb import get_arb_positions
 from routers.spacs import get_spac_positions
 from routers.portfolio import _fetch_day_quote
 from routers.portfolio_risk_dashboard import _compute_portfolio_risk, _sanitize_nan
+from routers.options_pnl_tracker import _live_option_price
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -66,7 +69,7 @@ def _bs_delta(option_type: str, underlying_price, strike, years, iv, r: float = 
 
 
 async def _net_exposure_options_sleeve() -> dict:
-    from main import _fetch_fundamentals, _live_option_price
+    from main import _fetch_fundamentals
 
     with db_session() as db:
         rows = db.query(OptionsPosition).all()

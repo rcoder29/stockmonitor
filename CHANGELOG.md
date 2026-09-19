@@ -4,6 +4,37 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: Position Sizing, Portfolio Optimizer, Rich Earnings Calendar, Options P&L, Portfolio X-Ray, Sector Momentum, Market Breadth, Fundamental Comparison, Price Target Tracker, Earnings Call Summarizer, DCF Valuation, Yield Curve & Rates
+
+Continued the router extraction (see prior entries below) with the largest batch yet — 12 sections. Moved two more small, dependency-free constants into `edgar_utils.py` (`_SECTOR_ETFS`, shared by Sector Rotation and Sector Momentum Ranker; `SCREENER_UNIVERSE`, shared by Screener and Market Breadth Dashboard) so both consumers could be handled without deferred imports. Also found and merged in an unlabeled endpoint (`/api/options/unusual`, no `# ── ` section header) that a line-range-based extraction would otherwise have silently swept into Yield Curve & Rates — it's a second, explicit-symbols options-unusual-activity scanner, so it now lives alongside the existing scanner in `routers/unusual_options.py`.
+
+Options P&L Tracker's `_live_option_price` is exactly what `net_exposure.py` deferred-imports from `main` — caught by the now-standard post-batch audit, fixed the same way as the prior `_fetch_day_quote`/`_compute_portfolio_risk` cases: `net_exposure.py` now imports it directly from `routers/options_pnl_tracker.py`.
+
+Live verification surfaced two genuine pre-existing bugs, both fixed (found only because this batch's live-endpoint testing exercised code paths that hadn't been curl-tested end-to-end before):
+- **Position Sizing Calculator** 500'd on every call: the 14-day ATR calculation can produce NaN when the most recent trading session's data is incomplete, and Starlette refuses to serialize a bare NaN. Fixed with `edgar_utils._finite_or_none` (the same helper already used elsewhere for exactly this).
+- **Rich Earnings Calendar** silently returned `[]` for every symbol: `_enrich_earnings` still used the old DataFrame-shaped `.calendar` API (`cal.columns`, `cal[col].dropna()`), but current yfinance returns `.calendar` as a plain dict. Rewrote to the dict-based access already used correctly in `earnings_play_calculator.py` (`cal["Earnings Date"]`, `cal["Earnings Average"]` for the EPS consensus).
+
+### New
+- `backend/routers/position_sizing.py`, `portfolio_optimizer.py`, `rich_earnings_calendar.py`, `options_pnl_tracker.py`, `portfolio_xray.py`, `sector_momentum.py`, `market_breadth.py`, `fundamental_comparison.py`, `price_target_tracker.py`, `earnings_call_summarizer.py`, `dcf_valuation.py`, `yield_curve.py` — new
+- `backend/edgar_utils.py` — added `_SECTOR_ETFS` and `SCREENER_UNIVERSE`
+
+### Fixed
+- `backend/routers/position_sizing.py` — NaN-guard the ATR calculation.
+- `backend/routers/rich_earnings_calendar.py` — dict-based `.calendar` access matching current yfinance.
+- `backend/routers/net_exposure.py` — `_live_option_price` now imported from `routers/options_pnl_tracker.py` instead of a stale deferred `main` import.
+- `backend/routers/unusual_options.py` — gained the second `/api/options/unusual` scanner (previously an unlabeled block in `main.py`).
+
+### Verified
+- 52/52 backend tests; audited every `from main import` across all routers before and after; live smoke tests on all 13 endpoints in this batch (both bugs above were only caught this way, not by ruff/tests/static checks); full route sweep — the only new failures were `/api/home/summary` and `/api/ai-stocks` intermittently 500ing on a transient Yahoo Finance rate limit from this session's cumulative testing volume today (confirmed via direct `_fetch_perf_one` calls returning "Too Many Requests" — neither endpoint's code was touched by this batch).
+
+### Files changed
+- The 12 new router files above — new
+- `backend/edgar_utils.py` — `_SECTOR_ETFS`, `SCREENER_UNIVERSE` added
+- `backend/main.py` — all 12 sections (+ the unlabeled UOA scan) removed; dead imports cleaned up (`OptionsPosition`, `PriceTarget`, `_get_cik`)
+- `backend/routers/net_exposure.py`, `backend/routers/unusual_options.py` — modified as described above
+
+---
+
 ## 2026-09-18 — Investor Education: Capital Structure & Derivatives (with a worked tree example)
 
 Enriched the Market Structure and Asset Classes layers (see prior entries below) with the piece the module was missing: how an issuer's different securities rank against each other, and how derivatives relate to an issuer without being a claim on it at all.
