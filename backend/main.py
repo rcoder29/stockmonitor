@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from typing import List
-import numpy as np
 import pandas as pd
 import yfinance as yf
 import yfinance.screener.screener as yf_screener
@@ -21,13 +20,11 @@ load_dotenv()
 from database import (
     init_db, migrate_db, db_session, cache_get, cache_set,
     PortfolioPosition,
-    SmartAlertRule,
 )
 # Shared SEC EDGAR helpers, split out so both main.py and routers/ can import
 # them without a circular dependency — see edgar_utils.py's module docstring.
 from edgar_utils import (
     _session, _safe_float, _finite_or_none, _edgar_req, _TICKER_RE,
-    _calc_rsi, _SECTOR_ETFS, SCREENER_UNIVERSE,
 )
 from routers import (
     corporate_bonds, convertible_bonds, treasury as treasury_router,
@@ -45,6 +42,9 @@ from routers import (
     options_pnl_tracker, portfolio_xray, sector_momentum, market_breadth,
     fundamental_comparison, price_target_tracker, earnings_call_summarizer,
     dcf_valuation, yield_curve,
+    ai_stocks, ai_analyst_actions, day_trader_scanners, screener,
+    options_chain, dividends, correlation_matrix, sector_rotation,
+    websocket_quotes, smart_alerts,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -112,6 +112,16 @@ app.include_router(price_target_tracker.router)
 app.include_router(earnings_call_summarizer.router)
 app.include_router(dcf_valuation.router)
 app.include_router(yield_curve.router)
+app.include_router(ai_stocks.router)
+app.include_router(ai_analyst_actions.router)
+app.include_router(day_trader_scanners.router)
+app.include_router(screener.router)
+app.include_router(options_chain.router)
+app.include_router(dividends.router)
+app.include_router(correlation_matrix.router)
+app.include_router(sector_rotation.router)
+app.include_router(websocket_quotes.router)
+app.include_router(smart_alerts.router)
 
 # Initialise DB tables on startup
 init_db()
@@ -124,8 +134,6 @@ migrate_db()
 _FUND_TTL    = timedelta(minutes=5)
 _MARKET_TTL  = timedelta(minutes=15)
 _PERF_TTL    = timedelta(minutes=15)
-_AI_TTL      = timedelta(minutes=15)
-_AI_ANLST_TTL = timedelta(minutes=15)
 
 
 # ── Fundamentals ──────────────────────────────────────────────────────────────
@@ -277,7 +285,12 @@ def _fetch_perf_one(sym: str) -> dict:
         )
         if hist.empty or len(hist) < 2:
             return {"symbol": sym}
-        closes = hist["Close"]
+        # An in-progress/incomplete session (e.g. mid-trading-day) can leave
+        # today's Close as NaN — drop it so .iloc[-1] never lands on NaN and
+        # leaks into JSON (Starlette rejects a bare NaN).
+        closes = hist["Close"].dropna()
+        if len(closes) < 2:
+            return {"symbol": sym}
         today  = closes.index[-1]
 
         def pct(n: int):
@@ -937,541 +950,6 @@ def get_market_summary():
     return result
 
 
-# ── AI stocks ─────────────────────────────────────────────────────────────────
-
-_AI_STOCKS = [
-    # Chips & Compute
-    {"symbol": "NVDA",  "name": "NVIDIA",             "layer": "Chips & Compute",  "thesis": "GPU monopoly for AI training & inference"},
-    {"symbol": "AMD",   "name": "AMD",                "layer": "Chips & Compute",  "thesis": "AI GPU challenger; EPYC data-center CPUs"},
-    {"symbol": "AVGO",  "name": "Broadcom",           "layer": "Chips & Compute",  "thesis": "Custom AI ASICs (XPUs) for Google & Meta"},
-    {"symbol": "MRVL",  "name": "Marvell Technology", "layer": "Chips & Compute",  "thesis": "Custom AI silicon & high-speed interconnects"},
-    {"symbol": "ARM",   "name": "Arm Holdings",       "layer": "Chips & Compute",  "thesis": "CPU architecture powering AI edge & servers"},
-    {"symbol": "INTC",  "name": "Intel",              "layer": "Chips & Compute",  "thesis": "Gaudi AI accelerators; leading-edge foundry"},
-    {"symbol": "QCOM",  "name": "Qualcomm",           "layer": "Chips & Compute",  "thesis": "On-device AI inference in mobile & PCs"},
-    # Memory & Storage
-    {"symbol": "MU",    "name": "Micron",             "layer": "Memory & Storage", "thesis": "HBM3E memory essential for AI accelerators"},
-    {"symbol": "SMCI",  "name": "Super Micro",        "layer": "Memory & Storage", "thesis": "AI server systems with direct liquid cooling"},
-    {"symbol": "WDC",   "name": "Western Digital",    "layer": "Memory & Storage", "thesis": "Flash storage for AI training datasets"},
-    # Semiconductor Equipment
-    {"symbol": "AMAT",  "name": "Applied Materials",  "layer": "Semi Equipment",   "thesis": "Deposition equipment for advanced AI chips"},
-    {"symbol": "LRCX",  "name": "Lam Research",       "layer": "Semi Equipment",   "thesis": "Etch systems for leading-edge nodes"},
-    {"symbol": "KLAC",  "name": "KLA Corp",           "layer": "Semi Equipment",   "thesis": "Process control for high-yield AI chip fabs"},
-    {"symbol": "ASML",  "name": "ASML",               "layer": "Semi Equipment",   "thesis": "Only maker of EUV machines — gating AI chips"},
-    # Cloud & Infrastructure
-    {"symbol": "MSFT",  "name": "Microsoft",          "layer": "Cloud & Infra",    "thesis": "Azure AI, OpenAI partnership, Copilot suite"},
-    {"symbol": "GOOGL", "name": "Alphabet",           "layer": "Cloud & Infra",    "thesis": "TPU silicon, Gemini models, Google Cloud AI"},
-    {"symbol": "AMZN",  "name": "Amazon",             "layer": "Cloud & Infra",    "thesis": "AWS Trainium/Inferentia, Bedrock AI platform"},
-    {"symbol": "META",  "name": "Meta",               "layer": "Cloud & Infra",    "thesis": "Llama open-source; massive AI capex cycle"},
-    {"symbol": "ORCL",  "name": "Oracle",             "layer": "Cloud & Infra",    "thesis": "OCI GPU clusters; AI database & applications"},
-    # Networking
-    {"symbol": "ANET",  "name": "Arista Networks",    "layer": "Networking",       "thesis": "Ethernet switches connecting AI GPU clusters"},
-    {"symbol": "CSCO",  "name": "Cisco",              "layer": "Networking",       "thesis": "AI networking fabric, Silicon One ASICs"},
-    {"symbol": "CIEN",  "name": "Ciena",              "layer": "Networking",       "thesis": "Optical networking backbone for AI traffic"},
-    # Power & Cooling
-    {"symbol": "VRT",   "name": "Vertiv",             "layer": "Power & Cooling",  "thesis": "Data-center power & liquid cooling systems"},
-    {"symbol": "ETN",   "name": "Eaton",              "layer": "Power & Cooling",  "thesis": "Power management & UPS for AI data centers"},
-    {"symbol": "GEV",   "name": "GE Vernova",         "layer": "Power & Cooling",  "thesis": "Gas & renewable generation for AI load growth"},
-    {"symbol": "CEG",   "name": "Constellation",      "layer": "Power & Cooling",  "thesis": "Nuclear PPA deals with Microsoft & Google"},
-    {"symbol": "VST",   "name": "Vistra",             "layer": "Power & Cooling",  "thesis": "Nuclear & gas baseload for 24/7 data centers"},
-    {"symbol": "POWL",  "name": "Powell Industries",  "layer": "Power & Cooling",  "thesis": "Switchgear & electrical gear for data centers"},
-    # Data Centers
-    {"symbol": "EQIX",  "name": "Equinix",            "layer": "Data Centers",     "thesis": "Global colocation hubs for AI cloud workloads"},
-    {"symbol": "DLR",   "name": "Digital Realty",     "layer": "Data Centers",     "thesis": "Hyperscale data center REIT expanding for AI"},
-    {"symbol": "IRON",  "name": "Iron Mountain",      "layer": "Data Centers",     "thesis": "Data center & storage REIT pivoting to AI"},
-    # Software & Applications
-    {"symbol": "PLTR",  "name": "Palantir",           "layer": "Software & Apps",  "thesis": "AIP platform bringing AI to enterprise & govt"},
-    {"symbol": "CRM",   "name": "Salesforce",         "layer": "Software & Apps",  "thesis": "Agentforce AI agents across enterprise CRM"},
-    {"symbol": "NOW",   "name": "ServiceNow",         "layer": "Software & Apps",  "thesis": "AI-powered enterprise workflow automation"},
-    {"symbol": "SNOW",  "name": "Snowflake",          "layer": "Software & Apps",  "thesis": "AI data cloud, Cortex AI for enterprise data"},
-    {"symbol": "DDOG",  "name": "Datadog",            "layer": "Software & Apps",  "thesis": "AI observability & monitoring for cloud apps"},
-    {"symbol": "MDB",   "name": "MongoDB",            "layer": "Software & Apps",  "thesis": "Document DB powering AI application backends"},
-    # Cybersecurity
-    {"symbol": "CRWD",  "name": "CrowdStrike",        "layer": "Cybersecurity",    "thesis": "AI-native endpoint & cloud security platform"},
-    {"symbol": "PANW",  "name": "Palo Alto Networks", "layer": "Cybersecurity",    "thesis": "AI-powered network, cloud & SOC security"},
-    {"symbol": "ZS",    "name": "Zscaler",            "layer": "Cybersecurity",    "thesis": "Zero-trust AI security for distributed infra"},
-    {"symbol": "S",     "name": "SentinelOne",        "layer": "Cybersecurity",    "thesis": "AI-driven autonomous threat detection & response"},
-    # Quantum Computing
-    {"symbol": "IONQ",  "name": "IonQ",               "layer": "Quantum Computing","thesis": "Trapped-ion quantum systems; cloud QaaS leader"},
-    {"symbol": "RGTI",  "name": "Rigetti Computing",  "layer": "Quantum Computing","thesis": "Superconducting QPUs on AWS & Azure marketplaces"},
-    {"symbol": "QUBT",  "name": "Quantum Computing",  "layer": "Quantum Computing","thesis": "Photonic quantum optimization for logistics & finance"},
-    {"symbol": "QBTS",  "name": "D-Wave Quantum",     "layer": "Quantum Computing","thesis": "Annealing QPUs for real-world optimization problems"},
-    {"symbol": "IBM",   "name": "IBM",                "layer": "Quantum Computing","thesis": "Eagle/Condor QPUs; Qiskit ecosystem & IBM Quantum Network"},
-    {"symbol": "ARQQ",  "name": "Arqit Quantum",      "layer": "Quantum Computing","thesis": "Quantum-safe satellite encryption for enterprise & govt"},
-    {"symbol": "MSFT",  "name": "Microsoft",          "layer": "Quantum Computing","thesis": "Azure Quantum, topological qubit research program"},
-    # Robotics & Automation
-    {"symbol": "ISRG",  "name": "Intuitive Surgical", "layer": "Robotics",         "thesis": "Da Vinci surgical robot monopoly; AI-guided procedures"},
-    {"symbol": "TER",   "name": "Teradyne",           "layer": "Robotics",         "thesis": "Universal Robots cobots + semiconductor test equipment"},
-    {"symbol": "ROK",   "name": "Rockwell Automation","layer": "Robotics",         "thesis": "Industrial automation & AI-driven smart manufacturing"},
-    {"symbol": "CGNX",  "name": "Cognex",             "layer": "Robotics",         "thesis": "Machine vision — the eyes of industrial & warehouse robots"},
-    {"symbol": "PATH",  "name": "UiPath",             "layer": "Robotics",         "thesis": "RPA + agentic AI automating enterprise software workflows"},
-    {"symbol": "ABB",   "name": "ABB Ltd",            "layer": "Robotics",         "thesis": "Global leader in industrial robots & factory automation"},
-    {"symbol": "HON",   "name": "Honeywell",          "layer": "Robotics",         "thesis": "Industrial automation, process control & AI sensors"},
-    {"symbol": "TSLA",  "name": "Tesla",              "layer": "Robotics",         "thesis": "Optimus humanoid robot; FSD autonomous driving AI"},
-    {"symbol": "NVDA",  "name": "NVIDIA",             "layer": "Robotics",         "thesis": "Isaac robotics platform; Jetson edge AI for robots"},
-]
-
-
-@app.get("/api/ai-stocks")
-def get_ai_stocks():
-    cached = cache_get("ai:stocks", _AI_TTL)
-    if cached is not None:
-        return cached
-
-    unique_syms = list({s["symbol"] for s in _AI_STOCKS})
-    perf: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        for fut in as_completed({pool.submit(_fetch_perf_one, s): s for s in unique_syms}):
-            d = fut.result()
-            perf[d["symbol"]] = d
-
-    result = []
-    for s in _AI_STOCKS:
-        d = perf.get(s["symbol"], {"symbol": s["symbol"]})
-        result.append({**d, "name": s["name"], "layer": s["layer"], "thesis": s["thesis"]})
-
-    cache_set("ai:stocks", result)
-    return result
-
-
-# ── AI analyst actions ────────────────────────────────────────────────────────
-
-@app.get("/api/ai-analyst-actions")
-def get_ai_analyst_actions():
-    cached = cache_get("ai:analyst", _AI_ANLST_TTL)
-    if cached is not None:
-        return cached
-
-    ai_syms = list({s["symbol"] for s in _AI_STOCKS})
-    actions: list[dict] = []
-    cutoff = datetime.utcnow() - timedelta(days=14)
-
-    def _for_sym(sym: str) -> list:
-        try:
-            df = yf.Ticker(sym, session=_session).upgrades_downgrades
-            if df is None or df.empty:
-                return []
-            recent = df[df.index >= cutoff]
-            result = []
-            for ts, row in recent.iterrows():
-                action = str(row.get("Action", "")).lower()
-                result.append({
-                    "symbol":      sym,
-                    "firm":        str(row.get("Firm", "")),
-                    "toGrade":     str(row.get("ToGrade", "")),
-                    "fromGrade":   str(row.get("FromGrade", "")),
-                    "action":      action,
-                    "date":        ts.strftime("%Y-%m-%d"),
-                    "priceTarget": _safe_float(row.get("currentPriceTarget")),
-                })
-            return result
-        except Exception:
-            return []
-
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        for fut in as_completed([pool.submit(_for_sym, s) for s in ai_syms]):
-            actions.extend(fut.result())
-
-    actions.sort(key=lambda x: x["date"], reverse=True)
-    result = {
-        "upgrades":   [a for a in actions if a["action"] in ("up", "init")][:10],
-        "downgrades": [a for a in actions if a["action"] == "down"][:10],
-    }
-    cache_set("ai:analyst", result)
-    return result
-
-
-
-# ── Day Trader scanners ───────────────────────────────────────────────────────
-
-_DAY_TRADER_TTL = timedelta(minutes=5)
-
-
-@app.get("/api/day-trader/scanners")
-def get_day_trader_scanners():
-    cached = cache_get("day_trader:scanners", _DAY_TRADER_TTL)
-    if cached is not None:
-        return cached
-
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        f_gainers = pool.submit(_fetch_screener_quotes, "day_gainers")
-        f_losers  = pool.submit(_fetch_screener_quotes, "day_losers")
-        f_active  = pool.submit(_fetch_screener_quotes, "most_actives")
-        result = {
-            "gainers":    f_gainers.result(),
-            "losers":     f_losers.result(),
-            "mostActive": f_active.result(),
-        }
-
-    cache_set("day_trader:scanners", result)
-    return result
-
-
-@app.get("/api/day-trader/news")
-def get_day_trader_news():
-    cached = cache_get("day_trader:news", _DAY_TRADER_TTL)
-    if cached is not None:
-        return cached
-
-    # Pull symbols from the scanner cache (or fall back to liquid defaults)
-    scan = cache_get("day_trader:scanners", _DAY_TRADER_TTL) or {}
-    seen_syms: set[str] = set()
-    symbols: list[str] = []
-    for key in ("gainers", "losers", "mostActive"):
-        for s in (scan.get(key) or [])[:4]:
-            sym = s.get("symbol", "")
-            if sym and sym not in seen_syms:
-                seen_syms.add(sym)
-                symbols.append(sym)
-    if not symbols:
-        symbols = ["SPY", "QQQ", "AAPL", "NVDA", "TSLA", "META", "AMZN"]
-
-    def _fetch_sym_news(sym: str) -> list[dict]:
-        return [{"symbol": sym, **a} for a in _fetch_feed(sym)[:4]]
-
-    raw: list[dict] = []
-    with ThreadPoolExecutor(max_workers=min(len(symbols), 8)) as pool:
-        for articles in pool.map(_fetch_sym_news, symbols):
-            raw.extend(articles)
-
-    # Deduplicate by link
-    seen_links: set[str] = set()
-    articles: list[dict] = []
-    for a in raw:
-        if a["link"] not in seen_links:
-            seen_links.add(a["link"])
-            articles.append(a)
-
-    articles.sort(key=lambda a: a.get("publishedAt") or "", reverse=True)
-    result = articles[:20]
-    cache_set("day_trader:news", result)
-    return result
-
-
-# ── Screener ─────────────────────────────────────────────────────────────────
-
-_SCREEN_TTL = timedelta(minutes=20)
-
-
-@app.get("/api/screener/technical")
-def technical_screener(scan: str = "52w_high"):
-    cache_key = f"screener:tech:{scan}"
-    cached = cache_get(cache_key, _SCREEN_TTL)
-    if cached is not None:
-        return cached
-
-    valid_scans = {"52w_high", "golden_cross", "death_cross", "rsi_oversold", "rsi_overbought", "high_volume", "short_interest"}
-    if scan not in valid_scans:
-        raise HTTPException(400, f"scan must be one of {valid_scans}")
-
-    try:
-        raw = yf.download(SCREENER_UNIVERSE, period="1y", interval="1d",
-                          auto_adjust=True, progress=False, session=_session)
-        closes  = raw["Close"].dropna(how="all")
-        volumes = raw["Volume"].dropna(how="all")
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-    results = []
-    for sym in SCREENER_UNIVERSE:
-        if sym not in closes.columns:
-            continue
-        prices = closes[sym].dropna()
-        vols   = volumes[sym].dropna() if sym in volumes.columns else None
-        if len(prices) < 60:
-            continue
-
-        price   = float(prices.iloc[-1])
-        chg_pct = float((prices.iloc[-1] / prices.iloc[-2] - 1) * 100) if len(prices) >= 2 else 0.0
-        vol_today = float(vols.iloc[-1]) if vols is not None and len(vols) > 0 else None
-
-        row = {"symbol": sym, "price": round(price, 2), "changePercent": round(chg_pct, 2),
-               "volume": int(vol_today) if vol_today else None}
-
-        if scan == "52w_high":
-            high = float(prices.max())
-            pct_from_high = round((price / high - 1) * 100, 2)
-            if pct_from_high >= -3:
-                row.update({"high52w": round(high, 2), "pctFromHigh": pct_from_high})
-                results.append(row)
-
-        elif scan in ("golden_cross", "death_cross"):
-            if len(prices) < 200:
-                continue
-            ma50  = prices.rolling(50).mean()
-            ma200 = prices.rolling(200).mean()
-            # Look for crossover within the last 30 days
-            diff = ma50 - ma200
-            sign_changes = (diff > 0).astype(int).diff().abs()
-            recent = sign_changes.iloc[-30:]
-            crossed = recent.sum() > 0
-            is_golden = float(ma50.iloc[-1]) > float(ma200.iloc[-1])
-            if (scan == "golden_cross" and is_golden and crossed) or \
-               (scan == "death_cross"  and not is_golden and crossed):
-                row.update({"ma50": round(float(ma50.iloc[-1]), 2),
-                            "ma200": round(float(ma200.iloc[-1]), 2)})
-                results.append(row)
-
-        elif scan in ("rsi_oversold", "rsi_overbought"):
-            rsi_series = _calc_rsi(prices)
-            rsi_val    = float(rsi_series.iloc[-1])
-            if rsi_val != rsi_val:
-                continue
-            if (scan == "rsi_oversold"  and rsi_val < 30) or \
-               (scan == "rsi_overbought" and rsi_val > 70):
-                row.update({"rsi": round(rsi_val, 1)})
-                results.append(row)
-
-        elif scan == "high_volume":
-            if vols is None or len(vols) < 22:
-                continue
-            avg_vol_20 = float(vols.iloc[-21:-1].mean())
-            if avg_vol_20 > 0 and vol_today and vol_today >= 2 * avg_vol_20:
-                row.update({"avgVolume20d": int(avg_vol_20),
-                            "volRatio": round(vol_today / avg_vol_20, 1)})
-                results.append(row)
-
-    if scan == "short_interest":
-        def _fetch_si(sym2):
-            f = _fetch_fundamentals(sym2)
-            si_pct = f.get("shortPercentOfFloat")
-            if si_pct is not None and si_pct > 0.10:
-                price2 = None
-                try:
-                    if sym2 in closes.columns:
-                        price2 = round(float(closes[sym2].dropna().iloc[-1]), 2)
-                except Exception:
-                    pass
-                return {
-                    "symbol": sym2,
-                    "price": price2,
-                    "shortPercentOfFloat": round(si_pct * 100, 1),
-                    "shortRatio": round(float(f["shortRatio"]), 1) if f.get("shortRatio") else None,
-                    "marketCap": f.get("marketCap"),
-                    "sector": f.get("sector"),
-                }
-            return None
-        with ThreadPoolExecutor(max_workers=10) as ex2:
-            for item in ex2.map(_fetch_si, SCREENER_UNIVERSE):
-                if item:
-                    results.append(item)
-        results.sort(key=lambda x: x.get("shortPercentOfFloat", 0), reverse=True)
-        cache_set(cache_key, results)
-        return results
-
-    results.sort(key=lambda x: x.get("pctFromHigh", x.get("rsi", x.get("volRatio", 0))),
-                 reverse=(scan not in ("rsi_oversold",)))
-    cache_set(cache_key, results)
-    return results
-
-
-@app.get("/api/screener/fundamental")
-def fundamental_screener(screen: str = "quality_growth"):
-    cache_key = f"screener:fund:{screen}"
-    cached = cache_get(cache_key, _SCREEN_TTL)
-    if cached is not None:
-        return cached
-
-    presets = {
-        "quality_growth":    lambda f: (f.get("profitMargin") or 0) > 0.15 and (f.get("revenueGrowth") or 0) > 0.08 and (f.get("debtToEquity") or 999) < 150,
-        "deep_value":        lambda f: 0 < (f.get("peRatio") or 999) < 15 and 0 < (f.get("priceToBook") or 999) < 2,
-        "dividend_income":   lambda f: (f.get("dividendYield") or 0) > 0.02 and 0 < (f.get("peRatio") or 999) < 35,
-        "momentum_quality":  lambda f: (f.get("roe") or 0) > 0.15 and (f.get("profitMargin") or 0) > 0.10,
-    }
-    if screen not in presets:
-        raise HTTPException(400, f"screen must be one of {list(presets.keys())}")
-
-    filt = presets[screen]
-    results = []
-
-    with ThreadPoolExecutor(max_workers=10) as ex:
-        futures = {ex.submit(_fetch_fundamentals, sym): sym for sym in SCREENER_UNIVERSE}
-        for f in as_completed(futures):
-            data = f.result()
-            if data and filt(data):
-                results.append({
-                    "symbol":        data["symbol"],
-                    "name":          data.get("name", ""),
-                    "price":         data.get("price"),
-                    "peRatio":       data.get("peRatio"),
-                    "forwardPE":     data.get("forwardPE"),
-                    "profitMargin":  round((data.get("profitMargin") or 0) * 100, 1),
-                    "revenueGrowth": round((data.get("revenueGrowth") or 0) * 100, 1),
-                    "dividendYield": round((data.get("dividendYield") or 0) * 100, 2),
-                    "debtToEquity":  data.get("debtToEquity"),
-                    "roe":           round((data.get("roe") or 0) * 100, 1),
-                    "marketCap":     data.get("marketCap"),
-                    "sector":        data.get("sector"),
-                })
-
-    results.sort(key=lambda x: x.get("profitMargin") or 0, reverse=True)
-    cache_set(cache_key, results)
-    return results
-
-
-# ── Options Chain ─────────────────────────────────────────────────────────────
-
-_OPTIONS_TTL     = timedelta(minutes=15)
-_DIVIDEND_TTL    = timedelta(hours=4)
-_CORRELATION_TTL = timedelta(minutes=30)
-
-
-@app.get("/api/options/{symbol}/expirations")
-def get_option_expirations(symbol: str):
-    sym = symbol.upper()
-    key = f"options:exps:{sym}"
-    cached = cache_get(key, _OPTIONS_TTL)
-    if cached is not None:
-        return cached
-    try:
-        dates = list(yf.Ticker(sym, session=_session).options)
-        result = {"symbol": sym, "expirations": dates}
-        cache_set(key, result)
-        return result
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-@app.get("/api/options/{symbol}")
-def get_option_chain(symbol: str, expiry: str | None = None):
-    sym = symbol.upper()
-    key = f"options:chain:{sym}:{expiry}"
-    cached = cache_get(key, _OPTIONS_TTL)
-    if cached is not None:
-        return cached
-    try:
-        ticker = yf.Ticker(sym, session=_session)
-        if not expiry:
-            exps = ticker.options
-            if not exps:
-                return {"calls": [], "puts": [], "putCallRatio": None, "expiry": None}
-            expiry = exps[0]
-        chain = ticker.option_chain(expiry)
-
-        def process_df(df, side):
-            rows = []
-            for _, row in df.iterrows():
-                # yfinance leaves volume/OI/IV/bid/ask as NaN (not None) for
-                # illiquid strikes — `x or 0` doesn't catch that since NaN is
-                # truthy, so int(NaN) used to blow up. _safe_float catches it.
-                vol = int(_safe_float(row.get("volume")) or 0)
-                oi  = int(_safe_float(row.get("openInterest")) or 0)
-                iv  = _safe_float(row.get("impliedVolatility"))
-                rows.append({
-                    "strike":          round(float(row["strike"]), 2),
-                    "bid":             round(_safe_float(row.get("bid")) or 0, 2),
-                    "ask":             round(_safe_float(row.get("ask")) or 0, 2),
-                    "lastPrice":       round(_safe_float(row.get("lastPrice")) or 0, 2),
-                    "volume":          vol,
-                    "openInterest":    oi,
-                    "impliedVolatility": round(iv * 100, 1) if iv else None,
-                    "inTheMoney":      bool(row.get("inTheMoney", False)),
-                    "unusual":         vol >= 500 and (oi == 0 or vol > oi * 2),
-                })
-            return rows
-
-        calls = process_df(chain.calls, "call")
-        puts  = process_df(chain.puts,  "put")
-        total_call_oi = sum(r["openInterest"] for r in calls)
-        total_put_oi  = sum(r["openInterest"] for r in puts)
-        result = {
-            "symbol": sym, "expiry": expiry,
-            "calls": calls, "puts": puts,
-            "putCallRatio": round(total_put_oi / total_call_oi, 2) if total_call_oi > 0 else None,
-            "totalCallOI": total_call_oi, "totalPutOI": total_put_oi,
-        }
-        cache_set(key, result)
-        return result
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-# ── Dividends ─────────────────────────────────────────────────────────────────
-
-class DividendRequest(BaseModel):
-    symbols: List[str]
-
-
-@app.post("/api/dividends")
-def get_dividends(body: DividendRequest):
-    key = f"dividends:{'|'.join(sorted(body.symbols))}"
-    cached = cache_get(key, _DIVIDEND_TTL)
-    if cached is not None:
-        return cached
-
-    def fetch_div(sym: str):
-        try:
-            ticker = yf.Ticker(sym, session=_session)
-            info   = ticker.info
-            divs   = ticker.dividends
-            history = []
-            if len(divs) > 0:
-                for ts, amt in divs.tail(8).items():
-                    history.append({"date": str(ts.date()), "amount": round(float(amt), 4)})
-            ex_ts = info.get("exDividendDate")
-            ex_date = None
-            if ex_ts:
-                try:
-                    ex_date = datetime.utcfromtimestamp(int(ex_ts)).strftime("%Y-%m-%d")
-                except Exception:
-                    pass
-            return {
-                "symbol":        sym,
-                "dividendRate":  _safe_float(info.get("dividendRate")),
-                "dividendYield": round(float(info.get("dividendYield") or 0) * 100, 2),
-                "exDividendDate": ex_date,
-                "payoutRatio":   _safe_float(info.get("payoutRatio")),
-                "lastDividend":  round(float(divs.iloc[-1]), 4) if len(divs) > 0 else None,
-                "history":       history,
-                "paysDividend":  bool((info.get("dividendRate") or 0) > 0),
-            }
-        except Exception:
-            return {"symbol": sym, "error": True, "paysDividend": False, "history": []}
-
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        results = list(ex.map(fetch_div, body.symbols))
-
-    cache_set(key, results)
-    return results
-
-
-# ── Correlation Matrix ────────────────────────────────────────────────────────
-
-class CorrRequest(BaseModel):
-    symbols: List[str]
-    period:  str = "3mo"
-
-
-@app.post("/api/portfolio/correlation")
-def get_correlation(body: CorrRequest):
-    if len(body.symbols) < 2:
-        raise HTTPException(400, "Need at least 2 symbols")
-    key = f"corr:{'|'.join(sorted(body.symbols))}:{body.period}"
-    cached = cache_get(key, _CORRELATION_TTL)
-    if cached is not None:
-        return cached
-    try:
-        raw = yf.download(body.symbols, period=body.period, auto_adjust=True, progress=False)["Close"]
-        closes = raw.to_frame(body.symbols[0]) if isinstance(raw, pd.Series) else raw
-        closes = closes.ffill().dropna(how="all")
-        returns = closes.pct_change().dropna()
-        syms = [s for s in body.symbols if s in returns.columns]
-        if len(syms) < 2:
-            raise HTTPException(400, "Insufficient price data")
-        corr = returns[syms].corr()
-        matrix = [
-            [round(float(corr.loc[s1, s2]), 3) if not np.isnan(corr.loc[s1, s2]) else None
-             for s2 in syms]
-            for s1 in syms
-        ]
-        result = {"symbols": syms, "matrix": matrix}
-        cache_set(key, result)
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
 # ── Insider Transactions ──────────────────────────────────────────────────────
 
 _INSIDER_TTL = timedelta(hours=4)
@@ -1587,66 +1065,6 @@ def get_analyst_data(symbol: str):
         raise HTTPException(500, str(e))
 
 
-# ── Sector Rotation ───────────────────────────────────────────────────────────
-
-_SECTOR_TTL = timedelta(minutes=15)
-
-
-def _fetch_sector_perf(info: dict) -> dict:
-    sym = info["symbol"]
-    cache_key = f"sector:{sym}"
-    cached = cache_get(cache_key, _SECTOR_TTL)
-    if cached is not None:
-        return cached
-
-    try:
-        t = yf.Ticker(sym, session=_session)
-        hist = t.history(period="3mo")
-        if hist.empty:
-            return {**info, "error": "no data"}
-        closes = hist["Close"]
-        fi = t.fast_info
-        price = _safe_float(fi.last_price) or float(closes.iloc[-1])
-        prev  = _safe_float(fi.previous_close) or (float(closes.iloc[-2]) if len(closes) > 1 else price)
-
-        def chg(n):
-            return round((float(closes.iloc[-1]) / float(closes.iloc[-1 - n]) - 1) * 100, 2) if len(closes) > n else None
-
-        result = {
-            **info,
-            "price": round(price, 2),
-            "chg1d": round((price - prev) / prev * 100, 2) if prev else None,
-            "chg1w": chg(5),
-            "chg1m": chg(21),
-            "chg3m": chg(63),
-        }
-    except Exception as e:
-        logger.warning("sector perf failed %s: %s", sym, e)
-        result = {**info, "error": str(e)}
-
-    cache_set(cache_key, result)
-    return result
-
-
-@app.get("/api/market/sectors")
-def get_sector_rotation():
-    cache_key = "market:sectors"
-    cached = cache_get(cache_key, _SECTOR_TTL)
-    if cached is not None:
-        return cached
-
-    with ThreadPoolExecutor(max_workers=6) as ex:
-        futures = {ex.submit(_fetch_sector_perf, s): s["symbol"] for s in _SECTOR_ETFS}
-        perf_map = {}
-        for f in as_completed(futures):
-            data = f.result()
-            perf_map[data["symbol"]] = data
-
-    results = [perf_map.get(s["symbol"], s) for s in _SECTOR_ETFS]
-    cache_set(cache_key, results)
-    return results
-
-
 # ── AI News Sentiment ─────────────────────────────────────────────────────────
 
 _SENTIMENT_TTL = timedelta(hours=1)
@@ -1702,176 +1120,6 @@ def get_sentiment(symbol: str):
     return result
 
 
-# ── WebSocket live quotes ─────────────────────────────────────────────────────
-
-@app.websocket("/ws/quotes")
-async def ws_quotes(websocket: WebSocket, symbols: str = ""):
-    await websocket.accept()
-    syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
-    if not syms:
-        await websocket.close()
-        return
-    loop = asyncio.get_event_loop()
-    try:
-        while True:
-            results = await loop.run_in_executor(
-                None,
-                lambda: [_fetch_quote(s) for s in syms],
-            )
-            await websocket.send_json(results)
-            await asyncio.sleep(4)
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        logger.warning("WS quotes error: %s", e)
-
-
-# ── Smart Alerts 2.0 ──────────────────────────────────────────────────────────
-
-SMART_ALERT_TYPES = {
-    "volume_spike":       {"param": "multiplier",  "default": 2.0,  "label": "Volume Spike"},
-    "gap_up":             {"param": "pct",          "default": 2.0,  "label": "Gap Up"},
-    "gap_down":           {"param": "pct",          "default": 2.0,  "label": "Gap Down"},
-    "rsi_overbought":     {"param": "threshold",    "default": 70.0, "label": "RSI Overbought"},
-    "rsi_oversold":       {"param": "threshold",    "default": 30.0, "label": "RSI Oversold"},
-    "golden_cross":       {"param": None,           "default": None, "label": "Golden Cross (MA50/200)"},
-    "death_cross":        {"param": None,           "default": None, "label": "Death Cross (MA50/200)"},
-    "earnings_proximity": {"param": "days",         "default": 5,    "label": "Earnings Proximity"},
-}
-
-
-class SmartAlertCreate(BaseModel):
-    symbol:     str
-    alert_type: str
-    params:     dict = {}
-
-
-@app.get("/api/alerts/smart")
-def list_smart_alerts():
-    with db_session() as db:
-        rules = db.query(SmartAlertRule).filter(SmartAlertRule.active == 1).order_by(SmartAlertRule.created_at.desc()).all()
-        return [{"id": r.id, "symbol": r.symbol, "alert_type": r.alert_type,
-                 "params": json.loads(r.params), "created_at": str(r.created_at)} for r in rules]
-
-
-@app.post("/api/alerts/smart")
-def create_smart_alert(req: SmartAlertCreate):
-    sym = req.symbol.upper().strip()
-    if req.alert_type not in SMART_ALERT_TYPES:
-        raise HTTPException(400, f"Unknown alert_type. Valid: {list(SMART_ALERT_TYPES)}")
-    with db_session() as db:
-        rule = SmartAlertRule(symbol=sym, alert_type=req.alert_type, params=json.dumps(req.params))
-        db.add(rule)
-        db.flush()
-        return {"id": rule.id, "symbol": sym, "alert_type": req.alert_type}
-
-
-@app.delete("/api/alerts/smart/{rule_id}")
-def delete_smart_alert(rule_id: int):
-    with db_session() as db:
-        rule = db.query(SmartAlertRule).filter(SmartAlertRule.id == rule_id).first()
-        if not rule:
-            raise HTTPException(404, "Rule not found")
-        rule.active = 0
-    return {"ok": True}
-
-
-def _check_smart_rule(rule: dict) -> dict | None:
-    sym        = rule["symbol"]
-    atype      = rule["alert_type"]
-    params     = rule["params"]
-
-    try:
-        t = yf.Ticker(sym, session=_session)
-        hist = t.history(period="1y", interval="1d", auto_adjust=True)
-        if len(hist) < 5:
-            return None
-        closes  = hist["Close"].dropna().values.astype(float)
-        volumes = hist["Volume"].dropna().values.astype(float)
-
-        if atype == "volume_spike":
-            mult   = params.get("multiplier", 2.0)
-            avg20  = float(np.mean(volumes[-21:-1])) if len(volumes) >= 21 else float(np.mean(volumes[:-1]))
-            today  = float(volumes[-1])
-            if avg20 > 0 and today >= mult * avg20:
-                return {"triggered": True, "detail": f"Volume {today/avg20:.1f}× avg20 ({int(today):,} vs {int(avg20):,})"}
-
-        elif atype in ("gap_up", "gap_down"):
-            pct_thresh = params.get("pct", 2.0)
-            prev_close = float(hist["Close"].dropna().iloc[-2])
-            today_open = float(hist["Open"].dropna().iloc[-1])
-            gap_pct    = (today_open / prev_close - 1) * 100
-            if atype == "gap_up"   and gap_pct >= pct_thresh:
-                return {"triggered": True, "detail": f"Gapped up {gap_pct:+.2f}% at open"}
-            if atype == "gap_down" and gap_pct <= -pct_thresh:
-                return {"triggered": True, "detail": f"Gapped down {gap_pct:+.2f}% at open"}
-
-        elif atype in ("rsi_overbought", "rsi_oversold"):
-            thresh = params.get("threshold", 70 if atype == "rsi_overbought" else 30)
-            rsi    = float(_calc_rsi(pd.Series(closes), 14).iloc[-1])
-            if atype == "rsi_overbought" and rsi >= thresh:
-                return {"triggered": True, "detail": f"RSI(14) = {rsi:.1f} ≥ {thresh}"}
-            if atype == "rsi_oversold"   and rsi <= thresh:
-                return {"triggered": True, "detail": f"RSI(14) = {rsi:.1f} ≤ {thresh}"}
-
-        elif atype in ("golden_cross", "death_cross"):
-            if len(closes) < 201:
-                return None
-            ma50_today  = float(np.mean(closes[-50:]))
-            ma200_today = float(np.mean(closes[-200:]))
-            ma50_prev   = float(np.mean(closes[-51:-1]))
-            ma200_prev  = float(np.mean(closes[-201:-1]))
-            if atype == "golden_cross" and ma50_prev <= ma200_prev and ma50_today > ma200_today:
-                return {"triggered": True, "detail": f"MA50 ({ma50_today:.2f}) crossed above MA200 ({ma200_today:.2f})"}
-            if atype == "death_cross"  and ma50_prev >= ma200_prev and ma50_today < ma200_today:
-                return {"triggered": True, "detail": f"MA50 ({ma50_today:.2f}) crossed below MA200 ({ma200_today:.2f})"}
-
-        elif atype == "earnings_proximity":
-            days_thresh = int(params.get("days", 5))
-            cal = t.calendar
-            if cal is not None and not cal.empty:
-                ed_col = [c for c in cal.columns if "Earnings" in c]
-                if ed_col:
-                    ed = cal[ed_col[0]].dropna()
-                    if not ed.empty:
-                        next_date = pd.to_datetime(ed.iloc[0]).date()
-                        days_away = (next_date - datetime.utcnow().date()).days
-                        if 0 <= days_away <= days_thresh:
-                            return {"triggered": True, "detail": f"Earnings in {days_away} day(s) ({next_date})"}
-
-    except Exception as e:
-        logger.debug("smart alert check failed %s/%s: %s", sym, atype, e)
-
-    return None
-
-
-@app.post("/api/alerts/smart/scan")
-async def scan_smart_alerts():
-    with db_session() as db:
-        rules = db.query(SmartAlertRule).filter(SmartAlertRule.active == 1).all()
-        rule_dicts = [{"id": r.id, "symbol": r.symbol, "alert_type": r.alert_type,
-                       "params": json.loads(r.params)} for r in rules]
-
-    if not rule_dicts:
-        return []
-
-    loop    = asyncio.get_event_loop()
-    futures = {loop.run_in_executor(None, _check_smart_rule, r): r for r in rule_dicts}
-    results = []
-    for fut, rule in futures.items():
-        outcome = await fut
-        if outcome and outcome.get("triggered"):
-            results.append({
-                "id":         rule["id"],
-                "symbol":     rule["symbol"],
-                "alert_type": rule["alert_type"],
-                "label":      SMART_ALERT_TYPES.get(rule["alert_type"], {}).get("label", rule["alert_type"]),
-                "detail":     outcome.get("detail", ""),
-            })
-    return results
-
-
-# ── News Sentiment Engine ──────────────────────────────────────────────────────
 
 _SENTIMENT_TTL = timedelta(hours=2)
 

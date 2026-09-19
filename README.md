@@ -215,7 +215,7 @@ Bypass for a specific commit with `git commit --no-verify` if you hit a false po
 ```
 stockmonitor/
 ├── backend/
-│   ├── main.py              FastAPI app (~4,700 lines) — most endpoints still live here;
+│   ├── main.py              FastAPI app (~4,000 lines) — most endpoints still live here;
 │   │                        being split into routers/ incrementally (see below)
 │   ├── edgar_utils.py       Shared SEC/EDGAR + generic helpers (_get_cik, _edgar_req,
 │   │                        _build_ticker_map, _parse_nport_xml, _fetch_opp_quote, _calc_rsi,
@@ -275,7 +275,20 @@ stockmonitor/
 │   │   ├── price_target_tracker.py      Watchlist → Price Targets
 │   │   ├── earnings_call_summarizer.py  Chart modal → Earnings tab (AI summary)
 │   │   ├── dcf_valuation.py             Research → DCF Valuation
-│   │   └── yield_curve.py               Markets → Yield Curve
+│   │   ├── yield_curve.py               Markets → Yield Curve
+│   │   ├── ai_stocks.py                 Markets → AI Growth Watch List — _AI_STOCKS also
+│   │   │                                 imported directly by ai_analyst_actions.py
+│   │   ├── ai_analyst_actions.py        Markets → Analyst Picks (AI upgrades/downgrades)
+│   │   ├── day_trader_scanners.py       Trading → Day Trader (gainers/losers/news)
+│   │   ├── screener.py                  Research → Screener (technical + fundamental presets)
+│   │   ├── options_chain.py             Chart modal → Options tab (full chain)
+│   │   ├── dividends.py                 Dividend info per symbol
+│   │   ├── correlation_matrix.py        Watchlist → Correlation (POST /api/portfolio/correlation;
+│   │   │                                 a second, differently-routed Correlation Matrix section
+│   │   │                                 remains in main.py, pending extraction as market_correlation.py)
+│   │   ├── sector_rotation.py           Markets → Sector Rotation
+│   │   ├── websocket_quotes.py          /ws/quotes — real-time price feed powering the whole app
+│   │   └── smart_alerts.py              Watchlist → Smart Alerts (rule-based scanner)
 │   ├── ruff.toml            Lint gate config — see "Lint gate" below
 │   ├── requirements.txt
 │   ├── requirements-dev.txt Dev-only deps (ruff, pytest) — not deployed

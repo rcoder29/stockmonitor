@@ -4,6 +4,35 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: AI Stocks, AI Analyst Actions, Day Trader Scanners, Screener, Options Chain, Dividends, Correlation Matrix, Sector Rotation, WebSocket Live Quotes, Smart Alerts 2.0
+
+Continued the router extraction (see prior entries below) with 10 more sections. `routers/ai_analyst_actions.py` imports `_AI_STOCKS` directly from the new `routers/ai_stocks.py` (module-level, no cycle) rather than deferring through `main.py` — the same trick used earlier for Custom Screener/NLP Screener. `_fetch_screener_quotes` and `_fetch_feed` (Day Trader Scanners) and `_fetch_fundamentals` (Screener) are still main.py-anchored, so those got the usual function-scoped deferred import.
+
+Split the three TTL constants clustered under the old "Options Chain" section header (`_OPTIONS_TTL`, `_DIVIDEND_TTL`, `_CORRELATION_TTL`) to live locally with the section that actually consumes each one, since each turned out to be single-consumer despite being defined together.
+
+Live verification surfaced and fixed a third instance of the "today's incomplete trading session leaves a NaN Close" bug class (same root cause as the Position Sizing ATR fix two batches ago, different call sites):
+- **`_fetch_perf_one`** (still in `main.py`, shared by AI Stocks, Home Summary, and Market Performance) took `hist["Close"].iloc[-1]` without dropping NaN — broken for every symbol whenever called mid-session. Fixed by dropping NaN before indexing; this also fixed `/api/home/summary` and `/api/market/performance`, which had been intermittently 500ing and were wrongly attributed to a Yahoo Finance rate limit in the previous batch's notes.
+- **`routers/sector_rotation.py`**'s `_fetch_sector_perf` had the identical unguarded `closes.iloc[-1]` pattern for its `chg1w`/`chg1m`/`chg3m` deltas.
+
+Both fixes were masked for a while during testing by the app's own DB-backed response cache still holding NaN-containing results from before the fix — a good reminder to clear the relevant `cache_entries` rows before trusting a "still failing" result while iterating on a fix.
+
+### New
+- `backend/routers/ai_stocks.py`, `ai_analyst_actions.py`, `day_trader_scanners.py`, `screener.py`, `options_chain.py`, `dividends.py`, `correlation_matrix.py`, `sector_rotation.py`, `websocket_quotes.py`, `smart_alerts.py` — new
+
+### Fixed
+- `backend/main.py` — `_fetch_perf_one` now drops NaN closes before indexing.
+- `backend/routers/sector_rotation.py` — same NaN-guard for `_fetch_sector_perf`.
+- `backend/routers/smart_alerts.py` — `earnings_proximity` rule now uses the dict-based `.calendar` access (matching the `rich_earnings_calendar.py` fix from the previous batch) instead of the old DataFrame-shaped API; this rule silently never fired before.
+
+### Verified
+- 52/52 backend tests; audited every `from main import` across all routers; live smoke tests on all endpoints in this batch, including re-testing after clearing stale cache rows to confirm the NaN fixes actually took effect (not just a cache hit hiding the old bug); full route sweep confirms `/api/home/summary`, `/api/ai-stocks`, and `/api/market/sectors` — all previously 500ing — are now clean, with zero new regressions.
+
+### Files changed
+- The 10 new router files above — new
+- `backend/main.py` — all 10 sections removed; `_fetch_perf_one` NaN fix; dead imports/constants cleaned up (`WebSocket`, `WebSocketDisconnect`, `numpy`, `SmartAlertRule`, `_calc_rsi`, `_SECTOR_ETFS`, `SCREENER_UNIVERSE`, dead `_AI_TTL`/`_AI_ANLST_TTL` duplicates in the TTLs block)
+
+---
+
 ## 2026-09-18 — Backend Modularization: Position Sizing, Portfolio Optimizer, Rich Earnings Calendar, Options P&L, Portfolio X-Ray, Sector Momentum, Market Breadth, Fundamental Comparison, Price Target Tracker, Earnings Call Summarizer, DCF Valuation, Yield Curve & Rates
 
 Continued the router extraction (see prior entries below) with the largest batch yet — 12 sections. Moved two more small, dependency-free constants into `edgar_utils.py` (`_SECTOR_ETFS`, shared by Sector Rotation and Sector Momentum Ranker; `SCREENER_UNIVERSE`, shared by Screener and Market Breadth Dashboard) so both consumers could be handled without deferred imports. Also found and merged in an unlabeled endpoint (`/api/options/unusual`, no `# ── ` section header) that a line-range-based extraction would otherwise have silently swept into Yield Curve & Rates — it's a second, explicit-symbols options-unusual-activity scanner, so it now lives alongside the existing scanner in `routers/unusual_options.py`.
