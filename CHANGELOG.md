@@ -4,6 +4,30 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Investor Education: Capital Structure & Derivatives (with a worked tree example)
+
+Enriched the Market Structure and Asset Classes layers (see prior entries below) with the piece the module was missing: how an issuer's different securities rank against each other, and how derivatives relate to an issuer without being a claim on it at all.
+
+Two new topics: **Capital Structure** (child of The Issuer Concept) explains the seniority stack — secured debt → senior unsecured debt → subordinated debt → preferred stock → common equity — and why the same issuer's securities carry very different risk/yield purely from where they sit in that stack. **Derivatives** (a new 8th asset class) explains that options, futures, swaps, and Credit Default Swaps (CDS) are side contracts between two *other* parties that derive their value from an issuer's securities or default risk — the issuer isn't a party to them and raises no capital from their trading.
+
+The Capital Structure topic centers on a worked example: a visual tree of a hypothetical issuer ("Acme Corp") showing every tier of its capital stack as a ranked, colored box (paid-first at top, paid-last at bottom), with a convertible-notes branch showing its embedded option, and a separate "Derivatives" zone below with dashed-style cross-references (Listed Options → Common Stock, CDS → Senior Unsecured Debt) showing exactly how a derivative *references* a tier without belonging to it.
+
+Existing topics got cross-links to both new ones: Equities, Corporate Bonds, Convertible Bonds (plus a new keyPoint on its embedded-option nature), and Credit Spread (plus a new keyPoint on CDS as the derivative-market parallel to a cash bond's credit spread).
+
+### New
+- Topics: `capital-structure` (structure layer) and `derivatives` (assets layer) in `investorEducationTopics.js`, each with `relatedIds` back to `issuer-concept`, `equities`, `corporate-bonds`, `convertible-bonds`.
+- `InvestorEducation.jsx`: a small `diagram` mechanism (`topic.diagram` key → `DIAGRAMS` registry) and the `CapitalStructureTree` component — a data-driven capital-stack visualization keyed off `CAPITAL_STACK`/`DERIVATIVE_EXAMPLES` constants, rendered only for the Capital Structure topic.
+
+### Verified
+- A Node script walked every topic's `parentId`/`childIds`/`relatedIds`/`layer` and confirmed all 30 topics resolve to real IDs with no dangling references, each layer still has exactly one root, and every child's `parentId` points back correctly.
+- `npx vite build` — new `fuchsia-*` Tailwind classes (used for the "this is a derivative reference" annotations) confirmed present in the built CSS.
+- `npx vitest run` — 90/90 existing frontend tests still pass.
+
+### Files changed
+- `frontend/src/data/investorEducationTopics.js`, `frontend/src/components/InvestorEducation.jsx` — modified
+
+---
+
 ## 2026-09-18 — Investor Education: Onion Map + Live Data Snapshots
 
 Enriched the Investor Education module (see prior entry below) with two additions: a visual "onion map" landing view, and live data grounding six of the topics in real current numbers.

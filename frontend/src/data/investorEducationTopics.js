@@ -118,7 +118,33 @@ export const TOPICS = {
       "An issuer's creditworthiness (or growth prospects) directly drives what its securities are worth.",
       "Governments, corporations, and funds are all 'issuers' — just of different kinds of claims.",
     ],
-    parentId: 'public-vs-private', childIds: ['private-markets'], relatedIds: [],
+    parentId: 'public-vs-private', childIds: ['private-markets', 'capital-structure'], relatedIds: ['derivatives'],
+  },
+  'capital-structure': {
+    id: 'capital-structure', layer: 'structure', title: 'The Capital Structure: Ranking Claims on an Issuer',
+    oneLiner: 'Every security an issuer creates is a claim on it — capital structure is the order those claims get paid in.',
+    summary: "A single company can have many different securities outstanding at once — a secured loan, senior bonds, subordinated bonds, preferred stock, common stock — and each is really just a different-ranked claim on the same underlying business. Capital structure is the hierarchy those claims are paid in during a bankruptcy or liquidation: secured debt first (backed by specific collateral), then senior unsecured debt, then subordinated ('junior') debt, then preferred stock, and common equity holders last. That ranking is exactly why one issuer's bonds are safer — and lower-yielding — than its own stock, and why its 'junior' debt yields more than its 'senior' debt.",
+    keyPoints: [
+      'Seniority determines who gets paid first if an issuer defaults or liquidates: secured debt → senior unsecured debt → subordinated debt → preferred stock → common equity.',
+      "The same issuer's securities can carry very different risk and yield purely because of where they sit in this stack — not because the underlying business changed.",
+      "Preferred stock is a hybrid: it ranks above common equity but below all debt, usually pays a fixed dividend, and typically doesn't vote.",
+      'A convertible bond sits with the debt until conversion, but carries an embedded option to convert into common equity — a hybrid that reaches across the stack (see Derivatives).',
+    ],
+    parentId: 'issuer-concept', childIds: [], relatedIds: ['corporate-bonds', 'convertible-bonds', 'equities', 'derivatives'],
+    diagram: 'capital-structure-tree',
+  },
+  'derivatives': {
+    id: 'derivatives', layer: 'assets', title: "Derivatives: Contracts Built on an Issuer's Securities",
+    oneLiner: "A contract whose value comes from another security or event — a side bet the issuer isn't even a party to.",
+    summary: "A derivative doesn't represent a direct claim on an issuer the way a bond or share does — it's a contract between two other parties whose payoff derives from the price of an underlying security, index, or event. Options and futures reference a stock, bond, or index price; a Credit Default Swap (CDS) references a specific issuer's default risk directly, acting like insurance against that issuer failing to pay its debt. Because no capital changes hands with the issuer, trading derivatives doesn't fund the company at all — it just lets other investors transfer or take on risk tied to that issuer's fortunes, often with far more leverage than owning the underlying security would allow.",
+    keyPoints: [
+      "A derivative 'derives' its value from an underlying security or event — it's a side contract between two other investors, not a new claim registered against the issuer.",
+      'Options (calls/puts), futures/forwards, swaps, and Credit Default Swaps (CDS) are the main derivative types — CDS references an issuer\'s default risk most directly.',
+      "A convertible bond's conversion right is itself an embedded derivative (a call option on the issuer's stock) bundled inside an otherwise ordinary bond.",
+      "Derivatives let investors take much larger, more leveraged positions on an issuer's fortunes than buying the underlying security outright.",
+    ],
+    parentId: 'asset-classes-overview', childIds: [], relatedIds: ['issuer-concept', 'capital-structure', 'equities', 'corporate-bonds'],
+    linkTab: 'optionstracker', linkLabel: 'Open Options P&L Tracker',
   },
   'private-markets': {
     id: 'private-markets', layer: 'structure', title: 'Private Markets: Placement, VC & PE',
@@ -199,7 +225,7 @@ export const TOPICS = {
       'Diversifying across asset classes reduces reliance on any single economic driver.',
     ],
     parentId: null,
-    childIds: ['equities', 'fixed-income', 'currencies-fx', 'commodities', 'real-estate', 'private-equity-vc', 'crypto-assets'],
+    childIds: ['equities', 'fixed-income', 'currencies-fx', 'commodities', 'real-estate', 'private-equity-vc', 'crypto-assets', 'derivatives'],
     relatedIds: [],
   },
   'equities': {
@@ -211,7 +237,7 @@ export const TOPICS = {
       'Valuation tools include P/E, P/B, and discounted cash flow (DCF) — how much future profit is worth today.',
       'Dividends and buybacks are the two ways companies return profit directly to shareholders.',
     ],
-    parentId: 'asset-classes-overview', childIds: [], relatedIds: ['going-public'],
+    parentId: 'asset-classes-overview', childIds: [], relatedIds: ['going-public', 'capital-structure', 'derivatives'],
     linkTab: 'fundamentals', linkLabel: 'Open Fundamentals',
   },
   'fixed-income': {
@@ -256,7 +282,7 @@ export const TOPICS = {
       "'Investment grade' vs 'high yield (junk)' is the main quality split in corporate bonds.",
       "The credit spread over Treasuries is the market's live read on how risky a company looks right now.",
     ],
-    parentId: 'fixed-income', childIds: [], relatedIds: ['credit-spread'],
+    parentId: 'fixed-income', childIds: [], relatedIds: ['credit-spread', 'capital-structure', 'derivatives'],
     linkTab: 'corporatebonds', linkLabel: 'Open Corporate Bonds',
   },
   'convertible-bonds': {
@@ -267,8 +293,9 @@ export const TOPICS = {
       "Convertibles trade with 'bond floor' downside protection and equity-like upside if the stock rallies.",
       'Companies use them to raise debt more cheaply than a straight bond would allow.',
       'The conversion price is the stock price at which converting becomes more valuable than holding the bond.',
+      'The conversion right is itself an embedded derivative — a call option on the issuer\'s stock bundled into an otherwise ordinary bond.',
     ],
-    parentId: 'fixed-income', childIds: [], relatedIds: [],
+    parentId: 'fixed-income', childIds: [], relatedIds: ['capital-structure', 'derivatives'],
     linkTab: 'convertiblebonds', linkLabel: 'Open Convertible Bonds',
   },
   'currencies-fx': {
@@ -369,8 +396,9 @@ export const TOPICS = {
       "Credit spread = issuer's bond yield − Treasury yield at the same maturity.",
       "Widening spreads across the market signal rising systemic risk, not just one company's trouble.",
       'A lower credit rating generally means a wider spread and a higher cost of borrowing for that issuer.',
+      "A Credit Default Swap (CDS) trades that same default risk directly, without owning the bond — its spread typically moves in step with the cash bond's credit spread.",
     ],
-    parentId: 'risk-free-rate', childIds: ['duration-risk'], relatedIds: ['corporate-bonds'],
+    parentId: 'risk-free-rate', childIds: ['duration-risk'], relatedIds: ['corporate-bonds', 'derivatives'],
     linkTab: 'corporatebonds', linkLabel: 'See Credit Spread vs. Treasury Curve',
   },
   'duration-risk': {

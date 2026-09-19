@@ -142,6 +142,115 @@ function LiveStat({ topic }) {
   )
 }
 
+// ── Worked example: an issuer's capital structure as a tree ───────────────────
+
+const CAPITAL_STACK = [
+  {
+    key: 'secured',
+    label: 'Secured Debt',
+    example: 'e.g. a secured term loan or mortgage bond, backed by specific collateral (a factory, equipment, real estate).',
+    payRank: 'Paid 1st — first claim on the pledged collateral',
+    accent: 'border-sky-600 bg-sky-950/30',
+  },
+  {
+    key: 'senior-unsecured',
+    label: 'Senior Unsecured Debt',
+    example: 'e.g. "Senior Notes due 2030" — an unsecured bond with no specific collateral pledged.',
+    payRank: 'Paid 2nd — ahead of every other unsecured claim',
+    accent: 'border-sky-700 bg-sky-950/20',
+  },
+  {
+    key: 'subordinated',
+    label: "Subordinated (\"Junior\") Debt",
+    example: 'e.g. "Subordinated Notes due 2032" — contractually ranked behind senior debt, so it pays a higher coupon to compensate.',
+    payRank: 'Paid 3rd — behind senior debt, still ahead of all equity',
+    accent: 'border-violet-700 bg-violet-950/20',
+    branch: {
+      label: 'Convertible Notes (hybrid)',
+      note: 'A bond with an embedded option to convert into Common Stock — ranks with the debt until converted, then becomes equity.',
+      references: 'Embedded derivative: a call option on Common Stock',
+    },
+  },
+  {
+    key: 'preferred',
+    label: 'Preferred Stock',
+    example: 'Fixed dividend, usually no vote — ranks above common stock, below every form of debt.',
+    payRank: 'Paid 4th — after every debtholder',
+    accent: 'border-emerald-700 bg-emerald-950/20',
+  },
+  {
+    key: 'common',
+    label: 'Common Stock',
+    example: 'Ownership with unlimited upside — and the residual claim if anything is left over.',
+    payRank: 'Paid last — but no ceiling on upside while the business grows',
+    accent: 'border-amber-700 bg-amber-950/20',
+  },
+]
+
+const DERIVATIVE_EXAMPLES = [
+  {
+    label: 'Listed Options (Calls/Puts)',
+    note: "Traded between two other investors, settled based on Acme's stock price.",
+    references: 'Common Stock',
+  },
+  {
+    label: 'Credit Default Swap (CDS)',
+    note: 'Acts like insurance — pays out if Acme fails to pay its debt as promised.',
+    references: 'Senior Unsecured Debt',
+  },
+]
+
+function CapitalStructureTree() {
+  return (
+    <div className="space-y-4">
+      <div className="text-xs text-gray-500">
+        Illustrative example — <span className="text-gray-300 font-medium">"Acme Corp,"</span> a hypothetical issuer.
+        Every box below is a different security Acme itself issued — all claims on the <em>same</em> company, ranked by who gets paid first if Acme runs into trouble.
+      </div>
+
+      <div className="space-y-2">
+        {CAPITAL_STACK.map(tier => (
+          <div key={tier.key}>
+            <div className={`border-l-4 rounded-r-lg px-3 py-2.5 ${tier.accent}`}>
+              <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-1">
+                <div className="text-sm font-semibold text-white">{tier.label}</div>
+                <div className="text-[10.5px] text-gray-500 font-medium shrink-0">{tier.payRank}</div>
+              </div>
+              <div className="text-xs text-gray-400 mt-1 leading-relaxed">{tier.example}</div>
+            </div>
+            {tier.branch && (
+              <div className="ml-6 mt-1.5 border-l-4 border-fuchsia-700 bg-fuchsia-950/20 rounded-r-lg px-3 py-2">
+                <div className="text-xs font-semibold text-white">↳ {tier.branch.label}</div>
+                <div className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{tier.branch.note}</div>
+                <div className="text-[10.5px] text-fuchsia-400 mt-1">↳ {tier.branch.references}</div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="pt-1">
+        <div className="text-xs text-gray-500 mb-2">
+          Derivatives — contracts other investors trade <em>referencing</em> Acme's securities. Acme isn't a party to these and raises no capital from them.
+        </div>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {DERIVATIVE_EXAMPLES.map(d => (
+            <div key={d.label} className="border-l-4 border-gray-600 bg-gray-900/60 rounded-r-lg px-3 py-2.5">
+              <div className="text-sm font-semibold text-white">{d.label}</div>
+              <div className="text-xs text-gray-400 mt-1 leading-relaxed">{d.note}</div>
+              <div className="text-[10.5px] text-fuchsia-400 mt-1.5">↳ References: {d.references}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const DIAGRAMS = {
+  'capital-structure-tree': CapitalStructureTree,
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function InvestorEducation({ onNavigate }) {
@@ -154,6 +263,7 @@ export default function InvestorEducation({ onNavigate }) {
   const breadcrumb = useMemo(() => pathTo(activeId), [activeId])
   const children = (topic.childIds || []).map(id => TOPICS[id])
   const related = (topic.relatedIds || []).map(id => TOPICS[id])
+  const Diagram = topic.diagram ? DIAGRAMS[topic.diagram] : null
 
   function goto(id) {
     setActiveId(id)
@@ -275,6 +385,8 @@ export default function InvestorEducation({ onNavigate }) {
             </li>
           ))}
         </ul>
+
+        {Diagram && <Diagram />}
 
         <LiveStat topic={topic} />
 
