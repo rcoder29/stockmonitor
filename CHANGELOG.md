@@ -4,6 +4,53 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-18 — Backend Modularization: the final batch — 15 sections, effort complete
+
+Extracted every remaining "safe" section in one pass: Index Constituent Heatmap, Tax Advisor, Short Squeeze Scanner, IPO & Lockup Calendar, Fed Watch, AI Morning Briefing, Crypto Dashboard, AI Portfolio Review, Economic Dashboard, AI Stock Analyzer, Dividend Tracker, Watchlist Heatmap, Earnings Surprise Tracker, Earnings Strategy Analyzer, and a second, differently-routed Correlation Matrix (`GET /api/market/correlation`, now `routers/market_correlation.py` — distinct from `routers/correlation_matrix.py`'s `POST /api/portfolio/correlation`, confirmed no cache-key collision despite both starting with `corr:`).
+
+**`main.py` is now 532 lines, down from 12,269 at the start of this effort (96% reduction).** What's left is exactly what was scoped out from the beginning as the permanent core: `_fetch_quote`, `_fetch_fundamentals`, `_fetch_perf_one`, `_fetch_screener_quotes`, `_fetch_feed` and their TTLs (TTLs, Fundamentals, Market performance, Market summary sections) — used by nearly every router in the app via the function-scoped deferred-import pattern — plus the trivial Health check and the Serve React Build (SPA catchall) sections. This is the natural floor for this architecture; extracting the core itself would just move the "everything imports from here" problem to a different file without reducing complexity.
+
+Found a fourth instance of the stale DataFrame-shaped `.calendar` bug, this time in AI Stock Analyzer's `_build_snapshot` (used by both the stock snapshot and AI analysis endpoints) — fixed with the same dict-based access pattern used in the three earlier fixes. Also confirmed, by reading it closely, that Earnings Strategy Analyzer's own `.calendar` handling was already correct (it has a defensive `isinstance(cal, dict)` branch) — good evidence the fix pattern is now the right one to reach for whenever `.calendar` shows up.
+
+### New
+- 15 new router files: `index_constituents.py`, `tax_advisor.py`, `short_squeeze_scanner.py`, `ipo_lockup_calendar.py`, `fed_watch.py`, `ai_morning_briefing.py`, `crypto_dashboard.py`, `ai_portfolio_review.py`, `economic_dashboard.py`, `ai_stock_analyzer.py`, `dividend_tracker.py`, `watchlist_heatmap.py`, `earnings_surprise_tracker.py`, `earnings_strategy_analyzer.py`, `market_correlation.py`
+
+### Fixed
+- `routers/ai_stock_analyzer.py` — `_build_snapshot`'s earnings-date lookup rewritten to the proven dict-based `.calendar` access.
+- `backend/tests/test_main.py` — `TestIndexConstituents`'s mocks patched `main._fetch_market_cap`, which moved entirely into `routers/index_constituents.py` during this batch (a local helper, not deferred-imported) — updated to `patch("routers.index_constituents._fetch_market_cap", ...)`. The `_fetch_perf_one` mocks in the same tests correctly stay pointed at `main` since that one is still deferred-imported from there.
+
+### Verified
+- 52/52 backend tests (after the mock-target fix above, found by actually running the suite — not caught by ruff or static checks); audited every `from main import` across all routers; live smoke tests on 13 of the 15 endpoints with real data. The remaining two (`/api/market/stock-snapshot`, `/api/ai/stock-analyze`) hit an active Yahoo Finance rate limit from this session's cumulative testing volume (confirmed via direct `YFRateLimitError` from a raw function call, not an application bug) — verified the `.calendar` fix logic in isolation instead, against the exact dict shape observed live earlier this session, with the same code path already proven correct in three prior fixes. Full route sweep shows the same baseline set of param-required 422s plus three new timeouts on previously-working, untouched endpoints (`/api/portfolio/net-exposure`, `/api/home/summary`, `/api/portfolio/optimize`) consistent with the same rate limit, not a regression.
+
+### Files changed
+- The 15 new router files above — new
+- `backend/main.py` — all 15 sections removed; dead imports cleaned up (`HTTPException`, `StreamingResponse`, `BaseModel`, `pandas`, `json`, `Anthropic`, `db_session`, `PortfolioPosition`, `_finite_or_none`, `_edgar_req`, `_TICKER_RE`)
+- `backend/tests/test_main.py` — `TestIndexConstituents` mock target fix
+
+---
+
+## 2026-09-18 — Backend Modularization: AI News Sentiment, News Sentiment Engine, Custom News Feed, Market Sentiment Dashboard (the `_SENTIMENT_TTL` cluster)
+
+Continued the router extraction (see prior entries below) with the other TTL-name-collision cluster: `_SENTIMENT_TTL` was defined three times in `main.py` (`hours=1` for per-symbol AI sentiment, `hours=2` for batch news sentiment, `minutes=30` for the market-wide sentiment dashboard) with three genuinely different intended cadences. Unlike the `_ANALYST_TTL` fix two batches ago (where both definitions meant "the same concept" and got unified into one shared constant), these three are unrelated features that happened to reuse a generic name — so each got its own distinctly-named constant (`_AI_SENTIMENT_TTL`, `_NEWS_SENTIMENT_TTL`, `_MARKET_SENTIMENT_TTL`) restoring its originally-intended value, since Market Sentiment Dashboard's `minutes=30` (the last one assigned in the file) had been silently winning for all three at runtime.
+
+Also found a second cache-key collision of the same shape as the analyst one: `/api/sentiment/{symbol}` and `/api/news/sentiment` both built a cache key as `f"sentiment:{...}"`, which collapsed to the identical string for a single-symbol batch request (`sentiment:AAPL`) despite the two endpoints returning completely different response shapes. Fixed by giving the batch endpoint its own `news_sentiment:{symbols}` key.
+
+### New
+- `backend/routers/ai_news_sentiment.py`, `news_sentiment_engine.py`, `custom_news_feed.py`, `market_sentiment_dashboard.py` — new
+
+### Fixed
+- `_SENTIMENT_TTL` naming collision resolved into three distinct constants, each scoped to its own router, restoring each section's originally-intended cache duration.
+- `news_sentiment_engine.py`'s cache key changed from the colliding `sentiment:{symbols}` to `news_sentiment:{symbols}`.
+
+### Verified
+- 52/52 backend tests; cleared existing `sentiment:*`/`mkt_sentiment_v1` cache rows before testing; live smoke tests on all 4 endpoints — `/api/news/sentiment` reached the real Anthropic call and hit only the pre-existing invalid API key, confirming the cache-key fix and deferred `_fetch_feed` import both work; full route sweep, zero new regressions.
+
+### Files changed
+- The 4 new router files above — new
+- `backend/main.py` — all four sections removed; dead imports cleaned up (`Query`, `asyncio`, `List`)
+
+---
+
 ## 2026-09-18 — Backend Modularization: Insider Transactions, Analyst Ratings, Insider Trading Feed, Analyst Rating Tracker (the `_ANALYST_TTL`/`_INSIDER_TTL` cluster)
 
 Finally tackled the cluster that had been deliberately deferred across every prior batch: four sections sharing `_ANALYST_TTL`/`_INSIDER_TTL`, including the known pre-existing bug where `_ANALYST_TTL` was defined twice in `main.py` with different values (`hours=4` near Insider Transactions, `hours=6` near Analyst Rating Tracker) — Python module-level execution meant the later assignment silently won everywhere, so `hours=6` was already the value actually in effect at runtime for both consumers. Moved both TTLs into `edgar_utils.py` as a single source of truth (kept at `hours=6`/`hours=4` respectively, preserving actual current behavior rather than "fixing" it to a guessed original intent) — this makes the whole class of bug structurally impossible going forward.

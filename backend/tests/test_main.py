@@ -200,7 +200,7 @@ class TestIndexConstituents:
                      "5d": 2.0, "1m": 3.0, "3m": 4.0, "6m": 5.0, "1y": 10.0, "ytd": 8.0}
         mock_cap = ("AAPL", 3e12)
         with patch("main._fetch_perf_one", return_value=mock_perf), \
-             patch("main._fetch_market_cap", return_value=mock_cap):
+             patch("routers.index_constituents._fetch_market_cap", return_value=mock_cap):
             r = client.get("/api/index-constituents?index=DOW30")
         assert r.status_code == 200
         data = r.json()
@@ -212,7 +212,7 @@ class TestIndexConstituents:
                      "5d": None, "1m": None, "3m": None, "6m": None, "1y": None, "ytd": None}
         mock_cap = ("AAPL", 3e12)
         with patch("main._fetch_perf_one", return_value=mock_perf), \
-             patch("main._fetch_market_cap", return_value=mock_cap):
+             patch("routers.index_constituents._fetch_market_cap", return_value=mock_cap):
             r = client.get("/api/index-constituents?index=DOW30")
         item = r.json()[0]
         for field in ("symbol", "name", "sector", "actualWeight", "marketCap", "price", "1d"):
@@ -223,7 +223,7 @@ class TestIndexConstituents:
                      "5d": None, "1m": None, "3m": None, "6m": None, "1y": None, "ytd": None}
         # Return a meaningful cap for every call
         with patch("main._fetch_perf_one", return_value=mock_perf), \
-             patch("main._fetch_market_cap", side_effect=lambda s: (s, 1e12)):
+             patch("routers.index_constituents._fetch_market_cap", side_effect=lambda s: (s, 1e12)):
             r = client.get("/api/index-constituents?index=DOW30")
         items = r.json()
         # All weights should be equal (same cap) and sum close to 100
@@ -235,7 +235,7 @@ class TestIndexConstituents:
         mock_perf = {"symbol": "X", "price": 1.0, "1d": 0.0,
                      "5d": None, "1m": None, "3m": None, "6m": None, "1y": None, "ytd": None}
         with patch("main._fetch_perf_one", return_value=mock_perf), \
-             patch("main._fetch_market_cap", side_effect=lambda s: (s, 1e12)):
+             patch("routers.index_constituents._fetch_market_cap", side_effect=lambda s: (s, 1e12)):
             r = client.get("/api/index-constituents")
         assert r.status_code == 200
 

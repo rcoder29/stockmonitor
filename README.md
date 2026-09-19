@@ -215,8 +215,14 @@ Bypass for a specific commit with `git commit --no-verify` if you hit a false po
 ```
 stockmonitor/
 ├── backend/
-│   ├── main.py              FastAPI app (~3,500 lines) — most endpoints still live here;
-│   │                        being split into routers/ incrementally (see below)
+│   ├── main.py              FastAPI app (~530 lines) — modularization effort complete.
+│   │                        What remains is the permanent core: _fetch_quote,
+│   │                        _fetch_fundamentals, _fetch_perf_one, _fetch_screener_quotes,
+│   │                        _fetch_feed and their TTLs, used by nearly every router below
+│   │                        via a function-scoped deferred import, plus the Health check
+│   │                        and the Serve React Build (SPA catchall) sections. Started at
+│   │                        12,269 lines; extracting the core itself would just move the
+│   │                        "everything imports from here" problem elsewhere, not remove it.
 │   ├── edgar_utils.py       Shared SEC/EDGAR + generic helpers (_get_cik, _edgar_req,
 │   │                        _build_ticker_map, _parse_nport_xml, _fetch_opp_quote, _calc_rsi,
 │   │                        _SECTOR_ETFS, SCREENER_UNIVERSE, …) — imported by main.py and
@@ -293,9 +299,31 @@ stockmonitor/
 │   │   ├── analyst_ratings.py           Chart modal → Analysts tab (per-symbol) — cache key
 │   │   │                                 "analyst:{symbol}" is scoped to this endpoint only
 │   │   ├── insider_trading_feed.py      Markets → Insider Trading (market-wide feed)
-│   │   └── analyst_rating_tracker.py    Research → Analyst Ratings (multi-symbol tracker) —
-│   │                                     cache key "analyst_tracker:{symbol}", changed during
-│   │                                     extraction to stop colliding with analyst_ratings.py
+│   │   ├── analyst_rating_tracker.py    Research → Analyst Ratings (multi-symbol tracker) —
+│   │   │                                 cache key "analyst_tracker:{symbol}", changed during
+│   │   │                                 extraction to stop colliding with analyst_ratings.py
+│   │   ├── ai_news_sentiment.py         Chart modal → News tab (per-symbol AI sentiment)
+│   │   ├── news_sentiment_engine.py     Watchlist → News Sentiment (multi-symbol batch) —
+│   │   │                                 cache key "news_sentiment:{symbols}", changed during
+│   │   │                                 extraction to stop colliding with ai_news_sentiment.py
+│   │   ├── custom_news_feed.py          News → My News Feed
+│   │   ├── market_sentiment_dashboard.py  Markets → Sentiment (composite fear/greed score)
+│   │   ├── index_constituents.py        Markets → Index Heatmap + generic ETF search/holdings
+│   │   ├── tax_advisor.py               Portfolio → Tax Advisor (AI, state-aware)
+│   │   ├── short_squeeze_scanner.py     Markets → Short Squeeze
+│   │   ├── ipo_lockup_calendar.py       Markets → IPO & Lockups (live EDGAR-sourced)
+│   │   ├── fed_watch.py                 Markets → Fed Watch (FOMC cut/hold/hike odds)
+│   │   ├── ai_morning_briefing.py       AI Tools → Morning Briefing
+│   │   ├── crypto_dashboard.py          Markets → Crypto
+│   │   ├── ai_portfolio_review.py       AI Tools → Portfolio Review — _fetch_quote deferred
+│   │   ├── economic_dashboard.py        Markets → Economic Indicators (+ optional FRED)
+│   │   ├── ai_stock_analyzer.py         AI Tools → Stock Analyzer (snapshot + AI analysis)
+│   │   ├── dividend_tracker.py          Portfolio → Dividend Tracker
+│   │   ├── watchlist_heatmap.py         Watchlist → Heatmap
+│   │   ├── earnings_surprise_tracker.py Research → Earnings Surprise
+│   │   ├── earnings_strategy_analyzer.py Research → Earnings Strategy
+│   │   └── market_correlation.py        Markets → Correlation (GET /api/market/correlation;
+│   │                                     distinct from correlation_matrix.py's POST endpoint above)
 │   ├── ruff.toml            Lint gate config — see "Lint gate" below
 │   ├── requirements.txt
 │   ├── requirements-dev.txt Dev-only deps (ruff, pytest) — not deployed
