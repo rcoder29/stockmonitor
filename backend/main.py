@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -46,13 +47,25 @@ from routers import (
     ipo_lockup_calendar, fed_watch, ai_morning_briefing, crypto_dashboard,
     ai_portfolio_review, economic_dashboard, ai_stock_analyzer,
     dividend_tracker, watchlist_heatmap, earnings_surprise_tracker,
-    earnings_strategy_analyzer, market_correlation,
+    earnings_strategy_analyzer, market_correlation, digest,
 )
+import digest_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Stock Monitor API")
+
+@asynccontextmanager
+async def lifespan(_app):
+    # Background thread that sends the scheduled daily/weekly digests. Only runs
+    # under a real server (TestClient without a `with` block never enters the
+    # lifespan); DIGEST_SCHEDULER=0 disables it.
+    digest_service.start_scheduler()
+    yield
+    digest_service.stop_scheduler()
+
+
+app = FastAPI(title="Stock Monitor API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -147,6 +160,7 @@ app.include_router(watchlist_heatmap.router)
 app.include_router(earnings_surprise_tracker.router)
 app.include_router(earnings_strategy_analyzer.router)
 app.include_router(market_correlation.router)
+app.include_router(digest.router)
 
 # Initialise DB tables on startup
 init_db()

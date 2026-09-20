@@ -68,6 +68,7 @@ Stock Monitor started as a simple watchlist with live prices and has grown into 
 | Feature | Description |
 |---|---|
 | **AI Chat** | Streaming Claude conversation for open-ended market questions, strategy discussion, and educational Q&A. |
+| **Digests** | A pre-market daily digest and a weekly recap of markets, portfolio P&L vs. SPY, watchlist movers, upcoming earnings/economic events, and price alerts — delivered to Telegram on a schedule you set, with preview, send-now, history, and an optional AI-written summary. |
 | **Financial Advisor** | AI-generated portfolio strategy based on goal, horizon, capital, monthly contribution, risk tolerance, age, account type, and geographic focus. Includes asset allocation chart. |
 
 ### Chart Modal (available on any ticker)
@@ -111,6 +112,13 @@ cd backend
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY=sk-ant-...   # required for AI features
 python -m uvicorn main:app --port 8000
+```
+
+Optional, for scheduled digests (put these in `backend/.env`, see AI Tools → Digests for the 2-minute Telegram bot setup):
+
+```
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_CHAT_ID=123456789
 ```
 
 ### Frontend
@@ -201,6 +209,16 @@ Bypass for a specific commit with `git commit --no-verify` if you hit a false po
 | `GET /api/earnings/summary/{symbol}` | AI earnings call summary from SEC 8-K |
 | `GET /api/options/strategies/{symbol}` | AI-generated options strategies |
 
+### Digests
+| Endpoint | Description |
+|---|---|
+| `GET/PUT /api/digest/settings` | Schedule: timezone, daily on/time/weekdays-only, weekly on/day/time, AI summary |
+| `GET /api/digest/status` | Delivery channels configured, scheduler running, next daily/weekly run |
+| `POST /api/digest/preview` | Build a `daily`/`weekly` digest and return its data + text, without sending or logging |
+| `POST /api/digest/send` | Build and deliver a digest now to every configured channel |
+| `POST /api/digest/test` | Send a one-line test message to confirm the channel works |
+| `GET /api/digest/history[/{id}]` | Past sends with status, or one with its full text |
+
 ### Macro & Sectors
 | Endpoint | Description |
 |---|---|
@@ -227,6 +245,13 @@ stockmonitor/
 │   │                        _build_ticker_map, _parse_nport_xml, _fetch_opp_quote, _calc_rsi,
 │   │                        _SECTOR_ETFS, SCREENER_UNIVERSE, …) — imported by main.py and
 │   │                        every router below with no circular dependency
+│   ├── digest_builder.py    Digest data collection (market, portfolio, watchlist, events,
+│   │                        alerts, targets) — each section isolated so one failing source
+│   │                        drops that section, not the digest
+│   ├── digest_render.py     Structured digest → Telegram HTML / plain text
+│   ├── digest_channels.py   Delivery channels (Telegram; token redacted from all errors)
+│   ├── digest_service.py    Settings, due-time + catch-up logic, at-most-once claiming,
+│   │                        retries, audit log, and the background scheduler thread
 │   ├── routers/             Feature areas extracted out of main.py as FastAPI APIRouters
 │   │   ├── corporate_bonds.py    Research → Corporate Bonds
 │   │   ├── convertible_bonds.py  Research → Convertible Bonds
@@ -314,6 +339,7 @@ stockmonitor/
 │   │   ├── ipo_lockup_calendar.py       Markets → IPO & Lockups (live EDGAR-sourced)
 │   │   ├── fed_watch.py                 Markets → Fed Watch (FOMC cut/hold/hike odds)
 │   │   ├── ai_morning_briefing.py       AI Tools → Morning Briefing
+│   │   ├── digest.py                    AI Tools → Digests (settings, preview, send, history)
 │   │   ├── crypto_dashboard.py          Markets → Crypto
 │   │   ├── ai_portfolio_review.py       AI Tools → Portfolio Review — _fetch_quote deferred
 │   │   ├── economic_dashboard.py        Markets → Economic Indicators (+ optional FRED)
@@ -368,6 +394,7 @@ stockmonitor/
 │           ├── PriceAlerts.jsx         Alert modal + toast notifications
 │           ├── EarningsCalendar.jsx    Inline earnings countdown
 │           ├── UserGuide.jsx           In-app documentation
+│           ├── DigestCenter.jsx        Digests — delivery setup, schedule, preview/send, history
 │           └── InvestorEducation.jsx   Investor education — onion-map landing view +
 │                                        layered concept graph (data/investorEducationTopics.js),
 │                                        with live data snapshots on 12 topics and deep
@@ -406,4 +433,5 @@ All backend API responses are cached in SQLite to avoid Yahoo Finance rate limit
 - **yfinance + curl_cffi:** yfinance 1.3 uses `curl_cffi` internally. The backend passes a session with `impersonate="chrome"` (required — Yahoo rejects plain curl user agents). Standard `requests` SSL overrides have no effect.
 - **ANTHROPIC_API_KEY:** Required only for AI-powered features. All market data features work without it.
 - **WebSocket:** Run uvicorn without `--reload` in production to avoid zombie worker processes on Windows.
+- **Digest scheduler:** A background thread in the backend process sends the scheduled digests (set `DIGEST_SCHEDULER=0` to disable it). It only runs while the backend is up; a digest missed while the machine was off is sent on startup if within 6 hours (daily) or the same day (weekly). Each period is sent at most once, and nothing is sent or logged until a delivery channel is configured. Uses a single process — don't run it under multiple uvicorn workers.
 - **SQLite DB:** Created automatically at `backend/stockmonitor.db` on first run. Contains watchlists, alerts, portfolio positions, trade journal, and price snapshots.

@@ -242,6 +242,43 @@ class CppiRebalanceLog(Base):
     created_at        = Column(DateTime, default=datetime.utcnow)
 
 
+# ── Digests ───────────────────────────────────────────────────────────────────
+
+class DigestSettings(Base):
+    """Single-row (id=1) schedule config for the daily/weekly digests. Delivery
+    credentials (Telegram token/chat id) live in the environment, not here."""
+    __tablename__ = "digest_settings"
+    id                  = Column(Integer, primary_key=True)
+    timezone            = Column(String(50), default="America/New_York")
+    daily_enabled       = Column(Integer, default=0)
+    daily_time          = Column(String(5), default="08:00")    # HH:MM local
+    daily_weekdays_only = Column(Integer, default=1)
+    weekly_enabled      = Column(Integer, default=0)
+    weekly_day          = Column(Integer, default=6)            # 0=Mon … 6=Sun
+    weekly_time         = Column(String(5), default="18:00")    # HH:MM local
+    use_ai              = Column(Integer, default=1)
+    updated_at          = Column(DateTime, default=datetime.utcnow)
+
+
+class DigestLog(Base):
+    """One row per digest run. Scheduled runs use a deterministic period_key
+    (date / ISO week) so the unique constraint guarantees at-most-once delivery
+    per period even if the scheduler ticks twice; manual runs get a unique key."""
+    __tablename__ = "digest_log"
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    kind       = Column(String(10), nullable=False)               # 'daily' | 'weekly'
+    period_key = Column(String(40), nullable=False)
+    trigger    = Column(String(10), default="scheduled")          # 'scheduled' | 'manual'
+    status     = Column(String(10), default="pending")            # pending|sent|failed
+    attempts   = Column(Integer, default=1)
+    channels   = Column(Text, default="{}")                       # JSON {channel: {ok, error}}
+    text       = Column(Text, default="")                         # plain-text rendering
+    error      = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint("kind", "period_key", name="uq_digest_kind_period"),)
+
+
 # ── Generic key-value cache ───────────────────────────────────────────────────
 
 class CacheEntry(Base):

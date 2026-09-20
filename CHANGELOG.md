@@ -4,6 +4,42 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-19 — Daily & Weekly Digests (scheduled, delivered to Telegram)
+
+New **AI Tools → Digests** feature: a pre-market daily digest and a Sunday-evening weekly recap, sent to Telegram on a schedule. Motivated by a gap found while scoping it: the app had no backend scheduler and price alerts were only ever evaluated by the browser (`PATCH /api/alerts/{id}/trigger` is called from the frontend), so nothing fired unless a tab was open.
+
+Each digest covers: index/VIX/10Y/sector moves; the user's portfolio value, unrealized and period P&L, return vs. SPY, and top movers (daily) or best/worst holdings (weekly); watchlist gainers/losers; economic releases and earnings for holdings + watchlist (next 2 days / next 7); price alerts already through their target, near it, or recently triggered; and, weekly only, price targets that are close or have a near deadline. An optional AI-written summary (Claude Haiku) tops it and is skipped silently if the key is missing or rejected.
+
+Design notes:
+- **At most once per period.** Scheduled runs claim a `digest_log` row keyed `(kind, date | ISO week)` before doing any work; the unique constraint makes a duplicate tick lose the race. Manual sends get unique keys and are never deduped.
+- **Catch-up for a laptop that sleeps.** A digest missed while the app was off is sent on startup if within 6h (daily) or the same day (weekly) of its scheduled time — never a stale morning digest in the afternoon. Failed deliveries retry every 10 min, up to 3 attempts; a `pending` row from a crashed process is reclaimed after 30 min.
+- **Quiet until configured.** With no delivery channel, nothing is claimed or logged, so the digest stays due until one is set up. Schedules default to off.
+- **Section isolation.** Each section is built independently; a failing data source drops that section (named in a footnote) instead of the digest. Positions Yahoo can't price are named and carried at cost rather than dropped.
+- **Secrets stay out of the DB, logs, and UI.** The Telegram token/chat id come from `backend/.env`; the token is part of Telegram's request URL, and `requests` exception text includes the URL, so every error path redacts it (covered by a test).
+- **Labels say "Last session" / "Past 5 sessions"**, not "Today", since a pre-market digest reports the previous close.
+
+### New
+- Backend: `digest_builder.py`, `digest_render.py`, `digest_channels.py`, `digest_service.py`, `routers/digest.py` (`/api/digest/{settings,status,preview,send,test,history}`); `DigestSettings` and `DigestLog` tables
+- Frontend: `DigestCenter.jsx` (Delivery setup with Telegram steps, Schedule, Preview & send, History) and an AI Tools → Digests nav item
+- `backend/tests/test_digest.py` (65 tests, run against a throwaway SQLite DB rather than the real one) and `DigestCenter.test.jsx` (11)
+- User Guide section and changelog entry; README endpoints, structure, and notes
+
+### Changed
+- `main.py`: registers the digest router and adds a FastAPI `lifespan` that starts/stops the scheduler thread (`DIGEST_SCHEDULER=0` disables it). `TestClient` without a `with` block never enters the lifespan, so tests don't start it.
+- `requirements.txt`: `requests` declared explicitly (was only a transitive dependency of yfinance).
+
+### Verified
+- 117 backend tests (52 existing + 65 new) and 101 frontend tests (90 + 11); ruff and `vite build` clean.
+- Live against real Yahoo data and the real portfolio (187 holdings): both digests build in ~4s warm (~37s cold, dominated by first-time earnings-date lookups, which are then cached).
+- End-to-end scheduler run on a *copy* of the real database with a fake channel: a due tick sent once, the next tick did nothing, Sunday triggered the weekly digest, history was logged, and the real database was untouched.
+
+### Not verified
+- **Real Telegram delivery.** No bot credentials were available, so `TelegramChannel` is covered by mocked-`requests` tests only (request shape, error handling, message splitting, token redaction) — not by an actual send. Use "Send test message" after adding the credentials.
+- **The AI summary against the live API** — the configured Anthropic key is rejected (401); the failure path is tested, the success path only with a mock.
+- The Digests page was not exercised in a browser (component tests only).
+
+---
+
 ## 2026-09-19 — Investor Education: new "Valuation & Analysis" layer (5 core topics)
 
 Added a fifth, innermost onion layer covering how to analyze a single company, complementing the existing layers' focus on how the financial system is organized. It's a drill-down chain: **Reading the Three Financial Statements → Profitability, Quality & Moats → Valuation Ratios & Multiples → Intrinsic Value & Discounted Cash Flow → Earnings, Expectations & Guidance**.

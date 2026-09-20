@@ -56,6 +56,7 @@ const ShortSqueeze = lazy(() => import('./components/ShortSqueeze'))
 const IpoCalendar = lazy(() => import('./components/IpoCalendar'))
 const FedWatch = lazy(() => import('./components/FedWatch'))
 const MorningBriefing = lazy(() => import('./components/MorningBriefing'))
+const DigestCenter = lazy(() => import('./components/DigestCenter'))
 const WheelTracker = lazy(() => import('./components/WheelTracker'))
 const TaxLotManager = lazy(() => import('./components/TaxLotManager'))
 const MedicareEstimator = lazy(() => import('./components/MedicareEstimator'))
@@ -303,6 +304,7 @@ const NAV_GROUPS = [
     icon: Icons.ai,
     items: [
       { id: 'morningbriefing',  label: 'Morning Briefing' },
+      { id: 'digest',           label: 'Digests' },
       { id: 'stockanalyzer',    label: 'Stock Analyzer' },
       { id: 'portfolioreview',  label: 'Portfolio Review' },
       { id: 'advisor',          label: 'Financial Advisor' },
@@ -995,6 +997,7 @@ export default function App() {
           {activeTab === 'rothconversionplanner' && <RothConversionPlanner />}
           {activeTab === 'customnews'            && <CustomNews />}
           {activeTab === 'morningbriefing'        && <MorningBriefing />}
+          {activeTab === 'digest'                 && <DigestCenter />}
           {activeTab === 'taxadvisor'            && <TaxAdvisor />}
           {activeTab === 'shortsqueeze'          && <ShortSqueeze />}
           {activeTab === 'ipocalendar'           && <IpoCalendar />}
