@@ -1,6 +1,6 @@
-// Investor Education content — a graph of concepts organized into four
+// Investor Education content — a graph of concepts organized into five
 // "onion" layers (Macro → Market Structure → Asset Classes → Risk &
-// Valuation). Each topic has a parent/children (top-down / bottom-up
+// Valuation → Valuation & Analysis). Each topic has a parent/children (top-down / bottom-up
 // drill path) plus lateral `relatedIds` that cross layers, and an optional
 // `linkTab` that deep-links to the live tool built for that concept
 // elsewhere in the app. A handful of topics also carry `liveStat`: an
@@ -14,7 +14,19 @@ export const LAYERS = [
   { id: 'structure', label: 'Market Structure',   subtitle: 'Issuers, private markets, IPOs & exchanges' },
   { id: 'assets',    label: 'Asset Classes',      subtitle: 'Liquid & illiquid, public & private' },
   { id: 'risk',      label: 'Risk & Valuation',   subtitle: 'Risk-free rate, spreads, duration, beta' },
+  { id: 'analysis',  label: 'Valuation & Analysis', subtitle: 'Financial statements, quality, multiples, DCF, earnings' },
 ]
+
+// Live-stat formatters: fractions → "12.3%", ratios → "12.3×", and null-safe
+// so a missing field hides the stat block instead of rendering "NaN".
+const pct = (v) => (v == null ? null : `${(v * 100).toFixed(1)}%`)
+const mult = (v) => (v == null ? null : `${v.toFixed(1)}×`)
+
+// The Valuation & Analysis live stats all use one well-known large-cap as a
+// worked example, so the numbers stay stable and comparable across topics.
+const EXAMPLE_SYMBOL = 'AAPL'
+const fundamentalsRow = (d) => (d.rows || []).find(r => r.symbol === EXAMPLE_SYMBOL) || null
+const FUNDAMENTALS_ENDPOINT = `/api/compare/fundamentals?symbols=${EXAMPLE_SYMBOL}`
 
 export const TOPICS = {
   // ── Macro & Geography ────────────────────────────────────────────────────
@@ -27,7 +39,7 @@ export const TOPICS = {
       'Economies are interconnected through trade, capital flows, and currency exchange rates.',
       'A slowdown in one major economy (e.g. China or the US) transmits to others through trade and financial linkages.',
     ],
-    parentId: null, childIds: ['regions'], relatedIds: ['central-banks'],
+    parentId: null, childIds: ['regions', 'central-banks'], relatedIds: [],
   },
   'regions': {
     id: 'regions', layer: 'macro', title: 'Regions & Trade Blocs',
@@ -107,7 +119,7 @@ export const TOPICS = {
       'Public = exchange-listed, liquid, continuous pricing, broad investor access.',
       "The transition from private to public is one of the most important events in a company's life.",
     ],
-    parentId: null, childIds: ['issuer-concept'], relatedIds: ['mergers-acquisitions'],
+    parentId: null, childIds: ['issuer-concept', 'mergers-acquisitions'], relatedIds: [],
   },
   'issuer-concept': {
     id: 'issuer-concept', layer: 'structure', title: 'The Issuer Concept',
@@ -166,7 +178,7 @@ export const TOPICS = {
       'A SPAC merger takes a private company public by combining it with an already-listed shell company.',
       "Early IPO shares are often subject to a 'lockup period' preventing insiders from selling for a set time after listing.",
     ],
-    parentId: 'private-markets', childIds: ['secondary-markets'], relatedIds: ['spacs-concept'],
+    parentId: 'private-markets', childIds: ['secondary-markets', 'spacs-concept'], relatedIds: [],
     linkTab: 'ipocalendar', linkLabel: 'Open IPO & Lockup Calendar',
     liveStat: {
       endpoint: '/api/market/ipo-calendar',
@@ -237,7 +249,7 @@ export const TOPICS = {
       'Valuation tools include P/E, P/B, and discounted cash flow (DCF) — how much future profit is worth today.',
       'Dividends and buybacks are the two ways companies return profit directly to shareholders.',
     ],
-    parentId: 'asset-classes-overview', childIds: [], relatedIds: ['going-public', 'capital-structure', 'derivatives'],
+    parentId: 'asset-classes-overview', childIds: [], relatedIds: ['going-public', 'capital-structure', 'derivatives', 'valuation-multiples'],
     linkTab: 'fundamentals', linkLabel: 'Open Fundamentals',
   },
   'fixed-income': {
@@ -377,7 +389,7 @@ export const TOPICS = {
       'A higher risk-free rate makes future cash flows worth less today, pressuring growth-stock and long-bond valuations most.',
       'The risk-free rate is the reference point every credit spread and risk premium is measured against.',
     ],
-    parentId: null, childIds: ['credit-spread'], relatedIds: ['treasuries', 'central-banks'],
+    parentId: null, childIds: ['credit-spread'], relatedIds: ['treasuries', 'central-banks', 'dcf-intrinsic-value'],
     linkTab: 'rates', linkLabel: 'Open Yield Curve & Rates',
     liveStat: {
       endpoint: '/api/market/rates',
@@ -446,5 +458,148 @@ export const TOPICS = {
       'The illiquidity premium is the extra expected return investors demand for locking up capital (see Private Equity & VC).',
     ],
     parentId: 'volatility-beta', childIds: [], relatedIds: ['private-equity-vc'],
+  },
+
+  // ── Valuation & Analysis ──────────────────────────────────────────────────
+  'financial-statements': {
+    id: 'financial-statements', layer: 'analysis', title: 'Reading the Three Financial Statements',
+    oneLiner: 'The income statement, balance sheet, and cash flow statement are three views of the same business.',
+    summary: "Every public company reports three linked statements. The income statement shows performance over a period — revenue minus costs leaves net income. The balance sheet is a snapshot at one date — what the company owns (assets) equals what it owes (liabilities) plus what belongs to shareholders (equity). The cash flow statement tracks the actual cash that moved in and out, split into operating, investing, and financing. They connect: net income flows into equity on the balance sheet and is the starting point of the cash flow statement. Reading them together is how you tell a business that merely reports profit from one that actually produces cash.",
+    keyPoints: [
+      'Income statement: revenue → gross profit → operating income → net income. The margin at each step shows where the money goes.',
+      "Balance sheet: assets = liabilities + shareholders' equity. It shows leverage (debt vs. equity) and liquidity (cash vs. near-term obligations) — the same claims ranked in the Capital Structure topic.",
+      'Cash flow statement: free cash flow = operating cash flow − capital expenditures. It is the cash left over for owners and lenders.',
+      'Profit is not cash. Accruals and depreciation shape net income, while cash is much harder to dress up — a persistent gap between the two is a red flag.',
+      'Public companies file audited annual (10-K) and quarterly (10-Q) statements with the SEC, freely searchable on EDGAR.',
+    ],
+    parentId: null, childIds: ['profitability-quality'], relatedIds: ['capital-structure', 'issuer-concept', 'equities'],
+    linkTab: 'fundamentals', linkLabel: 'Open Fundamentals',
+    liveStat: {
+      endpoint: FUNDAMENTALS_ENDPOINT,
+      parse: (d) => {
+        const r = fundamentalsRow(d)
+        const gross = pct(r?.['Gross Margin']), op = pct(r?.['Op Margin']), net = pct(r?.['Net Margin'])
+        if (!gross || !op || !net) return null
+        return {
+          label: `${EXAMPLE_SYMBOL}: margin at each step of the income statement`,
+          value: `${gross} → ${op} → ${net}`,
+          sub: 'Gross → operating → net margin: how much of each revenue dollar survives each layer of cost',
+        }
+      },
+    },
+  },
+  'profitability-quality': {
+    id: 'profitability-quality', layer: 'analysis', title: 'Profitability, Quality & Moats',
+    oneLiner: 'How much a business earns on the capital it uses — and whether it can keep doing so.',
+    summary: "Growth is only valuable if it earns more than it costs. Return on equity (ROE = net income ÷ shareholders' equity) and return on invested capital (ROIC = operating profit after tax ÷ debt plus equity invested, net of cash) measure how efficiently a company turns capital into profit. ROIC is the cleaner test because it ignores how the business is financed: a company earning an ROIC above its cost of capital is creating value, and one earning below it is destroying value even while growing. Durable high returns usually need a moat — a lasting advantage such as brand, network effects, switching costs, cost leadership, or regulation and patents — that competitors can't easily copy.",
+    keyPoints: [
+      "ROIC above the company's cost of capital means growth creates value; below it, growth destroys value.",
+      'ROE can be inflated by leverage and by buybacks that shrink equity — cross-check it against ROA, ROIC, and debt levels.',
+      'Margins and returns that stay stable or rise over many years are the fingerprint of a moat; sharp mean-reversion suggests there is none.',
+      'Common moat sources: brand, network effects, switching costs, cost advantages, and regulatory or IP protection.',
+      "Quality tells you what a business is worth owning — not what price to pay. That's the job of the next two topics.",
+    ],
+    parentId: 'financial-statements', childIds: ['valuation-multiples'], relatedIds: ['capital-structure', 'equities'],
+    linkTab: 'fundamentals', linkLabel: 'Compare margins and returns in Fundamentals',
+    liveStat: {
+      endpoint: FUNDAMENTALS_ENDPOINT,
+      parse: (d) => {
+        const r = fundamentalsRow(d)
+        const roe = pct(r?.ROE), roa = pct(r?.ROA)
+        if (!roe || !roa) return null
+        return {
+          label: `${EXAMPLE_SYMBOL}: return on equity vs. return on assets`,
+          value: `ROE ${roe} · ROA ${roa}`,
+          sub: 'A big gap between the two means leverage or buybacks are doing part of the work — check debt before crediting quality',
+        }
+      },
+    },
+  },
+  'valuation-multiples': {
+    id: 'valuation-multiples', layer: 'analysis', title: 'Valuation Ratios & Multiples',
+    oneLiner: 'Price expressed relative to earnings, sales, or cash flow — a shorthand for what the market is paying.',
+    summary: "A multiple divides a company's price by a fundamental, so you can compare very different-sized companies. P/E is price ÷ earnings per share (forward P/E uses expected earnings). EV/EBITDA divides enterprise value — market cap plus debt minus cash — by operating earnings before interest, taxes, depreciation, and amortization; because it includes debt, it compares companies with different capital structures fairly. P/S suits growing companies that aren't yet profitable, P/B suits banks and asset-heavy businesses, and free cash flow yield (FCF ÷ market cap) can be read like the yield on a bond. A multiple on its own means nothing: it only becomes information when set against the company's own history, its peers, its growth, and the interest-rate backdrop.",
+    keyPoints: [
+      "P/E = price ÷ EPS. A high P/E isn't automatically expensive — it can be justified by fast growth, and the PEG ratio (P/E ÷ growth) adjusts for that.",
+      'EV/EBITDA includes debt, so it compares companies with different capital structures on equal footing (see The Capital Structure).',
+      'Different businesses call for different multiples: P/S for early-stage growth, P/B for banks, EV/EBITDA for capital-heavy firms, FCF yield for mature cash generators.',
+      "Always compare against peers and the company's own history. A 'cheap' multiple can be a value trap — cheap because earnings are about to fall.",
+      'Higher interest rates pull multiples down, because the discount rate applied to future earnings rises with the risk-free rate.',
+    ],
+    parentId: 'profitability-quality', childIds: ['dcf-intrinsic-value'], relatedIds: ['equities', 'capital-structure', 'risk-free-rate'],
+    linkTab: 'fundamentals', linkLabel: 'Compare multiples side by side',
+    liveStat: {
+      endpoint: FUNDAMENTALS_ENDPOINT,
+      parse: (d) => {
+        const r = fundamentalsRow(d)
+        const pe = mult(r?.['P/E (Trailing)'])
+        if (!pe) return null
+        const fwd = mult(r?.['P/E (Forward)'])
+        const ev = mult(r?.['EV/EBITDA'])
+        const ps = mult(r?.['P/S'])
+        return {
+          label: `${EXAMPLE_SYMBOL}: trailing P/E`,
+          value: pe,
+          sub: [fwd && `Forward P/E ${fwd}`, ev && `EV/EBITDA ${ev}`, ps && `P/S ${ps}`].filter(Boolean).join(' · ') || undefined,
+        }
+      },
+    },
+  },
+  'dcf-intrinsic-value': {
+    id: 'dcf-intrinsic-value', layer: 'analysis', title: 'Intrinsic Value & Discounted Cash Flow',
+    oneLiner: "What a business's future cash flows are worth today, after adjusting for time and risk.",
+    summary: "Multiples tell you what the market pays for similar companies; a discounted cash flow (DCF) asks what the cash flows themselves are worth. You forecast free cash flow for an explicit period (typically 5–10 years), estimate a terminal value for everything beyond that, and discount it all back to today at a rate reflecting the risk. That rate is built on the risk-free rate: a common approach is the risk-free rate plus a beta-scaled equity risk premium (the CAPM). The mechanics are simple; the difficulty is that the answer is extremely sensitive to the inputs, so a DCF is best read as a range of plausible values built on explicit assumptions, not a single 'true' price.",
+    keyPoints: [
+      'Value today = the sum of future free cash flows, each discounted back at a rate that reflects time and risk.',
+      "The discount rate starts with the risk-free rate — when the Fed moves rates, every DCF value moves with it. That's why long-duration growth stocks trade like long bonds.",
+      'Terminal value usually makes up well over half of the total, so small changes in the growth or discount-rate assumption swing the result a lot.',
+      "Run best, base, and worst cases and look for a margin of safety — a price comfortably below your base-case value that absorbs forecast errors.",
+      "Use DCF and multiples as cross-checks: if a DCF says a stock is worth twice what peers' multiples imply, question the assumptions.",
+    ],
+    parentId: 'valuation-multiples', childIds: ['earnings-expectations'], relatedIds: ['risk-free-rate', 'central-banks', 'duration-risk', 'volatility-beta'],
+    linkTab: 'dcf', linkLabel: 'Open DCF Valuation',
+    liveStat: {
+      endpoint: `/api/dcf/prefill/${EXAMPLE_SYMBOL}`,
+      parse: (d) => {
+        if (d.eps_ttm == null) return null
+        const parts = [
+          d.growth_rate != null && `growth input ${(d.growth_rate * 100).toFixed(1)}%`,
+          d.beta != null && `beta ${d.beta.toFixed(2)}`,
+        ].filter(Boolean)
+        return {
+          label: `${EXAMPLE_SYMBOL}: starting inputs for a DCF`,
+          value: `EPS $${d.eps_ttm.toFixed(2)} (trailing)`,
+          sub: parts.length ? `${parts.join(' · ')} — the growth and beta assumptions are what a DCF is most sensitive to` : undefined,
+        }
+      },
+    },
+  },
+  'earnings-expectations': {
+    id: 'earnings-expectations', layer: 'analysis', title: 'Earnings, Expectations & Guidance',
+    oneLiner: 'Stocks move on results versus expectations — not on whether the results were good.',
+    summary: "Prices already reflect what the market expects, so an earnings report moves a stock by the surprise: actual results versus the consensus analyst estimate. A company can report record profit and still fall if it merely met a very high bar. Guidance — management's outlook for coming quarters — often matters more than the quarter just reported, because valuation is about the future. Investors also look at the quality of a beat: revenue-driven beats are stronger than ones produced by cost cuts or buybacks. After a surprise, prices have historically tended to keep drifting in the same direction for days or weeks (post-earnings-announcement drift), though the effect is modest and has faded as markets became more efficient.",
+    keyPoints: [
+      'EPS surprise % = (actual − consensus estimate) ÷ estimate. The reaction depends on the surprise, not on the absolute result.',
+      "Guidance often outweighs the quarter itself: a 'beat and lower guidance' frequently sells off, and companies often guide conservatively so they can beat.",
+      'Check the quality of the beat — revenue growth is stronger evidence than lower costs or a shrinking share count.',
+      'Options prices imply an expected earnings move, and implied volatility typically collapses right after the report — see Volatility & Beta and Derivatives.',
+      'Consistent beats are often already priced in: a stock can rise less on a beat than it falls on a miss.',
+    ],
+    parentId: 'dcf-intrinsic-value', childIds: [], relatedIds: ['volatility-beta', 'derivatives', 'equities'],
+    linkTab: 'earningssurprise', linkLabel: 'Open Earnings Surprise Tracker',
+    liveStat: {
+      endpoint: `/api/market/earnings-surprise?symbols=${EXAMPLE_SYMBOL}`,
+      parse: (d) => {
+        const r = Array.isArray(d) ? d.find(x => x.symbol === EXAMPLE_SYMBOL) : null
+        if (!r || !r.totalQuarters) return null
+        const sign = (v) => (v == null ? null : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`)
+        const surprise = sign(r.avgSurprisePct), drift = sign(r.avgDrift1d)
+        return {
+          label: `${EXAMPLE_SYMBOL}: earnings beats, last ${r.totalQuarters} quarters`,
+          value: `${r.beatCount} of ${r.totalQuarters} beat`,
+          sub: [surprise && `Avg EPS surprise ${surprise}`, drift && `avg next-day move ${drift}`].filter(Boolean).join(' · ') || undefined,
+        }
+      },
+    },
   },
 }

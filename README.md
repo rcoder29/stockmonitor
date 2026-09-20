@@ -370,7 +370,7 @@ stockmonitor/
 │           ├── UserGuide.jsx           In-app documentation
 │           └── InvestorEducation.jsx   Investor education — onion-map landing view +
 │                                        layered concept graph (data/investorEducationTopics.js),
-│                                        with live data snapshots on 6 topics and deep
+│                                        with live data snapshots on 12 topics and deep
 │                                        links out to the live tabs that match each concept
 ├── CHANGELOG.md             Full feature history
 └── README.md

@@ -4,6 +4,30 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-19 — Investor Education: new "Valuation & Analysis" layer (5 core topics)
+
+Added a fifth, innermost onion layer covering how to analyze a single company, complementing the existing layers' focus on how the financial system is organized. It's a drill-down chain: **Reading the Three Financial Statements → Profitability, Quality & Moats → Valuation Ratios & Multiples → Intrinsic Value & Discounted Cash Flow → Earnings, Expectations & Guidance**.
+
+Each topic has a live data snapshot using AAPL as a fixed worked example (so the numbers stay comparable across topics): margin waterfall and ROE-vs-ROA and P/E/EV-EBITDA/P/S from `/api/compare/fundamentals`, DCF starting inputs from `/api/dcf/prefill`, and beat history from `/api/market/earnings-surprise`. Each deep-links to the matching tab (Fundamentals, DCF Valuation, Earnings Surprise). Existing *Equities* and *The Risk-Free Rate* topics now link into the new layer.
+
+The onion map was hardcoded for four layers; ring radii are now derived from `LAYERS` so a sixth layer needs no geometry changes, and the layer cards wrap 3-up to fit five.
+
+### New
+- 5 topics in `data/investorEducationTopics.js`: `financial-statements`, `profitability-quality`, `valuation-multiples`, `dcf-intrinsic-value`, `earnings-expectations`
+- `analysis` layer (rose) in `LAYERS` and `LAYER_COLORS`
+
+### Changed
+- `InvestorEducation.jsx` — onion map: computed radii, center label, layer count, card grid
+- README: live-snapshot topic count corrected (was 6, is now 12)
+
+### Verified
+- Topic-graph integrity script and all 5 `parse` functions run against the live backend (also confirmed null-safe on empty payloads); `vite build` clean; 90/90 frontend tests. Not verified visually in a browser.
+
+### Fixed
+- Three orphaned topics: `central-banks`, `spacs-concept`, and `mergers-acquisitions` named a `parentId` but were missing from that parent's `childIds`, so they never appeared in the sidebar outline or "Go Deeper" and were reachable only via Related Concepts. Each is now listed under its parent (Global Economy, Going Public, and Public vs. Private Markets respectively), and the redundant Related Concepts entries that pointed at them from those parents were dropped.
+
+---
+
 ## 2026-09-18 — Backend Modularization: the final batch — 15 sections, effort complete
 
 Extracted every remaining "safe" section in one pass: Index Constituent Heatmap, Tax Advisor, Short Squeeze Scanner, IPO & Lockup Calendar, Fed Watch, AI Morning Briefing, Crypto Dashboard, AI Portfolio Review, Economic Dashboard, AI Stock Analyzer, Dividend Tracker, Watchlist Heatmap, Earnings Surprise Tracker, Earnings Strategy Analyzer, and a second, differently-routed Correlation Matrix (`GET /api/market/correlation`, now `routers/market_correlation.py` — distinct from `routers/correlation_matrix.py`'s `POST /api/portfolio/correlation`, confirmed no cache-key collision despite both starting with `corr:`).

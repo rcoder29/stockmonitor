@@ -9,6 +9,7 @@ const LAYER_COLORS = {
   structure: { fill: 'fill-violet-700',  ring: 'hover:fill-violet-600',  dot: 'bg-violet-500',  text: 'text-violet-400',  border: 'border-violet-700/40',  bg: 'bg-violet-900/25' },
   assets:    { fill: 'fill-emerald-700', ring: 'hover:fill-emerald-600', dot: 'bg-emerald-500', text: 'text-emerald-400', border: 'border-emerald-700/40', bg: 'bg-emerald-900/25' },
   risk:      { fill: 'fill-amber-700',   ring: 'hover:fill-amber-600',   dot: 'bg-amber-500',   text: 'text-amber-400',   border: 'border-amber-700/40',   bg: 'bg-amber-900/25' },
+  analysis:  { fill: 'fill-rose-700',    ring: 'hover:fill-rose-600',    dot: 'bg-rose-500',    text: 'text-rose-400',    border: 'border-rose-700/40',    bg: 'bg-rose-900/25' },
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -32,15 +33,16 @@ function rootOf(layerId) {
 function OnionMap({ onSelectLayer }) {
   const size = 360
   const c = size / 2
-  // Outermost (broadest, Macro) to innermost (most granular, Risk).
-  const radii = [168, 128, 88, 48]
+  // Outermost (broadest, Macro) to innermost (most granular, Analysis) —
+  // evenly spaced so adding a layer doesn't need a new hand-tuned radius.
+  const radii = LAYERS.map((_, i) => 168 - i * 32)
 
   return (
     <div className="flex flex-col items-center gap-6 py-6 px-4">
       <div>
         <h1 className="text-white font-bold text-xl mb-1 text-center">Investor Education</h1>
         <p className="text-gray-500 text-sm text-center max-w-md">
-          Four layers, peeled from the outside in. Click a ring or a card to start exploring.
+          {LAYERS.length} layers, peeled from the outside in. Click a ring or a card to start exploring.
         </p>
       </div>
 
@@ -57,11 +59,11 @@ function OnionMap({ onSelectLayer }) {
           </circle>
         ))}
         <text x={c} y={c} textAnchor="middle" dominantBaseline="middle" className="fill-white text-[12px] font-bold pointer-events-none select-none">
-          Risk
+          Analysis
         </text>
       </svg>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-2xl">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-2xl">
         {LAYERS.map(l => (
           <button
             key={l.id}
