@@ -4,6 +4,28 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-22 — Range Screener
+
+New **Research -> Range Screener**: scans a ~290-name universe (the app's existing SCREENER_UNIVERSE, Short Squeeze, and Insider Trading Feed lists, deduped — mega-caps trend too often to range much, so the smaller/mid caps the latter two already cover matter here) for stocks trading sideways within a support/resistance band over the last 30, 60, or 90 days, and flags names currently near either edge as a possible range-trade entry or exit.
+
+"Range-bound" is quantified two ways over the same window: a Kaufman efficiency ratio (net price change / the sum of every day's move — near 0 for a choppy, going-nowhere stock, near 1 for a steady trend), and a touch count (how many days price actually came back within 15% of the window's high and low) so a single outlier spike or dip can't pass as a "range" on its own. Both feed each row alongside where the price currently sits in the band (0-100%), with a mechanical entry/target/stop for the "near support" / "near resistance" rows.
+
+### New
+- `backend/routers/range_screener.py`: `GET /api/screener/range-bound` (window, min/max width %, min touches, min score, signal, optional custom `symbols` list); results for the default universe cached 30 min
+- `backend/tests/test_range_screener.py` (16 tests: window-metrics math, batch computation, the API)
+- `frontend/src/components/RangeScreener.jsx` + `RangeScreener.test.jsx` (8 tests); new Research -> Range Screener nav item
+- User Guide section and changelog entry; README feature table, endpoint, and file-structure entries
+
+### Verified
+- 133 backend tests (117 existing + 16 new) and 109 frontend tests (101 + 8); ruff and `vite build` clean.
+- Live against real Yahoo data across the full ~293-symbol universe: cold scan ~9s, warm (cached) scan ~10ms. Sanity-checked the near-support/near-resistance picks (e.g. BSX 60-day: price $43.72 against a $42.50-$52.99 range, 11/8 touches, 4.62x risk:reward to the stop) and a custom-symbols override (GME, AAPL, TSLA) against expected shapes.
+- Noted for anyone tuning filters: over real daily closes, the efficiency-ratio score saturates high for most names within any 60-day window (normal noise, not just genuine ranges) — width % and touch count end up doing most of the real filtering; score is more useful for ranking than as a hard cutoff. Documented in the UI as a tip.
+
+### Aside (not part of this feature, flagged while testing it live)
+- `backend/tests/test_main.py` runs against the real `stockmonitor.db` (no test-DB isolation, unlike `test_digest.py` / `test_range_screener.py`), and its mocked fixtures write fake data — e.g. a `quote:AAPL` cache row with `name: "Test Corp"` — into that live cache table. Surfaced when a manual curl against the real running app showed "Test Corp" as AAPL's name. Not touched here since it's pre-existing test infrastructure, out of scope for this feature, and a deliberate fix (isolating `test_main.py` the way the two newer suites already are) is its own separate change — but worth knowing the real dev DB can pick up stale test fixtures for a few hours after any `pytest` run.
+
+---
+
 ## 2026-09-19 — Daily & Weekly Digests (scheduled, delivered to Telegram)
 
 New **AI Tools → Digests** feature: a pre-market daily digest and a Sunday-evening weekly recap, sent to Telegram on a schedule. Motivated by a gap found while scoping it: the app had no backend scheduler and price alerts were only ever evaluated by the browser (`PATCH /api/alerts/{id}/trigger` is called from the frontend), so nothing fired unless a tab was open.

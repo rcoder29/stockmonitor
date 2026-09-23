@@ -20,7 +20,7 @@ const GUIDE = [
       { type: 'p', text: 'The left sidebar organises all features into 9 groups. All groups start collapsed — click a group header to expand it. Only the group containing your current view opens automatically. Click any item to load that view. Home is pinned above the groups and the User Guide button is pinned below them. On mobile, tap ☰ to open the sidebar drawer.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
         ['Markets', 'Overview, Sentiment, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
-        ['Research', 'Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Convertible Bonds, Treasury Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
+        ['Research', 'Screener, Range Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Convertible Bonds, Treasury Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
         ['Watchlist', 'Watchlist, Heatmap, Correlation, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
         ['News', 'My News Feed'],
         ['Trading', 'Trade Ideas, Position Sizer, Wheel Tracker, Day Trader'],
@@ -578,6 +578,23 @@ const GUIDE = [
         ['Custom', 'Type a natural-language query ("profitable tech companies with revenue growth over 20%") or add filter rows manually. Claude translates NLP to filters.'],
       ]},
       { type: 'tip', text: 'Tip: Custom mode NLP query examples — "large cap financials with low P/E and high dividend yield", "beaten-down growth stocks with insider buying", "mega cap tech with expanding margins".' },
+      { type: 'h3', text: 'Range Screener' },
+      { type: 'p', text: 'Finds names trading sideways between a support and resistance level over the last 30/60/90 days — rather than trending — and shows where the price sits in that range right now, for a range-trading (buy support, sell resistance) approach. Found under Research → Range Screener.' },
+      { type: 'p', text: 'For each name and window, it detects the high and low of the window, then measures two things: how "range-bound" it is, and how many times price has come back to each edge:' },
+      { type: 'table', headers: ['Metric', 'What it means'], rows: [
+        ['Score', 'How choppy vs. trending the window was, from an efficiency-ratio calculation (net price change ÷ the sum of every day\'s move). 100 = pure back-and-forth with no net progress; 0 = a steady trend in one direction. It ranks names — a high score isn\'t a guarantee the range holds going forward.'],
+        ['Touches', 'How many days price came within 15% of the window low / within 15% of the window high. More touches on both sides means the support and resistance levels are more established, not just one outlier spike or dip.'],
+        ['Position', 'Where the current price sits between the low (0%) and high (100%) of the range.'],
+        ['Signal', '"Near support" (bottom 20% of the range) or "near resistance" (top 20%) — the two zones this screener treats as actionable. Everything else is "mid-range".'],
+      ]},
+      { type: 'steps', items: [
+        'Choose a window (30/60/90 days) and, optionally, tighten the width/touches/score filters or the signal dropdown.',
+        'Leave Symbols blank to scan the built-in ~290-name universe, or enter your own comma-separated list to scan just those.',
+        'Click "Run screen". The first scan of the default universe can take up to ~15 seconds; the backend caches it for 30 minutes, so repeat scans (or another window) are instant until that expires.',
+        'For rows flagged "near support" or "near resistance", Entry/Target/Stop are mechanical levels derived from the detected range (buy near the low with a stop just under it, or the mirror for resistance) — not a recommendation. Click a column header to sort.',
+      ]},
+      { type: 'tip', text: 'Tip: the score is far more discriminating for symbols that actually trend than for ones that don\'t — most stocks score fairly high over any given 60-day window just from normal daily noise. Width % and Touches are usually the more useful filters for narrowing down to genuinely tradeable ranges.' },
+      { type: 'tip', text: 'Disclaimer: this is a mechanical pattern screen, not investment advice. A range can break down in either direction at any time — confirm with your own analysis and size positions accordingly.' },
       { type: 'h3', text: 'Technical Signals' },
       { type: 'p', text: 'Multi-timeframe technical summary for every symbol in your watchlist and portfolio. Found under Research → Signals.' },
       { type: 'p', text: 'Each cell shows three indicators stacked:' },
@@ -1398,6 +1415,13 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-22 — Range Screener' },
+      { type: 'bullets', items: [
+        'New Research → Range Screener: scans a ~290-name universe for stocks trading sideways within a support/resistance band over 30/60/90 days, and flags names currently near either edge as a possible range-trade entry/exit.',
+        '"Range-bound-ness" is scored with a Kaufman efficiency-ratio calculation (net move ÷ total daily movement); support/resistance is confirmed by counting how many days price actually returned to each edge, so a single outlier spike or dip can\'t masquerade as a real range.',
+        'Filters: window, min/max width %, min touches per side, min score, and a signal dropdown (near support / near resistance / mid-range); an optional symbols box scans just your own list instead of the built-in universe.',
+        'Entry/target/stop/risk-reward are computed from the detected range for actionable rows — a mechanical read of the pattern, not investment advice.',
+      ]},
       { type: 'h3', text: '2026-09-19 — Daily & Weekly Digests' },
       { type: 'bullets', items: [
         'New AI Tools → Digests page: a pre-market daily digest and a weekly recap of markets, your portfolio, watchlist movers, upcoming events, and alerts, delivered to Telegram on a schedule you set.',

@@ -22,6 +22,7 @@ const DayTrader = lazy(() => import('./components/DayTrader'))
 const AiBot = lazy(() => import('./components/AiBot'))
 const FinancialAdvisor = lazy(() => import('./components/FinancialAdvisor'))
 const Screener = lazy(() => import('./components/Screener'))
+const RangeScreener = lazy(() => import('./components/RangeScreener'))
 const TradeJournal = lazy(() => import('./components/TradeJournal'))
 const MacroCalendar = lazy(() => import('./components/MacroCalendar'))
 const SectorDashboard = lazy(() => import('./components/SectorDashboard'))
@@ -194,6 +195,7 @@ const NAV_GROUPS = [
     icon: Icons.research,
     items: [
       { id: 'screener',     label: 'Screener' },
+      { id: 'rangescreener', label: 'Range Screener' },
       { id: 'fundamentals', label: 'Fundamentals' },
       { id: 'dcf',          label: 'DCF Valuation' },
       { id: 'compare',      label: 'Chart Compare' },
@@ -965,6 +967,7 @@ export default function App() {
           {activeTab === 'portfolio'       && <PortfolioTracker />}
           {activeTab === 'daytrader'       && <DayTrader />}
           {activeTab === 'screener'        && <Screener />}
+          {activeTab === 'rangescreener'   && <RangeScreener />}
           {activeTab === 'journal'         && <TradeJournal />}
           {activeTab === 'macro'           && <MacroCalendar />}
           {activeTab === 'sectors'         && <SectorDashboard />}

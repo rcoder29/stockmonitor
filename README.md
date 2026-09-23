@@ -50,6 +50,7 @@ Stock Monitor started as a simple watchlist with live prices and has grown into 
 | Feature | Description |
 |---|---|
 | **Screener** | Technical scans (52W High, Golden/Death Cross, RSI extremes, High Rel-Vol), fundamental presets (Quality Growth, Deep Value, Dividend Income, Momentum+Quality), and Claude NLP mode ("profitable tech with >20% revenue growth"). |
+| **Range Screener** | Scans a ~290-name universe for stocks trading sideways within a 30/60/90-day support/resistance band (Kaufman efficiency ratio + edge-touch counts to confirm a real range, not one outlier), flagging names near either edge with a mechanical entry/target/stop. |
 | **Signals** | Multi-timeframe technical summary (1D/1W/1M/3M) for all watchlist + portfolio symbols: Trend, RSI, MACD, Bollinger Band %. |
 | **Chart Compare** | Normalised return chart for up to 5 stocks over 1M/3M/6M/1Y. Fundamentals side-by-side table. |
 | **Fundamentals** | Side-by-side 21-metric comparison for up to 5 stocks. Best-in-class (green) / worst-in-class (red) highlighting. |
@@ -190,6 +191,7 @@ Bypass for a specific commit with `git commit --no-verify` if you hit a false po
 | Endpoint | Description |
 |---|---|
 | `GET /api/screener/technical?scan=golden_cross` | Technical scans |
+| `GET /api/screener/range-bound?window=60` | Range-bound scan: support/resistance band, range score, touches, near-support/near-resistance signal + entry/target/stop |
 | `GET /api/screener/fundamental?preset=quality_growth` | Fundamental presets |
 | `POST /api/screener/nlp` | NLP query → Claude → filter results |
 | `GET /api/signals?symbols=AAPL,MSFT` | Multi-timeframe technical signals |
@@ -339,6 +341,7 @@ stockmonitor/
 │   │   ├── ipo_lockup_calendar.py       Markets → IPO & Lockups (live EDGAR-sourced)
 │   │   ├── fed_watch.py                 Markets → Fed Watch (FOMC cut/hold/hike odds)
 │   │   ├── ai_morning_briefing.py       AI Tools → Morning Briefing
+│   │   ├── range_screener.py            Research → Range Screener (30/60/90d support/resistance scan)
 │   │   ├── digest.py                    AI Tools → Digests (settings, preview, send, history)
 │   │   ├── crypto_dashboard.py          Markets → Crypto
 │   │   ├── ai_portfolio_review.py       AI Tools → Portfolio Review — _fetch_quote deferred
@@ -395,6 +398,7 @@ stockmonitor/
 │           ├── EarningsCalendar.jsx    Inline earnings countdown
 │           ├── UserGuide.jsx           In-app documentation
 │           ├── DigestCenter.jsx        Digests — delivery setup, schedule, preview/send, history
+│           ├── RangeScreener.jsx       Range Screener — 30/60/90d support/resistance scan
 │           └── InvestorEducation.jsx   Investor education — onion-map landing view +
 │                                        layered concept graph (data/investorEducationTopics.js),
 │                                        with live data snapshots on 12 topics and deep
