@@ -4,6 +4,21 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-22 — Fix: test_main.py database isolation
+
+Fixed the issue flagged in the Range Screener entry below: `test_main.py`'s 52 tests ran against the real `backend/stockmonitor.db` (unlike `test_digest.py` / `test_range_screener.py`, which already use a throwaway DB), so its mocked fixtures were writing directly into the database the running app also reads from — e.g. a mocked quote's name ("Test Corp") could sit in the real quote cache for its TTL, and a CRUD test that crashed before its cleanup call could leave test rows (`TESTSYM99`, `PTTEST`, `ALTEST`, …) in the user's real watchlist, portfolio, or alerts.
+
+Added `tests/conftest.py` with an autouse `isolated_db` fixture (the same throwaway-SQLite-plus-monkeypatched-`SessionLocal` pattern `test_digest.py` already used) that now applies to every test file automatically, since every router reaches the database only through `db_session()`/`cache_get()`/`cache_set()` in `database.py`, which resolve `SessionLocal` by name at call time — no per-router changes needed. `test_digest.py` keeps its own same-named `isolated_db` fixture (it also clears delivery-channel env vars); pytest resolves a test module's own fixture in place of the conftest one, so the two never both run for that file.
+
+### Fixed
+- `backend/tests/conftest.py` — new, autouse `isolated_db` fixture applied to `test_main.py` and `test_range_screener.py` (the latter didn't strictly need it — it already patches `cache_get`/`cache_set` directly — but is now covered for any future test that touches the DB directly).
+
+### Verified
+- Snapshotted real-DB row counts (`watchlist`, `portfolio_positions`, `price_alerts`, `cache_entries`) before and after a full `pytest` run — identical, confirming nothing was written. Full suite: 133/133 passing, ruff clean.
+- The stale `quote:AAPL` → `"Test Corp"` row left in the real cache by *previous* (pre-fix) test runs is still there — it wasn't touched by this fix and will only clear on its own TTL or an explicit cleanup, not addressed here.
+
+---
+
 ## 2026-09-22 — Range Screener
 
 New **Research -> Range Screener**: scans a ~290-name universe (the app's existing SCREENER_UNIVERSE, Short Squeeze, and Insider Trading Feed lists, deduped — mega-caps trend too often to range much, so the smaller/mid caps the latter two already cover matter here) for stocks trading sideways within a support/resistance band over the last 30, 60, or 90 days, and flags names currently near either edge as a possible range-trade entry or exit.
