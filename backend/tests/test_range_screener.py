@@ -45,14 +45,6 @@ class TestWindowMetrics:
         assert m["touchesLow"] >= 2 and m["touchesHigh"] >= 2
         assert m["high"] == 110.0 and m["low"] == 100.0
 
-    def test_series_is_the_windows_own_closes_oldest_first(self):
-        vals = [100, 105, 110, 108, 102, 101, 103, 107, 109, 104, 106, 102, 100, 105]   # >= min bars for a 30d window
-        s = _series(vals)
-        m = rs._window_metrics(s, s, s, price=s.iloc[-1], days=30)
-        assert m is not None
-        assert m["series"] == [float(v) for v in vals]
-        assert m["series"][-1] == s.iloc[-1]   # last point is always the current price
-
     def test_steady_uptrend_scores_low(self):
         s = _series(list(np.linspace(100, 150, 20)))
         m = rs._window_metrics(s, s, s, price=s.iloc[-1], days=30)
@@ -97,9 +89,9 @@ class TestWindowMetrics:
 # ── _compute_range_data: batching, per-symbol windows, resilience ───────────
 
 def _fake_download(symbols):
-    """A yf.download(group_by='column')-shaped frame: 130 bdays, AAA range-bound,
+    """A yf.download(group_by='column')-shaped frame: ~300 bdays (>1yr), AAA range-bound,
     BBB trending, CCC too short a history, DDD present in the frame but with no data."""
-    idx = pd.bdate_range("2025-01-01", periods=130)
+    idx = pd.bdate_range("2025-01-01", periods=300)
     n = len(idx)
     cols = {}
     close_aaa = ([100, 108] * (n // 2 + 1))[:n]
@@ -122,10 +114,19 @@ class TestComputeRangeData:
         assert set(by_sym) == {"AAA", "BBB"}       # CCC too short, DDD not in the frame at all
         assert set(by_sym["AAA"]["windows"]) == {"30", "60", "90"}
         assert by_sym["AAA"]["windows"]["30"]["rangeScore"] > by_sym["BBB"]["windows"]["30"]["rangeScore"]
-        w30, w90 = by_sym["AAA"]["windows"]["30"], by_sym["AAA"]["windows"]["90"]
-        assert w30["series"][-1] == by_sym["AAA"]["price"]    # matches the metrics computed from this same series
-        assert len(w30["series"]) < len(w90["series"])         # a 30-day window has fewer bars than a 90-day one
-        assert w90["series"][-len(w30["series"]):] == w30["series"]   # both slice the same underlying closes, so 30d is a suffix of 90d
+        # series1y is per symbol (not per window) and covers ~1 year regardless of scan window
+        s1y = by_sym["AAA"]["series1y"]
+        assert s1y[-1] == by_sym["AAA"]["price"]
+        assert 250 <= len(s1y) <= 270   # ~1 year of business days (365 * 5/7 ≈ 261), comfortably less than the 300-bar fixture
+
+    def test_windows_no_longer_carry_their_own_series(self):
+        # series1y (symbol-level) replaced the old per-window series field.
+        with patch("routers.range_screener.yf.download", return_value=_fake_download(["AAA"])):
+            data = rs._compute_range_data(["AAA"])
+        row = data[0]
+        assert "series1y" in row
+        for w in row["windows"].values():
+            assert "series" not in w
 
     def test_download_failure_raises_http_500(self):
         with patch("routers.range_screener.yf.download", side_effect=RuntimeError("rate limited")):
@@ -158,13 +159,12 @@ class TestApi:
 
     def test_filters_narrow_the_result_and_response_shape(self):
         with patch("routers.range_screener._default_universe_data", return_value=[
-            {"symbol": "AAA", "name": "Acme", "price": 104.0, "windows": {
+            {"symbol": "AAA", "name": "Acme", "price": 104.0, "series1y": [90.0, 102.0, 106.0, 104.0], "windows": {
                 "60": {"high": 108.0, "low": 100.0, "widthPct": 8.0, "positionPct": 50.0,
                        "rangeScore": 95.0, "touchesLow": 3, "touchesHigh": 3, "signal": "neutral",
-                       "entry": None, "target": None, "stop": None, "riskReward": None,
-                       "series": [102.0, 106.0, 104.0]},
+                       "entry": None, "target": None, "stop": None, "riskReward": None},
             }},
-            {"symbol": "BBB", "name": None, "price": 50.0, "windows": {
+            {"symbol": "BBB", "name": None, "price": 50.0, "series1y": [40.0, 55.0, 45.0, 50.0], "windows": {
                 "60": {"high": 55.0, "low": 45.0, "widthPct": 22.0, "positionPct": 10.0,
                        "rangeScore": 20.0, "touchesLow": 1, "touchesHigh": 1, "signal": "near_support",
                        "entry": 50.0, "target": 55.0, "stop": 44.0, "riskReward": 1.5},
@@ -174,7 +174,7 @@ class TestApi:
             assert {r["symbol"] for r in all_rows} == {"AAA", "BBB"}
             assert all_rows[0]["symbol"] == "AAA"     # higher rangeScore sorts first
             assert all_rows[0]["windowDays"] == 60 and all_rows[0]["name"] == "Acme"
-            assert all_rows[0]["series"] == [102.0, 106.0, 104.0]   # passed through unchanged
+            assert all_rows[0]["series1y"] == [90.0, 102.0, 106.0, 104.0]   # passed through unchanged, wider than the 60d window's own high/low
 
             scored = client.get("/api/screener/range-bound?window=60&min_score=50&min_width=0&min_touches=0").json()
             assert [r["symbol"] for r in scored] == ["AAA"]
@@ -187,7 +187,7 @@ class TestApi:
 
     def test_uses_the_requested_window_key(self):
         with patch("routers.range_screener._default_universe_data", return_value=[
-            {"symbol": "AAA", "name": None, "price": 100.0, "windows": {
+            {"symbol": "AAA", "name": None, "price": 100.0, "series1y": [80.0, 110.0, 90.0, 100.0], "windows": {
                 "30": {"high": 110, "low": 90, "widthPct": 22.0, "positionPct": 50.0, "rangeScore": 80.0,
                        "touchesLow": 3, "touchesHigh": 3, "signal": "neutral", "entry": None, "target": None, "stop": None, "riskReward": None},
             }},

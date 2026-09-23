@@ -4,6 +4,22 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-23 — Range Screener: 1-year inline chart, click to open full chart
+
+Two refinements to the inline chart added earlier today (below): it now shows a full year of history instead of just the selected scan window, "to show multiple swings and resets" — and it's clickable, opening the same `ChartModal` used everywhere else in the app so the user can switch periods/indicators for a proper look.
+
+The two display concerns are now decoupled: the *scan* window (30/60/90 days) still drives the range-detection math (score, touches, position, entry/target/stop), while the *chart* always shows 1 year, with the scan window's low/high drawn as dashed reference lines at their real level within that wider range — not stretched to fill the box, since the current range is often narrower than the year's full swing.
+
+### Changed
+- `routers/range_screener.py` — `_compute_range_data` now fetches `period="13mo"` (was `"7mo"`) in the same single batched `yf.download` call, and computes `series1y` once per symbol (not once per window as the prior version's `series` field did — tripling the data for no reason, since all three windows share the same underlying closes). The per-window `series` field is removed; `series1y` sits at the row's top level alongside `symbol`/`price`.
+- `frontend/src/components/RangeScreener.jsx` — `Sparkline` now scales to the 1-year series' own min/max (with the window low/high drawn wherever they actually fall inside it, only if they're within that range) instead of the window's own low/high; wrapped in a `<button>` that opens `ChartModal` for that symbol, matching the same open/close pattern `IndexHeatmap.jsx`/`MarketSummary.jsx`/etc. already use elsewhere in the app.
+
+### Verified
+- 134 backend tests (unchanged count — one test removed for the retired per-window `series` field, two added for `series1y`) and 114 frontend tests (113 + 1 net: two sparkline tests rewritten in place, one new one for the click-to-open interaction); ruff and `vite build` clean.
+- Live against real data: cold scan still ~6s despite the longer 13-month lookback (no meaningful slowdown — same single batched download, just more rows per symbol); confirmed the 1-year range is genuinely wider than the scan window's own range for a real symbol (e.g. SHW: 60-day window $314.38–$371.30, but the 1-year series ranges $292.32–$369.96); payload for 200 rows grew from ~105KB to ~370KB uncompressed, still reasonable for a single API response.
+
+---
+
 ## 2026-09-23 — Range Screener: inline chart
 
 Each Range Screener row now shows a small inline sparkline of the closing price over the selected window (30/60/90d), with dashed lines marking the detected support and resistance. The point was consistency: rather than fetching a separate, approximately-matching chart period (which could show slightly different bars than what the score/touches/position were actually computed from), the backend now returns the exact same close-price array `_window_metrics` already builds for its efficiency-ratio math — no extra Yahoo call, no extra cache entry, guaranteed to match what the row's numbers describe.

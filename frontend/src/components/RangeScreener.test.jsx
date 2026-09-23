@@ -2,19 +2,29 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import RangeScreener from './RangeScreener'
 
+// Mock ChartModal so it doesn't need the chart library / a real fetch in jsdom (same pattern as IndexHeatmap.test.jsx).
+vi.mock('./ChartModal', () => ({ default: ({ symbol, onClose }) => (
+  <div data-testid="chart-modal">
+    <span>Chart for {symbol}</span>
+    <button onClick={onClose}>Close</button>
+  </div>
+)}))
+
+// series1y deliberately swings wider than the window's own low/high, so tests
+// can confirm the sparkline's y-scale is the 1-year range, not the window.
 const ROW_A = {
   symbol: 'AAA', name: 'Acme Corp', price: 43.72, windowDays: 60,
   high: 52.99, low: 42.50, widthPct: 24.7, positionPct: 11.6,
   rangeScore: 99.6, touchesLow: 11, touchesHigh: 8, signal: 'near_support',
   entry: 43.72, target: 52.99, stop: 41.71, riskReward: 4.62,
-  series: [50.1, 48.3, 45.0, 43.0, 44.5, 43.72],
+  series1y: [60.0, 55.0, 50.0, 38.0, 42.0, 48.0, 44.5, 43.72],
 }
 const ROW_B = {
   symbol: 'BBB', name: null, price: 100.0, windowDays: 60,
   high: 110.0, low: 90.0, widthPct: 22.2, positionPct: 50.0,
   rangeScore: 40.0, touchesLow: 3, touchesHigh: 3, signal: 'neutral',
   entry: null, target: null, stop: null, riskReward: null,
-  series: [95.0, 105.0, 92.0, 108.0, 100.0],
+  series1y: [85.0, 120.0, 95.0, 105.0, 100.0],
 }
 
 function mockFetchOnce(body, ok = true) {
@@ -51,16 +61,19 @@ describe('RangeScreener', () => {
     expect(screen.getByText('4.62x')).toBeInTheDocument()
   })
 
-  it('renders an inline sparkline scaled to the row\'s range, coloured by signal', async () => {
+  it('renders a 1-year inline sparkline, wider than the window, coloured by signal', async () => {
     mockFetchOnce([ROW_A])
     render(<RangeScreener />)
     await screen.findByText('AAA')
-    const svg = document.querySelector('svg[aria-label*="42.50"]')
+    const svg = document.querySelector('svg[aria-label*="1-year"]')
     expect(svg).toBeInTheDocument()
-    expect(svg.getAttribute('aria-label')).toContain('52.99')
+    expect(svg.getAttribute('aria-label')).toContain('$42.50')
+    expect(svg.getAttribute('aria-label')).toContain('$52.99')
     const poly = svg.querySelector('polyline')
-    expect(poly.getAttribute('points').split(' ')).toHaveLength(ROW_A.series.length)
+    expect(poly.getAttribute('points').split(' ')).toHaveLength(ROW_A.series1y.length)
     expect(poly.getAttribute('stroke')).toBe('#34d399')   // near_support -> green
+    // both the window's low and high are drawn as dashed reference lines, since both sit inside the wider 1y range
+    expect(svg.querySelectorAll('line[stroke-dasharray]')).toHaveLength(2)
     // last point of the line matches the last (most recent) close
     const lastPoint = poly.getAttribute('points').split(' ').pop()
     expect(svg.querySelector('circle').getAttribute('cx')).toBe(lastPoint.split(',')[0])
@@ -76,12 +89,28 @@ describe('RangeScreener', () => {
     expect(polylines[1].getAttribute('stroke')).toBe('#9ca3af')   // neutral -> grey
   })
 
-  it('shows a dash instead of a sparkline when the series is missing or too short', async () => {
-    mockFetchOnce([{ ...ROW_A, series: [50] }])
+  it('shows a dash instead of a sparkline when the series is missing or too short, but stays clickable', async () => {
+    mockFetchOnce([{ ...ROW_A, series1y: [50] }])
     render(<RangeScreener />)
     await screen.findByText('AAA')
     expect(document.querySelector('svg')).toBeNull()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+    expect(screen.getByTitle('Click to open the full chart')).toBeInTheDocument()
+  })
+
+  it('opens the full chart modal when a sparkline is clicked, and closes it', async () => {
+    mockFetchOnce([ROW_A, ROW_B])
+    render(<RangeScreener />)
+    await screen.findByText('AAA')
+    expect(screen.queryByTestId('chart-modal')).toBeNull()
+
+    const charts = screen.getAllByTitle('Click to open the full chart')
+    fireEvent.click(charts[1])   // BBB's row (second)
+    expect(screen.getByTestId('chart-modal')).toBeInTheDocument()
+    expect(screen.getByText('Chart for BBB')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Close'))
+    expect(screen.queryByTestId('chart-modal')).toBeNull()
   })
 
   it('the Chart column header is not sortable', async () => {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fmt } from '../utils/format'
+import ChartModal from './ChartModal'
 
 // Research → Range Screener. Finds names trading sideways between a support
 // and resistance band over the last 30/60/90 days, and flags whether price
@@ -28,32 +29,55 @@ function SortArrow({ active, dir }) {
   return <span className={`ml-1 text-xs ${active ? 'text-emerald-400' : 'text-gray-700'}`}>{active ? (dir === 'asc' ? '↑' : '↓') : '⇅'}</span>
 }
 
-const SPARK_W = 120
-const SPARK_H = 32
+const SPARK_W = 168
+const SPARK_H = 40
+const SPARK_PAD = 3   // vertical breathing room so the line/reference dashes don't clip at the very edge
 const SPARK_COLOR = { near_support: '#34d399', near_resistance: '#f87171', neutral: '#9ca3af' }
 
-// Inline sparkline of the same close-price series the row's metrics were
-// computed from — scaled so the low/high of the window sit exactly at the
-// bottom/top of the box, matching the Position bar's 0–100% scale.
-function Sparkline({ series, low, high, signal }) {
-  if (!series || series.length < 2 || high <= low) {
-    return <span className="text-gray-700">—</span>
-  }
+// Inline 1-year sparkline (independent of the scan window selected) so prior
+// swings and range resets are visible, not just the currently detected band.
+// The selected window's low/high are drawn as dashed reference lines at their
+// real position within that wider 1-year scale — they won't sit at the very
+// top/bottom of the box unless the current range happens to be the year's
+// widest swing. The whole chart is a button that opens the full ChartModal
+// (candles, every period 1D–5Y, indicators) for a proper look.
+function Sparkline({ series1y, low, high, signal, onOpen }) {
   const stroke = SPARK_COLOR[signal] || SPARK_COLOR.neutral
-  const n = series.length
-  const x = i => (i / (n - 1)) * SPARK_W
-  const y = v => SPARK_H - ((v - low) / (high - low)) * SPARK_H
-  const clampedY = v => Math.max(0, Math.min(SPARK_H, y(v))).toFixed(1)
-  const points = series.map((v, i) => `${x(i).toFixed(1)},${clampedY(v)}`).join(' ')
+  const hasData = series1y && series1y.length >= 2
+  const yearMin = hasData ? Math.min(...series1y) : null
+  const yearMax = hasData ? Math.max(...series1y) : null
+  const usable = hasData && yearMax > yearMin
+
+  let inner = <span className="text-gray-700">—</span>
+  if (usable) {
+    const n = series1y.length
+    const x = i => (i / (n - 1)) * SPARK_W
+    const y = v => SPARK_H - SPARK_PAD - ((v - yearMin) / (yearMax - yearMin)) * (SPARK_H - 2 * SPARK_PAD)
+    const clampedY = v => Math.max(0, Math.min(SPARK_H, y(v))).toFixed(1)
+    const points = series1y.map((v, i) => `${x(i).toFixed(1)},${clampedY(v)}`).join(' ')
+    const showLow = low >= yearMin && low <= yearMax
+    const showHigh = high >= yearMin && high <= yearMax
+
+    inner = (
+      <svg width={SPARK_W} height={SPARK_H} viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} className="block" role="img"
+        aria-label={`1-year price history; the selected window's range is $${low.toFixed(2)} to $${high.toFixed(2)}`}>
+        {/* selected window's support/resistance, drawn at their real level within the 1-year scale */}
+        {showLow && <line x1={0} y1={clampedY(low)} x2={SPARK_W} y2={clampedY(low)} stroke="#4b5563" strokeWidth={1} strokeDasharray="2,2" />}
+        {showHigh && <line x1={0} y1={clampedY(high)} x2={SPARK_W} y2={clampedY(high)} stroke="#4b5563" strokeWidth={1} strokeDasharray="2,2" />}
+        <polyline points={points} fill="none" stroke={stroke} strokeWidth={1.25} strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={x(n - 1).toFixed(1)} cy={clampedY(series1y[n - 1])} r={2} fill={stroke} />
+      </svg>
+    )
+  }
 
   return (
-    <svg width={SPARK_W} height={SPARK_H} viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} className="block" role="img" aria-label={`Price over the selected window, from $${low.toFixed(2)} to $${high.toFixed(2)}`}>
-      {/* support/resistance edges of the detected range */}
-      <line x1={0} y1={0.5} x2={SPARK_W} y2={0.5} stroke="#4b5563" strokeWidth={1} strokeDasharray="2,2" />
-      <line x1={0} y1={SPARK_H - 0.5} x2={SPARK_W} y2={SPARK_H - 0.5} stroke="#4b5563" strokeWidth={1} strokeDasharray="2,2" />
-      <polyline points={points} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={x(n - 1).toFixed(1)} cy={clampedY(series[n - 1])} r={2} fill={stroke} />
-    </svg>
+    <button
+      type="button" onClick={onOpen}
+      title="Click to open the full chart"
+      className="block rounded hover:ring-1 hover:ring-emerald-600/60 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
+    >
+      {inner}
+    </button>
   )
 }
 
@@ -76,6 +100,13 @@ export default function RangeScreener() {
   const [error, setError] = useState(null)
   const [sortCol, setSortCol] = useState('rangeScore')
   const [sortDir, setSortDir] = useState('desc')
+  const [chartSymbol, setChartSymbol] = useState(null)
+  const [chartQuote, setChartQuote] = useState(null)
+
+  function openChart(row) {
+    setChartQuote({ symbol: row.symbol, name: row.name, price: row.price, change: null, changePercent: null })
+    setChartSymbol(row.symbol)
+  }
 
   function set(patch) {
     setFilters(f => ({ ...f, ...patch }))
@@ -143,7 +174,7 @@ export default function RangeScreener() {
             Finds names that have traded sideways between a support and resistance level over the last 30/60/90 days, rather than trending, and shows where the price sits in that range right now.
             "Score" measures how choppy vs. trending the window was (100 = pure back-and-forth, 0 = a steady trend) — it ranks names, it isn't a guarantee the range will hold.
             "Touches" is how many times price came near the low / near the high — more touches means the support and resistance levels are more established, not just a one-off spike.
-            The inline chart shows the closing price over that same window, scaled so the dashed lines mark the detected low and high — the exact data the metrics beside it were computed from.
+            The inline chart shows a full year of closing prices, with dashed lines marking the selected window's detected low and high — so you can see how the current range sits against prior swings and resets, not just the window itself. Click any chart to open the full candlestick view with every period and indicator.
           </p>
         </div>
 
@@ -215,7 +246,7 @@ export default function RangeScreener() {
                     </td>
                     <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{fmt.price(row.price)}</td>
                     <td className="py-2.5 px-3">
-                      <Sparkline series={row.series} low={row.low} high={row.high} signal={row.signal} />
+                      <Sparkline series1y={row.series1y} low={row.low} high={row.high} signal={row.signal} onOpen={() => openChart(row)} />
                     </td>
                     <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{fmt.price(row.low)}</td>
                     <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{fmt.price(row.high)}</td>
@@ -256,6 +287,10 @@ export default function RangeScreener() {
           Entry/target/stop are mechanical levels derived from the detected range (buy near the low with a stop just below it, sell near the high with a stop just above it) — not a recommendation. A range can break down at any time; size positions accordingly and confirm with your own analysis before trading.
         </p>
       </div>
+
+      {chartSymbol && (
+        <ChartModal symbol={chartSymbol} quote={chartQuote} onClose={() => { setChartSymbol(null); setChartQuote(null) }} />
+      )}
     </div>
   )
 }

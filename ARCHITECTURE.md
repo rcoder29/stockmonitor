@@ -126,18 +126,20 @@ sequenceDiagram
     UI->>API: window=60&min_width=8&min_touches=2&min_score=70...
     API->>Cache: cache_get("range_screen:universe")
     alt cache hit (< 30 min)
-        Cache-->>API: precomputed {symbol, price, windows: {30,60,90}} for ~290 symbols
+        Cache-->>API: precomputed {symbol, price, series1y, windows: {30,60,90}} for ~290 symbols
     else cache miss
-        API->>YF: yf.download(universe, period="7mo") — one batched call
+        API->>YF: yf.download(universe, period="13mo") — one batched call
         YF-->>API: OHLC frame for every symbol
-        API->>API: per symbol, per window: high/low, efficiency ratio\n(range score), edge-touch counts, position %, signal,\nclose-price series (reused from the efficiency-ratio calc)
+        API->>API: per symbol, per window: high/low, efficiency ratio\n(range score), edge-touch counts, position %, signal
+        API->>API: per symbol (once, not per window): series1y —\n1 year of closes, sliced from the same downloaded frame
         API->>Cache: cache_set("range_screen:universe", result)
     end
     API->>API: filter by width/touches/score/signal, sort by score desc
-    API-->>UI: rows, each with entry/target/stop and a `series` of closes\nfor the inline sparkline — the exact bars the row's numbers came from
+    API-->>UI: rows, each with entry/target/stop and `series1y`\nfor the inline chart
+    UI->>UI: click an inline chart -> open ChartModal(symbol)\n(same modal, own /api/chart fetch, full period/indicator control)
 ```
 
-An optional `symbols=` query param bypasses the cached universe and scans a caller-supplied list instead — not cached, since arbitrary combinations aren't worth persisting. The frontend's inline sparkline is drawn from `series` directly rather than a second chart request, so it can never show a different window than the metrics beside it.
+An optional `symbols=` query param bypasses the cached universe and scans a caller-supplied list instead — not cached, since arbitrary combinations aren't worth persisting. `series1y` is fetched once per symbol (not once per scan window, which would triple it for identical underlying data) in the *same* batched call the scan windows already need — the 13-month lookback covers both. The inline chart's y-scale is the 1-year series' own min/max, with the selected window's low/high drawn as reference lines wherever they actually fall inside it — so a look at the chart shows the current range in the context of the whole year's swings, not just the window in isolation. Clicking it opens the same `ChartModal` other tables use (`IndexHeatmap.jsx`, `MarketSummary.jsx`, `PortfolioTracker.jsx`, …): a self-contained modal with its own `/api/chart/{symbol}?period=...` fetch, independent of the range screener's own data.
 
 ## Data Flow — Index / ETF Heatmap
 

@@ -586,7 +586,7 @@ const GUIDE = [
         ['Touches', 'How many days price came within 15% of the window low / within 15% of the window high. More touches on both sides means the support and resistance levels are more established, not just one outlier spike or dip.'],
         ['Position', 'Where the current price sits between the low (0%) and high (100%) of the range.'],
         ['Signal', '"Near support" (bottom 20% of the range) or "near resistance" (top 20%) — the two zones this screener treats as actionable. Everything else is "mid-range".'],
-        ['Chart', 'A small inline line chart of the closing price over that same window, with dashed lines marking the detected low and high — the exact data the row\'s metrics were computed from, not an approximation. Green when near support, red when near resistance, grey otherwise.'],
+        ['Chart', 'A small inline line chart of the last year of closing prices — wider than the window itself, so you can see prior swings and range resets, not just the currently detected band. Dashed lines mark the selected window\'s low and high at their real level within that year. Green when near support, red when near resistance, grey otherwise. Click it to open the full candlestick chart with every period (1D–5Y) and the usual overlays.'],
       ]},
       { type: 'steps', items: [
         'Choose a window (30/60/90 days) and, optionally, tighten the width/touches/score filters or the signal dropdown.',
@@ -1416,6 +1416,12 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-23 — Range Screener: 1-year inline chart, click to open full chart' },
+      { type: 'bullets', items: [
+        'The inline chart now shows a full year of closing prices instead of just the selected 30/60/90-day window, so prior swings and range resets are visible alongside the currently detected band — the selected window\'s low/high are drawn as dashed reference lines at their real level within that wider year, not stretched to fill the box.',
+        'Click any inline chart to open the same full ChartModal used elsewhere in the app (candlesticks, every period from 1D to 5Y, moving averages, Bollinger Bands, RSI, MACD) for that symbol.',
+        'The backend fetches 13 months of history in the same single batched call it already made (no extra Yahoo request), and computes the 1-year series once per symbol rather than once per window.',
+      ]},
       { type: 'h3', text: '2026-09-23 — Range Screener: inline chart' },
       { type: 'bullets', items: [
         'Each Range Screener row now shows a small inline sparkline of the closing price over the selected window, with dashed lines marking the detected support and resistance — built from the exact same price series the row\'s score/touches/position were computed from, not a separately-fetched approximation.',

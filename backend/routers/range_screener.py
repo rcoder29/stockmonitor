@@ -15,10 +15,13 @@ or exit/short (near resistance) for a range-trading strategy.
     Requiring at least a couple of touches on each side rules out a "range"
     that's really just one outlier spike plus one outlier dip.
 
-Each window also carries `series`: the closing price for every bar in that
-same window (oldest first), so the frontend can draw an inline sparkline that
-shows exactly the price action the metrics above were computed from — not an
-approximation from a separately-fetched chart period.
+Each symbol also carries `series1y`: its closing price for every bar in the
+last year (oldest first), independent of which scan window (30/60/90) is
+selected — used for an inline 1-year sparkline so multiple prior swings and
+range resets are visible at a glance, with the *selected* window's low/high
+drawn on top as reference lines. This is a separate, longer lookback than the
+scan windows use, which is why the batch download below covers 13 months
+instead of the ~7 the scan windows alone would need.
 
 Universe is the union of three curated lists already in this codebase
 (SCREENER_UNIVERSE, the Short Squeeze Scanner's, and the Insider Trading
@@ -103,13 +106,15 @@ def _window_metrics(h_sub: pd.Series, l_sub: pd.Series, c_sub: pd.Series, price:
         "target": round(target, 2) if target is not None else None,
         "stop": round(stop, 2) if stop is not None else None,
         "riskReward": risk_reward,
-        "series": [round(v, 2) for v in closes.tolist()],
     }
+
+
+_CHART_LOOKBACK_DAYS = 365
 
 
 def _compute_range_data(universe: list[str]) -> list[dict]:
     try:
-        raw = yf.download(universe, period="7mo", interval="1d", auto_adjust=True,
+        raw = yf.download(universe, period="13mo", interval="1d", auto_adjust=True,
                           progress=False, session=_session, group_by="column")
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -139,7 +144,9 @@ def _compute_range_data(universe: list[str]) -> list[dict]:
             q = cache_get(f"quote:{sym}", timedelta(hours=6))
             if q:
                 name = q.get("name")
-            results.append({"symbol": sym, "name": name, "price": round(price, 2), "windows": windows})
+            year_cutoff = last_date - pd.Timedelta(days=_CHART_LOOKBACK_DAYS)
+            series1y = [round(v, 2) for v in c[c.index >= year_cutoff].tolist()]
+            results.append({"symbol": sym, "name": name, "price": round(price, 2), "series1y": series1y, "windows": windows})
 
     return results
 
@@ -194,7 +201,7 @@ def range_bound_screener(
             continue
         rows.append({
             "symbol": row["symbol"], "name": row["name"], "price": row["price"],
-            "windowDays": window, **w,
+            "series1y": row["series1y"], "windowDays": window, **w,
         })
 
     rows.sort(key=lambda r: r["rangeScore"], reverse=True)
