@@ -15,6 +15,11 @@ or exit/short (near resistance) for a range-trading strategy.
     Requiring at least a couple of touches on each side rules out a "range"
     that's really just one outlier spike plus one outlier dip.
 
+Each window also carries `series`: the closing price for every bar in that
+same window (oldest first), so the frontend can draw an inline sparkline that
+shows exactly the price action the metrics above were computed from — not an
+approximation from a separately-fetched chart period.
+
 Universe is the union of three curated lists already in this codebase
 (SCREENER_UNIVERSE, the Short Squeeze Scanner's, and the Insider Trading
 Feed's) — mega-caps trend too much to range often, so a screener aimed at
@@ -98,6 +103,7 @@ def _window_metrics(h_sub: pd.Series, l_sub: pd.Series, c_sub: pd.Series, price:
         "target": round(target, 2) if target is not None else None,
         "stop": round(stop, 2) if stop is not None else None,
         "riskReward": risk_reward,
+        "series": [round(v, 2) for v in closes.tolist()],
     }
 
 

@@ -586,6 +586,7 @@ const GUIDE = [
         ['Touches', 'How many days price came within 15% of the window low / within 15% of the window high. More touches on both sides means the support and resistance levels are more established, not just one outlier spike or dip.'],
         ['Position', 'Where the current price sits between the low (0%) and high (100%) of the range.'],
         ['Signal', '"Near support" (bottom 20% of the range) or "near resistance" (top 20%) — the two zones this screener treats as actionable. Everything else is "mid-range".'],
+        ['Chart', 'A small inline line chart of the closing price over that same window, with dashed lines marking the detected low and high — the exact data the row\'s metrics were computed from, not an approximation. Green when near support, red when near resistance, grey otherwise.'],
       ]},
       { type: 'steps', items: [
         'Choose a window (30/60/90 days) and, optionally, tighten the width/touches/score filters or the signal dropdown.',
@@ -1415,6 +1416,11 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-23 — Range Screener: inline chart' },
+      { type: 'bullets', items: [
+        'Each Range Screener row now shows a small inline sparkline of the closing price over the selected window, with dashed lines marking the detected support and resistance — built from the exact same price series the row\'s score/touches/position were computed from, not a separately-fetched approximation.',
+        'Line colour follows the row\'s signal: green near support, red near resistance, grey mid-range.',
+      ]},
       { type: 'h3', text: '2026-09-22 — Range Screener' },
       { type: 'bullets', items: [
         'New Research → Range Screener: scans a ~290-name universe for stocks trading sideways within a support/resistance band over 30/60/90 days, and flags names currently near either edge as a possible range-trade entry/exit.',

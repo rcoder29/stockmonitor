@@ -28,6 +28,35 @@ function SortArrow({ active, dir }) {
   return <span className={`ml-1 text-xs ${active ? 'text-emerald-400' : 'text-gray-700'}`}>{active ? (dir === 'asc' ? '↑' : '↓') : '⇅'}</span>
 }
 
+const SPARK_W = 120
+const SPARK_H = 32
+const SPARK_COLOR = { near_support: '#34d399', near_resistance: '#f87171', neutral: '#9ca3af' }
+
+// Inline sparkline of the same close-price series the row's metrics were
+// computed from — scaled so the low/high of the window sit exactly at the
+// bottom/top of the box, matching the Position bar's 0–100% scale.
+function Sparkline({ series, low, high, signal }) {
+  if (!series || series.length < 2 || high <= low) {
+    return <span className="text-gray-700">—</span>
+  }
+  const stroke = SPARK_COLOR[signal] || SPARK_COLOR.neutral
+  const n = series.length
+  const x = i => (i / (n - 1)) * SPARK_W
+  const y = v => SPARK_H - ((v - low) / (high - low)) * SPARK_H
+  const clampedY = v => Math.max(0, Math.min(SPARK_H, y(v))).toFixed(1)
+  const points = series.map((v, i) => `${x(i).toFixed(1)},${clampedY(v)}`).join(' ')
+
+  return (
+    <svg width={SPARK_W} height={SPARK_H} viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} className="block" role="img" aria-label={`Price over the selected window, from $${low.toFixed(2)} to $${high.toFixed(2)}`}>
+      {/* support/resistance edges of the detected range */}
+      <line x1={0} y1={0.5} x2={SPARK_W} y2={0.5} stroke="#4b5563" strokeWidth={1} strokeDasharray="2,2" />
+      <line x1={0} y1={SPARK_H - 0.5} x2={SPARK_W} y2={SPARK_H - 0.5} stroke="#4b5563" strokeWidth={1} strokeDasharray="2,2" />
+      <polyline points={points} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={x(n - 1).toFixed(1)} cy={clampedY(series[n - 1])} r={2} fill={stroke} />
+    </svg>
+  )
+}
+
 function Field({ label, children }) {
   return (
     <label className="flex flex-col gap-1 text-[10.5px] text-gray-500 uppercase tracking-wider">
@@ -82,6 +111,7 @@ export default function RangeScreener() {
   const cols = [
     { label: 'Symbol',   key: 'symbol',       align: 'text-left' },
     { label: 'Price',    key: 'price',        align: 'text-right' },
+    { label: 'Chart',    key: 'chart',        align: 'text-left', sortable: false },
     { label: 'Range Low',  key: 'low',        align: 'text-right' },
     { label: 'Range High', key: 'high',       align: 'text-right' },
     { label: 'Width %',  key: 'widthPct',     align: 'text-right' },
@@ -113,6 +143,7 @@ export default function RangeScreener() {
             Finds names that have traded sideways between a support and resistance level over the last 30/60/90 days, rather than trending, and shows where the price sits in that range right now.
             "Score" measures how choppy vs. trending the window was (100 = pure back-and-forth, 0 = a steady trend) — it ranks names, it isn't a guarantee the range will hold.
             "Touches" is how many times price came near the low / near the high — more touches means the support and resistance levels are more established, not just a one-off spike.
+            The inline chart shows the closing price over that same window, scaled so the dashed lines mark the detected low and high — the exact data the metrics beside it were computed from.
           </p>
         </div>
 
@@ -167,10 +198,10 @@ export default function RangeScreener() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-gray-800 bg-gray-900/60">
-                  {cols.map(({ label, key, align }) => (
-                    <th key={key} onClick={() => handleSort(key)}
-                      className={`py-2.5 px-3 text-gray-500 font-medium tracking-wider uppercase cursor-pointer select-none hover:text-gray-300 whitespace-nowrap ${align}`}>
-                      {label}<SortArrow active={sortCol === key} dir={sortDir} />
+                  {cols.map(({ label, key, align, sortable = true }) => (
+                    <th key={key} onClick={sortable ? () => handleSort(key) : undefined}
+                      className={`py-2.5 px-3 text-gray-500 font-medium tracking-wider uppercase whitespace-nowrap ${align} ${sortable ? 'cursor-pointer select-none hover:text-gray-300' : ''}`}>
+                      {label}{sortable && <SortArrow active={sortCol === key} dir={sortDir} />}
                     </th>
                   ))}
                 </tr>
@@ -183,6 +214,9 @@ export default function RangeScreener() {
                       {row.name && <div className="text-gray-600 text-[10px] max-w-[140px] truncate">{row.name}</div>}
                     </td>
                     <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{fmt.price(row.price)}</td>
+                    <td className="py-2.5 px-3">
+                      <Sparkline series={row.series} low={row.low} high={row.high} signal={row.signal} />
+                    </td>
                     <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{fmt.price(row.low)}</td>
                     <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{fmt.price(row.high)}</td>
                     <td className="py-2.5 px-3 text-right text-gray-300 tabular-nums">{row.widthPct.toFixed(1)}%</td>

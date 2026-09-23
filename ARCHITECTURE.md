@@ -130,14 +130,14 @@ sequenceDiagram
     else cache miss
         API->>YF: yf.download(universe, period="7mo") — one batched call
         YF-->>API: OHLC frame for every symbol
-        API->>API: per symbol, per window: high/low, efficiency ratio\n(range score), edge-touch counts, position %, signal
+        API->>API: per symbol, per window: high/low, efficiency ratio\n(range score), edge-touch counts, position %, signal,\nclose-price series (reused from the efficiency-ratio calc)
         API->>Cache: cache_set("range_screen:universe", result)
     end
     API->>API: filter by width/touches/score/signal, sort by score desc
-    API-->>UI: rows, each with entry/target/stop for near-support/near-resistance
+    API-->>UI: rows, each with entry/target/stop and a `series` of closes\nfor the inline sparkline — the exact bars the row's numbers came from
 ```
 
-An optional `symbols=` query param bypasses the cached universe and scans a caller-supplied list instead — not cached, since arbitrary combinations aren't worth persisting.
+An optional `symbols=` query param bypasses the cached universe and scans a caller-supplied list instead — not cached, since arbitrary combinations aren't worth persisting. The frontend's inline sparkline is drawn from `series` directly rather than a second chart request, so it can never show a different window than the metrics beside it.
 
 ## Data Flow — Index / ETF Heatmap
 

@@ -4,6 +4,20 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-23 — Range Screener: inline chart
+
+Each Range Screener row now shows a small inline sparkline of the closing price over the selected window (30/60/90d), with dashed lines marking the detected support and resistance. The point was consistency: rather than fetching a separate, approximately-matching chart period (which could show slightly different bars than what the score/touches/position were actually computed from), the backend now returns the exact same close-price array `_window_metrics` already builds for its efficiency-ratio math — no extra Yahoo call, no extra cache entry, guaranteed to match what the row's numbers describe.
+
+### New
+- `routers/range_screener.py` — each window's dict gains `series`: the window's closing prices, oldest first (reuses the array already computed for the efficiency ratio, so this is free — no additional yfinance calls or cache keys).
+- `frontend/src/components/RangeScreener.jsx` — new `Sparkline` component (plain inline SVG, no charting library): draws the close-price line scaled so the range low/high sit at the box's bottom/top, coloured green/red/grey by the row's signal. New non-sortable "Chart" column.
+
+### Verified
+- 134 backend tests (133 + 1 new) and 113 frontend tests (101 + 12 new, up from the prior session's counts); ruff and `vite build` clean.
+- Live against real data: confirmed `series[-1] == price` for every row (the sparkline's last point always matches the displayed current price) and checked the payload size for 200 rows with series attached (~105KB uncompressed — no cap or pagination change needed).
+
+---
+
 ## 2026-09-22 — Fix: test_main.py database isolation
 
 Fixed the issue flagged in the Range Screener entry below: `test_main.py`'s 52 tests ran against the real `backend/stockmonitor.db` (unlike `test_digest.py` / `test_range_screener.py`, which already use a throwaway DB), so its mocked fixtures were writing directly into the database the running app also reads from — e.g. a mocked quote's name ("Test Corp") could sit in the real quote cache for its TTL, and a CRUD test that crashed before its cleanup call could leave test rows (`TESTSYM99`, `PTTEST`, `ALTEST`, …) in the user's real watchlist, portfolio, or alerts.

@@ -50,7 +50,7 @@ Stock Monitor started as a simple watchlist with live prices and has grown into 
 | Feature | Description |
 |---|---|
 | **Screener** | Technical scans (52W High, Golden/Death Cross, RSI extremes, High Rel-Vol), fundamental presets (Quality Growth, Deep Value, Dividend Income, Momentum+Quality), and Claude NLP mode ("profitable tech with >20% revenue growth"). |
-| **Range Screener** | Scans a ~290-name universe for stocks trading sideways within a 30/60/90-day support/resistance band (Kaufman efficiency ratio + edge-touch counts to confirm a real range, not one outlier), flagging names near either edge with a mechanical entry/target/stop. |
+| **Range Screener** | Scans a ~290-name universe for stocks trading sideways within a 30/60/90-day support/resistance band (Kaufman efficiency ratio + edge-touch counts to confirm a real range, not one outlier), flagging names near either edge with a mechanical entry/target/stop and an inline sparkline showing the exact price action behind each row. |
 | **Signals** | Multi-timeframe technical summary (1D/1W/1M/3M) for all watchlist + portfolio symbols: Trend, RSI, MACD, Bollinger Band %. |
 | **Chart Compare** | Normalised return chart for up to 5 stocks over 1M/3M/6M/1Y. Fundamentals side-by-side table. |
 | **Fundamentals** | Side-by-side 21-metric comparison for up to 5 stocks. Best-in-class (green) / worst-in-class (red) highlighting. |

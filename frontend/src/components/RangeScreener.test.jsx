@@ -7,12 +7,14 @@ const ROW_A = {
   high: 52.99, low: 42.50, widthPct: 24.7, positionPct: 11.6,
   rangeScore: 99.6, touchesLow: 11, touchesHigh: 8, signal: 'near_support',
   entry: 43.72, target: 52.99, stop: 41.71, riskReward: 4.62,
+  series: [50.1, 48.3, 45.0, 43.0, 44.5, 43.72],
 }
 const ROW_B = {
   symbol: 'BBB', name: null, price: 100.0, windowDays: 60,
   high: 110.0, low: 90.0, widthPct: 22.2, positionPct: 50.0,
   rangeScore: 40.0, touchesLow: 3, touchesHigh: 3, signal: 'neutral',
   entry: null, target: null, stop: null, riskReward: null,
+  series: [95.0, 105.0, 92.0, 108.0, 100.0],
 }
 
 function mockFetchOnce(body, ok = true) {
@@ -47,6 +49,50 @@ describe('RangeScreener', () => {
     expect(screen.getByText('11 / 8')).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Near support' })).toBeInTheDocument()
     expect(screen.getByText('4.62x')).toBeInTheDocument()
+  })
+
+  it('renders an inline sparkline scaled to the row\'s range, coloured by signal', async () => {
+    mockFetchOnce([ROW_A])
+    render(<RangeScreener />)
+    await screen.findByText('AAA')
+    const svg = document.querySelector('svg[aria-label*="42.50"]')
+    expect(svg).toBeInTheDocument()
+    expect(svg.getAttribute('aria-label')).toContain('52.99')
+    const poly = svg.querySelector('polyline')
+    expect(poly.getAttribute('points').split(' ')).toHaveLength(ROW_A.series.length)
+    expect(poly.getAttribute('stroke')).toBe('#34d399')   // near_support -> green
+    // last point of the line matches the last (most recent) close
+    const lastPoint = poly.getAttribute('points').split(' ').pop()
+    expect(svg.querySelector('circle').getAttribute('cx')).toBe(lastPoint.split(',')[0])
+  })
+
+  it('colours the sparkline red for near-resistance and grey for neutral', async () => {
+    const nearRes = { ...ROW_A, symbol: 'CCC', signal: 'near_resistance' }
+    mockFetchOnce([nearRes, ROW_B])
+    render(<RangeScreener />)
+    await screen.findByText('CCC')
+    const polylines = document.querySelectorAll('polyline')
+    expect(polylines[0].getAttribute('stroke')).toBe('#f87171')   // near_resistance -> red
+    expect(polylines[1].getAttribute('stroke')).toBe('#9ca3af')   // neutral -> grey
+  })
+
+  it('shows a dash instead of a sparkline when the series is missing or too short', async () => {
+    mockFetchOnce([{ ...ROW_A, series: [50] }])
+    render(<RangeScreener />)
+    await screen.findByText('AAA')
+    expect(document.querySelector('svg')).toBeNull()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+  })
+
+  it('the Chart column header is not sortable', async () => {
+    mockFetchOnce([ROW_A, ROW_B])
+    render(<RangeScreener />)
+    await screen.findByText('AAA')
+    const chartHeader = screen.getByText('Chart')
+    expect(chartHeader.closest('th').className).not.toContain('cursor-pointer')
+    const before = screen.getAllByRole('row').slice(1).map(r => r.textContent.slice(0, 3))
+    fireEvent.click(chartHeader)
+    expect(screen.getAllByRole('row').slice(1).map(r => r.textContent.slice(0, 3))).toEqual(before)
   })
 
   it('renders — for a neutral row with no trade levels', async () => {
