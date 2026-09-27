@@ -136,6 +136,19 @@ export default function HomeDashboard({ watchlist, quotes, alerts, earnings, por
                     Try it →
                   </button>
                 )}
+                {f.tabIds?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-1.5">
+                    {f.tabIds.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => onNavigate(t.id)}
+                        className="text-[11px] text-emerald-500 hover:text-emerald-400 transition-colors"
+                      >
+                        {t.label} →
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

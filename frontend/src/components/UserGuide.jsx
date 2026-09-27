@@ -1494,7 +1494,7 @@ function Block({ block, onNavigate }) {
 
     case 'h3':
       return (
-        <h3 className="text-white font-semibold text-sm mt-5 mb-2 flex items-center gap-2.5">
+        <h3 className="text-white font-semibold text-sm mt-5 mb-2 flex items-center gap-2 flex-wrap">
           {block.text}
           {block.tabId && onNavigate && (
             <button
@@ -1504,6 +1504,15 @@ function Block({ block, onNavigate }) {
               Open feature →
             </button>
           )}
+          {block.tabIds?.length > 0 && onNavigate && block.tabIds.map(t => (
+            <button
+              key={t.id}
+              onClick={() => onNavigate(t.id)}
+              className="text-[10px] font-medium text-emerald-500 hover:text-emerald-400 border border-emerald-700/40 hover:border-emerald-600 rounded px-1.5 py-0.5 transition-colors normal-case tracking-normal"
+            >
+              {t.label} →
+            </button>
+          ))}
         </h3>
       )
 

@@ -4,6 +4,19 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-27 — Changelog Jump Links: multi-feature bundles
+
+Follow-up to the same day's "What's New Widget & Changelog Jump Links" entry below, which only linked the ~30 most recent single-feature entries. Backfilled the rest.
+
+### New
+- `h3` changelog blocks can now carry a `tabIds` array (`[{id, label}]`) instead of a single `tabId`, for entries that bundle several features (e.g. "New SPACs module: Tracker, Discovery, Deal Analyzer") — `UserGuide.jsx`'s heading renderer and the Home "What's New" widget both render one "label →" button per entry in the list.
+- Backfilled `tabId`/`tabIds` across the older "Phase N" bundle entries and other multi-feature entries, cross-checked against the *current* `NAV_GROUPS` in `App.jsx` (not assumed from the old entry text) so nothing links to a feature that's since been renamed or removed — several old entries reference tabs that no longer exist (Portfolio Risk Dashboard, Portfolio Optimizer, Portfolio X-Ray, Options Strategy Builder, the original Insider Transactions/Earnings Calendar since superseded by newer features), and those specific items were left unlinked rather than pointed at the wrong page or removed silently.
+- 53 of the app's 59 changelog entries now have at least one jump link (up from ~30); the remaining 6 (nav redesigns, sidebar pinning, PDF export, the initial scaffold) have no single clean tab target and stay as plain text.
+
+### Verified
+- `vite build` clean; `changelog.js`'s chunk size confirmed unchanged in kind (still its own on-demand chunk, not bundled into Home's eager chunk) — grew from 50.20 kB to 53.51 kB from the added tabIds metadata, main bundle unchanged at ~451 kB.
+- Spot-checked via Node that `getLatestChangelogEntries` still parses correctly with the new `tabIds` field present.
+
 ## 2026-09-27 — What's New Widget & Changelog Jump Links
 
 The Changelog tab (User Guide) already held the full feature history, but nothing surfaced recent additions proactively, and there was no way to jump from a changelog entry to the feature it described.

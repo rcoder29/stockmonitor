@@ -14,7 +14,7 @@ export const CHANGELOG_BLOCKS = [
   { type: 'h3', text: '2026-09-27 — What\'s New Widget & Changelog Jump Links', tabId: 'home' },
   { type: 'bullets', items: [
     'New "What\'s New" card on Home: the 3 most recent changelog entries, each with a one-line summary and a "Try it →" button that jumps straight to that feature\'s tab. A "Full changelog →" link opens the User Guide scrolled directly to the Changelog section.',
-    'Changelog entries that map cleanly to one current tab now show an "Open feature →" button next to the heading, jumping there directly — applied to the ~30 most recent/unambiguous entries; older or multi-feature bundle entries are left as plain text rather than guessing which of several tabs they mean.',
+    'Changelog entries that map to a current tab now show one or more "→" jump buttons next to the heading. 53 of the app\'s 59 changelog entries are linked (including multi-feature bundle entries, which get one button per feature via a tabIds list) — only entries with no clean tab target (nav redesigns, sidebar pinning, PDF export, the initial scaffold) are left as plain text, and a few features named in old "Phase" bundles that no longer have a standalone tab (e.g. the original Portfolio Risk Dashboard/Optimizer/X-Ray, Options Strategy Builder) are skipped rather than linked to something that no longer exists.',
     'The changelog\'s full entry list moved out of UserGuide.jsx into its own data/changelog.js module — the single source of truth for both the User Guide\'s Changelog tab and the Home widget, loaded as a separate on-demand chunk (not bundled into Home\'s eager landing-page bundle) so the ~50-entry history doesn\'t slow down first paint.',
   ]},
   { type: 'h3', text: '2026-09-27 — Price Projection', tabId: 'priceprojection' },
@@ -174,7 +174,9 @@ export const CHANGELOG_BLOCKS = [
     '"Trust-Protected" summary and floor-value panel show how much of the book is recoverable via redemption regardless of deal outcome — warrant positions carry no floor and are excluded from that figure.',
     'Common vs. warrant exposure concentration breakdown.',
   ]},
-  { type: 'h3', text: '2026-08-06 — New SPACs module: Tracker, Discovery, Deal Analyzer' },
+  { type: 'h3', text: '2026-08-06 — New SPACs module: Tracker, Discovery, Deal Analyzer', tabIds: [
+    { id: 'spactracker', label: 'Tracker' }, { id: 'spacdiscovery', label: 'Discovery' }, { id: 'spacanalyzer', label: 'Deal Analyzer' },
+  ] },
   { type: 'bullets', items: [
     'New top-level SPACs sidebar group with 3 components — a separate strategy from Merger Arb since SPAC economics center on a redemption floor at trust value rather than deal-completion risk to a fixed offer price.',
     'Tracker: SPACs against trust value, redemption deadline, and warrant pricing, with live discount/premium-to-trust and annualized capture-yield-to-deadline.',
@@ -200,7 +202,10 @@ export const CHANGELOG_BLOCKS = [
     'Credit: HYG vs LQD 1-month return spread. Safe Haven: SPY vs TLT 1-month spread + gold.',
     'Auto-refreshes every 5 minutes. Server-side 30-minute cache.',
   ]},
-  { type: 'h3', text: '2026-08-06 — Merger Arb: Opportunity Scanner, Deal Analyzer, Arb Portfolio, Risk Matrix' },
+  { type: 'h3', text: '2026-08-06 — Merger Arb: Opportunity Scanner, Deal Analyzer, Arb Portfolio, Risk Matrix', tabIds: [
+    { id: 'mergerscanner', label: 'Opportunity Scanner' }, { id: 'mergeranalyzer', label: 'Deal Analyzer' },
+    { id: 'mergerportfolio', label: 'Arb Portfolio' }, { id: 'mergerrisk', label: 'Risk Matrix' },
+  ] },
   { type: 'bullets', items: [
     'Merger Arb sidebar group now complete — all 5 components live.',
     'Opportunity Scanner: broader EDGAR discovery feed (SC TO-T, SC 13E-3, DEFM14A, PREM14A, S-4, 425 — 60-day window) with live price context per filing and one-click add of untracked opportunities to the Deal Dashboard.',
@@ -251,7 +256,10 @@ export const CHANGELOG_BLOCKS = [
     'Signal system: STRONG BUY / BUY / NEUTRAL / WEAK / AVOID based on win rate and avg return thresholds.',
     'Backend: /api/market/earnings-strategy (single stock full analysis) and /api/market/earnings-strategy-scan (multi-stock scanner). 6-hour cache.',
   ]},
-  { type: 'h3', text: '2026-07-30 — 5 New Analysis Features' },
+  { type: 'h3', text: '2026-07-30 — 5 New Analysis Features', tabIds: [
+    { id: 'correlationmatrix', label: 'Correlation Matrix' }, { id: 'seasonalpatterns', label: 'Seasonal Patterns' },
+    { id: 'etfoverlap', label: 'ETF Overlap' }, { id: 'relativestrengthr', label: 'Relative Strength' }, { id: 'attribution', label: 'Attribution' },
+  ] },
   { type: 'bullets', items: [
     'Correlation Matrix (Watchlist → Correlation): color-coded Pearson correlation grid for any set of stocks over 1M–2Y lookbacks. Identifies hidden concentration risk and best diversifiers.',
     'Seasonal Patterns (Research → Seasonal Patterns): month-by-month avg return + win rate for any stock over up to 20 years. Bar chart and detailed table with box plot distributions.',
@@ -328,7 +336,9 @@ export const CHANGELOG_BLOCKS = [
     'Clear in-app setup guide for adding a FRED API key (free, no rate limits for personal use).',
     'All data cached 30 minutes; click ↻ Refresh to reload.',
   ]},
-  { type: 'h3', text: '2026-07-30 — Crypto Dashboard & AI Portfolio Review' },
+  { type: 'h3', text: '2026-07-30 — Crypto Dashboard & AI Portfolio Review', tabIds: [
+    { id: 'crypto', label: 'Crypto' }, { id: 'portfolioreview', label: 'Portfolio Review' },
+  ] },
   { type: 'bullets', items: [
     'New Crypto Dashboard under Markets → Crypto: live prices, market caps, 24h/7d performance for top 20 cryptocurrencies sorted by market cap.',
     'BTC and ETH hero cards with price, change badges, market cap, and volume. Market Overview card shows total market cap with BTC/ETH dominance bars.',
@@ -350,7 +360,10 @@ export const CHANGELOG_BLOCKS = [
     'Summary cards: buy count, sale count, total buy value, cluster buy stock count; largest-buy callout card.',
     'Sortable table with search by ticker, insider name, or company name.',
   ]},
-  { type: 'h3', text: '2026-07-30 — Wheel Tracker, Tax Lot Manager, Medicare Estimator, Estate & RMD Projector' },
+  { type: 'h3', text: '2026-07-30 — Wheel Tracker, Tax Lot Manager, Medicare Estimator, Estate & RMD Projector', tabIds: [
+    { id: 'wheeltracker', label: 'Wheel Tracker' }, { id: 'taxlots', label: 'Tax Lots' },
+    { id: 'medicare', label: 'Medicare Estimator' }, { id: 'estatermd', label: 'Estate & RMD' },
+  ] },
   { type: 'bullets', items: [
     'Wheel Strategy Tracker (Trading group): track cash-secured puts and covered calls through the options wheel cycle. Calculates annualised yield per position, shows expiry countdown badges (green/yellow/red), premium totals, and a 3-step wheel explainer. localStorage-persisted.',
     'Tax Lot Manager (Portfolio group): track cost basis by individual purchase lot. Sell Optimizer simulates which specific lots to sell to minimise federal tax using 5 methods (Min Tax, FIFO, LIFO, High Cost, Low Cost). Shows long-term vs short-term classification, holding period, and after-tax proceeds. Uses 2025 MFJ brackets and LTCG rates.',
@@ -366,7 +379,9 @@ export const CHANGELOG_BLOCKS = [
     'Claude generates a 6-section structured briefing: Market Pulse, Index & Sector Breakdown, Watchlist Spotlight, Key News & Implications, Risk Radar, Today\'s Action Checklist.',
     'Briefing cached in localStorage by date — revisiting the page shows cached result instantly; Refresh button regenerates with fresh data.',
   ]},
-  { type: 'h3', text: '2026-07-25 — Trading & Market Intelligence' },
+  { type: 'h3', text: '2026-07-25 — Trading & Market Intelligence', tabIds: [
+    { id: 'shortsqueeze', label: 'Short Squeeze' }, { id: 'ipocalendar', label: 'IPO & Lockups' }, { id: 'fedwatch', label: 'Fed Watch' },
+  ] },
   { type: 'bullets', items: [
     'Short Squeeze Scanner: scans ~120 high-short-interest stocks, scores 0–100 (short % float 40%, days to cover 30%, momentum 20%, MoM SI change 10%). EXTREME/HIGH/MEDIUM/LOW badges, sortable table, add custom symbols. 30-min cache.',
     'IPO & Lockup Calendar: tracks recent IPOs with live price vs IPO price performance and lockup expiry countdown. Color-coded progress bars (red ≤14 days). Active/Expired tabs. Explains lockup mechanics.',
@@ -388,7 +403,9 @@ export const CHANGELOG_BLOCKS = [
     'Topic selections persisted in localStorage — remembered across sessions.',
     'Backend: /api/news-feed endpoint maps topic keys to yfinance symbols, fetches in parallel with ThreadPoolExecutor.',
   ]},
-  { type: 'h3', text: '2026-07-25 — Early Retirement Health & Roth Conversion Planner' },
+  { type: 'h3', text: '2026-07-25 — Early Retirement Health & Roth Conversion Planner', tabIds: [
+    { id: 'earlyretirementhealth', label: 'Early Retirement Health' }, { id: 'rothconversionplanner', label: 'Roth Conversion Planner' },
+  ] },
   { type: 'bullets', items: [
     'Early Retirement Health (ACA Estimator): estimates monthly premiums and Premium Tax Credits for a family of 2 in the 55–65 Medicare gap. Uses 2025 CMS age-rating curve (3:1 age band), ARP/IRA extended subsidy rules (0–8.5% of MAGI sliding scale), and FPL-based subsidy cliffs. Year-by-year table and SVG premium chart through Medicare eligibility.',
     'Roth Conversion Planner: models the optimal annual Roth conversion during the 55–65 low-income window. Supports MFJ and Single filing, 2025 tax brackets, target bracket selection (12%/22%/24%). Shows conversion room, year-by-year schedule, projected RMD reduction at 73, estimated lifetime tax savings, and dual-scenario balance chart to age 75.',
@@ -402,7 +419,10 @@ export const CHANGELOG_BLOCKS = [
     'All sidebar groups now start collapsed by default. Only the group containing the active view auto-expands on load.',
     'Sidebar visual refresh: group labels lifted to text-slate-300, icons to text-slate-400, active group gets white text + left emerald border, active nav items are bold white. Width increased from w-48 to w-52.',
   ]},
-  { type: 'h3', text: '2026-07-25 — Retirement Planning Module' },
+  { type: 'h3', text: '2026-07-25 — Retirement Planning Module', tabIds: [
+    { id: 'fire', label: 'FIRE Calculator' }, { id: 'montecarlo', label: 'Monte Carlo' },
+    { id: 'coastfire', label: 'Coast FIRE & Roth' }, { id: 'socialsecurity', label: 'Social Security' },
+  ] },
   { type: 'bullets', items: [
     'New Retirement nav group with 4 tools: FIRE Calculator, Monte Carlo Simulator, Coast FIRE & Roth Conversion Ladder, Social Security Optimizer.',
     'FIRE Calculator: FIRE number, years-to-FIRE, portfolio projection chart, retirement-age comparison table. Presets for age 55/60/65.',
@@ -437,7 +457,10 @@ export const CHANGELOG_BLOCKS = [
     'Chart modal integration: click any tile or row to open the full chart.',
     'Backend: /api/index-constituents endpoint with 15-minute SQLite cache.',
   ]},
-  { type: 'h3', text: '2026-05-28 — Phase 13 + Polish' },
+  { type: 'h3', text: '2026-05-28 — Phase 13 + Polish', tabIds: [
+    { id: 'breadth', label: 'Breadth' }, { id: 'compare', label: 'Fundamental Comparison' }, { id: 'pricetargets', label: 'Price Targets' },
+    { id: 'dcf', label: 'DCF Valuation' }, { id: 'rates', label: 'Yield Curve' }, { id: 'uoa', label: 'Unusual Options' },
+  ] },
   { type: 'bullets', items: [
     'Market Breadth Dashboard: A/D line (60d), VIX sparkline, above-50MA / above-200MA gauges, H/L ratio, put/call ratio.',
     'Fundamental Comparison: side-by-side 21-metric comparison table for up to 5 stocks with best/worst-in-class colour coding.',
@@ -453,14 +476,21 @@ export const CHANGELOG_BLOCKS = [
     'Grouped collapsible sidebar replacing the flat 24-tab navigation.',
     'In-app User Guide (this document).',
   ]},
-  { type: 'h3', text: '2026-05-28 — Phases 9–12' },
+  { type: 'h3', text: '2026-05-28 — Phases 9–12', tabIds: [
+    { id: 'signals', label: 'Technical Signals' }, { id: 'tradeideas', label: 'Trade Ideas' }, { id: 'smartalerts', label: 'Smart Alerts' },
+    { id: 'positionsize', label: 'Position Sizer' }, { id: 'richearnings', label: 'Earnings+' }, { id: 'newssentiment', label: 'News Sentiment' },
+    { id: 'optionstracker', label: 'Options P&L' }, { id: 'sectormomentum', label: 'Sector Momentum' },
+  ] },
   { type: 'bullets', items: [
     'Phase 9: Options Strategy Builder with AI-generated strategies and payoff charts; multi-timeframe Technical Signals dashboard; AI Trade Ideas generator.',
     'Phase 10: Portfolio Risk Dashboard (beta, Herfindahl, VaR, Sharpe); Smart Alerts 2.0 with seven alert types; Position Sizer with three sizing methods.',
     'Phase 11: Portfolio Optimizer (efficient frontier, min-vol, max-Sharpe); rich Earnings Calendar with expected move and beat-rate history; News Sentiment with Claude scoring.',
     'Phase 12: Options P&L Tracker with live Greeks; Portfolio X-Ray (sector/cap/country donut charts); Sector Momentum Ranker with composite scores and acceleration signals.',
   ]},
-  { type: 'h3', text: '2026-05-28 — Phases 3–8' },
+  { type: 'h3', text: '2026-05-28 — Phases 3–8', tabIds: [
+    { id: 'journal', label: 'Trade Journal' }, { id: 'macro', label: 'Macro Calendar' }, { id: 'analystratings', label: 'Analyst Ratings' },
+    { id: 'sectors', label: 'Sector Rotation' }, { id: 'screener', label: 'Screener' }, { id: 'uoa', label: 'Unusual Options' },
+  ] },
   { type: 'bullets', items: [
     'Phase 3: Options chain viewer; Trade Journal with P&L matching; Dividends view; Correlation heatmap; Macro Calendar.',
     'Phase 4: Technical Indicators overlay; Insider Transactions (Form 4); Analyst Ratings and price targets; Portfolio Rebalancer; Short Interest.',
@@ -469,7 +499,7 @@ export const CHANGELOG_BLOCKS = [
     'Phase 7: WebSocket live price feed; browser push notifications; SEC Filings viewer; NLP custom screener; Unusual Options Activity.',
     'Phase 8: Portfolio equity curve vs cost basis; Earnings Play Calculator (expected move + straddle sizing); Claude NLP screener.',
   ]},
-  { type: 'h3', text: '2026-05-27 — Phase 1 Portfolio Intelligence' },
+  { type: 'h3', text: '2026-05-27 — Phase 1 Portfolio Intelligence', tabId: 'portfolio' },
   { type: 'bullets', items: [
     'Portfolio tracker with positions table, market value, unrealised P&L, day P&L.',
     'Portfolio heatmap (treemap by market value, coloured by day change).',
@@ -477,14 +507,18 @@ export const CHANGELOG_BLOCKS = [
     'Equity curve with snapshot-based history.',
     'Performance tracking vs SPY/QQQ benchmarks.',
   ]},
-  { type: 'h3', text: '2026-05-18 — Day Trader + AI Tools' },
+  { type: 'h3', text: '2026-05-18 — Day Trader + AI Tools', tabIds: [
+    { id: 'daytrader', label: 'Day Trader' }, { id: 'aibot', label: 'AI Chat' }, { id: 'advisor', label: 'Financial Advisor' },
+  ] },
   { type: 'bullets', items: [
     'Day Trader tab: trading plan calculator, strategy playbooks, live scanner, trade alerts sidebar, pre-market movers.',
     'AI Advisor (AI Chat): streaming Claude chat for market questions.',
     'Financial Advisor: AI-generated portfolio strategy based on financial profile (goal, horizon, risk tolerance, account type).',
     'SQLite database for position persistence.',
   ]},
-  { type: 'h3', text: '2026-05-15 — Market Intelligence' },
+  { type: 'h3', text: '2026-05-15 — Market Intelligence', tabIds: [
+    { id: 'market', label: 'Overview' }, { id: 'recommendations', label: 'Analyst Picks' }, { id: 'screener', label: 'Screener' },
+  ] },
   { type: 'bullets', items: [
     'Market Overview: index, sector ETF, and Mag 7 performance tables.',
     'AI Growth Watch List: 41 stocks across 9 AI stack layers (Chips, Memory, Cloud, Models, Applications, Robotics, Quantum…).',
@@ -518,6 +552,7 @@ export function getLatestChangelogEntries(n = 3) {
         date:    m ? m[1] : null,
         title:   m ? m[2] : block.text,
         tabId:   block.tabId ?? null,
+        tabIds:  block.tabIds ?? null,
         summary: '',
       }
     } else if (current && !current.summary) {
