@@ -9,7 +9,7 @@ import yfinance as yf
 from fastapi import APIRouter, HTTPException
 
 from database import cache_get, cache_set
-from edgar_utils import _session, _safe_float
+from edgar_utils import _session, _safe_float, _dividend_yield_fraction
 
 router = APIRouter()
 
@@ -57,7 +57,9 @@ def _fetch_compare_symbol(symbol: str) -> dict:
         info = yf.Ticker(symbol, session=_session).info
         row  = {"symbol": symbol, "name": info.get("shortName", symbol)}
         for label, key, _, _ in _COMPARE_METRICS:
-            row[label] = _safe_float(info.get(key))
+            # Dividend Yield needs the yfinance-1.2.0-aware helper (see edgar_utils),
+            # not a plain info.get — every other percent metric here is unaffected.
+            row[label] = _dividend_yield_fraction(info) if key == "dividendYield" else _safe_float(info.get(key))
         cache_set(cache_key, row)
         return row
     except Exception as e:

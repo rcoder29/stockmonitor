@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import { CHANGELOG_BLOCKS } from '../data/changelog'
 
 // ── Content definition ────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ const GUIDE = [
         ['Retirement', 'FIRE Calculator, Coast FIRE & Roth, Monte Carlo, Social Security, Early Retirement Health, Roth Conversion Planner, Medicare Estimator, Estate & RMD'],
       ]},
       { type: 'h3', text: 'Home & Quick Search' },
-      { type: 'p', text: 'Home (pinned at the top of the sidebar) is the app\'s landing page — it opens by default. It shows your portfolio value, day P&L and total P&L, a market pulse strip (SPY/QQQ/DIA + VIX), your biggest portfolio and watchlist movers today, earnings reporting in the next 7 days, active price alerts, and a "Recently Visited" row of the tabs you use most.' },
+      { type: 'p', text: 'Home (pinned at the top of the sidebar) is the app\'s landing page — it opens by default. It shows your portfolio value, day P&L and total P&L, a market pulse strip (SPY/QQQ/DIA + VIX), your biggest portfolio and watchlist movers today, earnings reporting in the next 7 days, active price alerts, a "What\'s New" card highlighting the 3 most recent feature additions, and a "Recently Visited" row of the tabs you use most.' },
       { type: 'p', text: 'Press ⌘K (Mac) or Ctrl+K (Windows/Linux) anywhere in the app — or click the Search button in the header — to open the command palette. Start typing to fuzzy-search all 90+ tools by name or group, use ↑/↓ to move the selection, and Enter to jump straight there. With an empty query it shows your recently visited tabs.' },
       { type: 'h3', text: 'Live Price Feed' },
       { type: 'p', text: 'Prices update via WebSocket during market hours. The green dot in the header means the live feed is connected. If it turns grey the app falls back to REST polling at your chosen refresh interval (5s to 5m). Price changes flash green (up) or red (down) in the Watchlist.' },
@@ -1424,493 +1425,7 @@ const GUIDE = [
     id: 'changelog',
     title: 'Changelog',
     icon: '◉',
-    blocks: [
-      { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
-      { type: 'h3', text: '2026-09-27 — Price Projection' },
-      { type: 'bullets', items: [
-        'New Research → Price Projection: given any stock or ETF ticker, projects a 1-year-forward price cone (p10/p25/median/p75/p90) from market-implied inputs — options-implied volatility term structure, the 1yr Treasury risk-free rate net of dividend yield, a VIX-regime vol multiplier, and the issuer\'s own corporate-bond credit spread as a proxy for single-name CDS (true CDS data is proprietary and not available from any free source).',
-        'Vol input is interpolated across every available options expiry out to ~13 months (not one flat IV stretched by sqrt-of-time), falling back to trailing realized volatility for non-optionable symbols. Credit spread only pulls the lower percentiles down, since spreads price default/distress risk asymmetrically — it never widens the upside.',
-        'Every raw input (risk-free rate, dividend yield, full IV curve, VIX current/median/regime, credit spread bps) is shown alongside the chart, plus a restated methodology note — nothing about how the cone was built is hidden.',
-      ]},
-      { type: 'h3', text: '2026-09-27 — Sidebar Pinning' },
-      { type: 'bullets', items: [
-        'Hover any item inside a sidebar group to reveal a ☆ pin toggle; pinned items collect in a new "Pinned" section above the groups, so your most-used views are one click away without expanding any group.',
-        'Click the ★ next to a pinned item to unpin it. Pins are stored in localStorage (separate from the existing Recently Visited tracking), starting empty until you pin something.',
-      ]},
-      { type: 'h3', text: '2026-09-23 — Range Screener: 1-year inline chart, click to open full chart' },
-      { type: 'bullets', items: [
-        'The inline chart now shows a full year of closing prices instead of just the selected 30/60/90-day window, so prior swings and range resets are visible alongside the currently detected band — the selected window\'s low/high are drawn as dashed reference lines at their real level within that wider year, not stretched to fill the box.',
-        'Click any inline chart to open the same full ChartModal used elsewhere in the app (candlesticks, every period from 1D to 5Y, moving averages, Bollinger Bands, RSI, MACD) for that symbol.',
-        'The backend fetches 13 months of history in the same single batched call it already made (no extra Yahoo request), and computes the 1-year series once per symbol rather than once per window.',
-      ]},
-      { type: 'h3', text: '2026-09-23 — Range Screener: inline chart' },
-      { type: 'bullets', items: [
-        'Each Range Screener row now shows a small inline sparkline of the closing price over the selected window, with dashed lines marking the detected support and resistance — built from the exact same price series the row\'s score/touches/position were computed from, not a separately-fetched approximation.',
-        'Line colour follows the row\'s signal: green near support, red near resistance, grey mid-range.',
-      ]},
-      { type: 'h3', text: '2026-09-22 — Range Screener' },
-      { type: 'bullets', items: [
-        'New Research → Range Screener: scans a ~290-name universe for stocks trading sideways within a support/resistance band over 30/60/90 days, and flags names currently near either edge as a possible range-trade entry/exit.',
-        '"Range-bound-ness" is scored with a Kaufman efficiency-ratio calculation (net move ÷ total daily movement); support/resistance is confirmed by counting how many days price actually returned to each edge, so a single outlier spike or dip can\'t masquerade as a real range.',
-        'Filters: window, min/max width %, min touches per side, min score, and a signal dropdown (near support / near resistance / mid-range); an optional symbols box scans just your own list instead of the built-in universe.',
-        'Entry/target/stop/risk-reward are computed from the detected range for actionable rows — a mechanical read of the pattern, not investment advice.',
-      ]},
-      { type: 'h3', text: '2026-09-19 — Daily & Weekly Digests' },
-      { type: 'bullets', items: [
-        'New AI Tools → Digests page: a pre-market daily digest and a weekly recap of markets, your portfolio, watchlist movers, upcoming events, and alerts, delivered to Telegram on a schedule you set.',
-        'A background scheduler sends each digest at most once per period, catches up if the app was closed at the scheduled time, and retries failed deliveries.',
-        'Preview and Send-now buttons, a delivery history with the full text of each digest, and an optional AI-written summary.',
-        'Also catches price alerts that crossed while the app was closed, since alerts are otherwise only checked while a browser tab is open.',
-      ]},
-      { type: 'h3', text: '2026-09-17 — Export to PDF' },
-      { type: 'bullets', items: [
-        'New "Export PDF" button in the header (every page) — saves the active page to PDF via the browser\'s native print dialog, no new dependencies.',
-        'Preserves the app\'s exact dark theme/colors in the export via print-color-adjust, rather than converting to a separate light print theme.',
-        'Relaxes the app\'s fixed-height scroll-region layout to natural document flow under print, so the full page content prints across multiple PDF pages instead of clipping to one viewport.',
-        'Known limitation: a modal (Chart Modal, Command Palette) left open while exporting isn\'t guaranteed to print in full if its own content scrolls — close it first for a complete export of the underlying page.',
-      ]},
-      { type: 'h3', text: '2026-09-17 — Corporate Bonds: Credit Spread vs. Treasury Curve' },
-      { type: 'bullets', items: [
-        'Corporate Bonds now computes an approximate yield-to-maturity for each fund-held bond and compares it against the Treasury par curve, interpolated at that bond\'s exact maturity.',
-        'New "vs. Treasury Curve" panel per bond: YTM, comparable Treasury yield, and the spread in basis points, plus a small chart plotting the bond against the Treasury curve on a continuous years-to-maturity axis.',
-        'YTM solved via bisection (semiannual compounding, clean price, no accrued-interest adjustment) from coupon, maturity, and the largest holder\'s implied price — only available for fund-held bonds, since prospectus-only bonds have no live price to solve from.',
-      ]},
-      { type: 'h3', text: '2026-09-17 — Treasury Bonds' },
-      { type: 'bullets', items: [
-        'New standalone Treasury Bonds page under Research → Treasury Bonds: current rates across all 14 tracked maturities, a per-maturity historical trend chart, and a multi-curve yield curve view.',
-        'Sourced from the U.S. Treasury\'s own official daily par yield curve CSV (home.treasury.gov) rather than FRED — genuinely free with no API key, and this app\'s FRED_API_KEY isn\'t configured anyway.',
-        'Yield Curve chart overlays Today, ~1 Month Ago, and ~1 Year Ago with a hover crosshair — a custom SVG chart since the x-axis is ordinal maturity, not calendar time, which the app\'s lightweight-charts library doesn\'t support.',
-        'Historical Trend chart uses lightweight-charts (matching the main Chart Modal) since that view genuinely is a time series.',
-        'Added a 2s10s spread badge (10Y − 2Y) next to the Yield Curve chart, green/"Normal" or red/"Inverted" depending on sign — the classic recession-watch indicator.',
-      ]},
-      { type: 'h3', text: '2026-09-17 — Convertible Bonds' },
-      { type: 'bullets', items: [
-        'New Convertible Bonds page under Research → Convertible Bonds, alongside Corporate Bonds.',
-        'Reuses Corporate Bonds\' fund N-PORT holdings + prospectus fallback pattern, scanning ICVT, CWB, and FCVT instead of the investment-grade/high-yield universe.',
-        'Adds a third source unique to converts: conversion price, ratio, call-trigger thresholds, and if-converted value are a defined part of the US-GAAP XBRL taxonomy, so a single companyfacts call per issuer can pull real structured terms when the issuer tagged them — no scraping needed, unlike credit ratings.',
-        'When no fund or prospectus match exists but the issuer disclosed conversion terms anyway, shows a standalone issuer profile with those terms and ratings mentions instead of an empty result.',
-        'Reuses the existing bond ratings-mentions endpoint unchanged for Credit Rating Mentions.',
-      ]},
-      { type: 'h3', text: '2026-09-16 — Corporate Bonds' },
-      { type: 'bullets', items: [
-        'New Corporate Bonds page under Research → Corporate Bonds.',
-        'No free per-CUSIP bond pricing API exists (unlike yfinance for equities), so this is built entirely on two public SEC data sources: N-PORT fund holdings for live characteristics, and full-text search over the issuer\'s own filings for everything a bulk data feed can\'t give for free.',
-        'Bond search scans the latest N-PORT filings from 7 major bond ETFs (LQD, VCIT, VCSH, USIG; HYG, JNK, USHY) for holdings matching the issuer, resolving each ETF ticker to its specific SEC fund series via the `company_tickers_mf.json` reference file.',
-        'When no tracked fund holds an issuer\'s bonds, falls back to the issuer\'s own 424B2/424B3/424B5/FWP prospectus filings, regex-extracting "X.XX% Notes due YYYY" terms from the cover page.',
-        'Ratings history comes from full-text-searching the issuer\'s own 8-K/10-K/10-Q filings for rating-action language, since the free NRSRO Rule 17g-7 disclosures only cover a rolling 12-24 month window.',
-      ]},
-      { type: 'h3', text: '2026-09-12 — Volume Profile Overlay' },
-      { type: 'bullets', items: [
-        'New VOL toggle in the Chart tab\'s indicator toolbar (alongside SMA/BB/RSI/MACD).',
-        'Adds a thin amber line tracking the 20-period rolling average volume, drawn on the volume histogram\'s scale.',
-        'Volume bars where volume > 2× the 20-period average render at full opacity (green/red) instead of the normal faded shade, so surges backed by real volume are obvious at a glance.',
-      ]},
-      { type: 'h3', text: '2026-08-17 — Net Market Exposure' },
-      { type: 'bullets', items: [
-        'New Net Exposure page under Portfolio → Net Exposure, rolling Stocks, Options, and CPPI into one beta-adjusted "how much market risk am I carrying right now" number.',
-        'Options delta is computed via Black-Scholes from strike/expiry/IV (yfinance doesn\'t reliably supply live Greeks) and beta-weighted by the underlying; CPPI uses the active strategy\'s live risky-sleeve value.',
-        'Merger Arb and SPAC capital shown as separate "event-driven" sleeves, deliberately excluded from the beta sum — their risk is deal completion/trust redemption, not market direction.',
-        'Bug fix: the underlying Portfolio Risk beta/VaR calc was crashing outright for portfolios containing a symbol with no usable 1-year price history (delisted tickers, non-equity symbols); fixed for both Portfolio Risk and this new page.',
-      ]},
-      { type: 'h3', text: '2026-08-16 — Home Dashboard & Command Palette' },
-      { type: 'bullets', items: [
-        'New Home dashboard, pinned above the sidebar groups and now the default landing tab — portfolio P&L, a market pulse strip (SPY/QQQ/DIA + VIX), today\'s biggest movers, upcoming earnings, active alerts, and a Recently Visited row.',
-        'New ⌘K / Ctrl+K command palette (or the header Search button) — fuzzy-searches all 90+ tools by name or group, with recently-visited tabs shown on an empty query.',
-        'Every tab navigation is now recorded to localStorage (deduped, capped at 8) to power both the Recently Visited row and the palette\'s empty state.',
-      ]},
-      { type: 'h3', text: '2026-08-14 — CPPI Allocator' },
-      { type: 'bullets', items: [
-        'New CPPI Allocator under Portfolio → CPPI Allocator — Constant Proportion Portfolio Insurance, dynamically rebalancing between a risky and safe asset so the portfolio is designed to never fall below a floor value.',
-        'Live dashboard tracks portfolio value, growing floor, cushion, target vs. actual exposure, and drift, with a one-click "Rebalance Now" once drift exceeds the band.',
-        'Backtest CPPI panel simulates the strategy over 6M-5Y of history vs. buy & hold, reporting alpha, max drawdown, and whether the floor was ever breached by an overnight gap.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — IPO & Lockup Calendar: now live from EDGAR' },
-      { type: 'bullets', items: [
-        'Replaced the hand-maintained static IPO list (frozen since whenever it was last edited, going stale silently) with a live SEC EDGAR feed.',
-        'Lockup tracker now built from 424B4 (final prospectus) filings, with lockup date computed from filing date + the standard 180-day term. "IPO Price" relabeled "Day-1 Open" since it\'s now the real first-trading-day open price (proxy for the underwriting offer price, which isn\'t in EDGAR\'s search metadata) rather than a hand-entered value.',
-        'New "Upcoming — Filed, Not Yet Priced" panel from S-1 registrations (last 60 days) — the forward-looking counterpart the old static list never had.',
-        'SPACs excluded from both feeds via SIC code 6770 ("Blank Checks") plus a name-pattern fallback — they\'re covered by the dedicated SPACs module instead.',
-        'Sector labels derived from each filing\'s SIC code via a small SIC-range-to-sector mapping.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — Reddit Trending Stocks' },
-      { type: 'bullets', items: [
-        'New Reddit Trending page under Markets → Reddit Trending.',
-        'Direct Reddit scraping is blocked (403 even with Chrome TLS impersonation) — sourced instead from ApeWisdom, a free unauthenticated API that aggregates mention counts across r/wallstreetbets and other finance subreddits.',
-        'Surfaces mention volume and 24h rank/mention momentum ("Rising Attention" / "Cooling Attention") rather than bullish/bearish sentiment, since the data source has no sentiment classification — labeled honestly as attention momentum, not a long/short signal.',
-        'Filter by subreddit source (All Stocks, r/wallstreetbets, r/stocks, r/options), sortable table, live price + 5D change per ticker.',
-        'Bug fix: found and fixed a latent NaN-serialization crash in `_fetch_opp_quote` (shared with the Merger Opportunity Scanner) — thin/sparse-data tickers could produce a NaN price that crashed FastAPI\'s JSON response encoder. The bug was masked in ad-hoc testing because Python\'s own `json.dumps` (used by the cache layer) silently allows NaN, so a broken result could get cached before the stricter response encoder caught it on a later request.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — Activist Tracker (13D/13G)' },
-      { type: 'bullets', items: [
-        'New Activist Tracker under Research → Activist Tracker.',
-        'Scans EDGAR for Schedule 13D and 13G beneficial-ownership filings (new 5%+ stakes and amendments). Defaults to 13D-only since 13G volume is dominated by routine index-fund threshold crossings.',
-        'Parses subject company and reporting person/fund from EDGAR\'s combined filer listing (display_names[0] = subject, [1] = filer) — the first feature in the app to use this half of that field.',
-        '"New filings only" toggle isolates fresh stakes from amendments (13D/A, 13G/A). Search by ticker, company, or filer name.',
-        'Live price + 5-day change per filing for quick context.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — Merger Arb: Alerts' },
-      { type: 'bullets', items: [
-        'New Alerts page for Merger Arb, mirroring SPAC Alerts — Merger Arb\'s sidebar group is now 7 items.',
-        'Three alert types: Days to Close Threshold (fires on overdue too), Spread Threshold (directional — at-or-above or at-or-below a % vs. live spread), Status Reached (fires when a deal\'s status matches your pick, e.g. "Closing" or "Terminated").',
-        'Separate rule/scan system from the general Smart Alerts, same on-demand scan pattern as SPAC Alerts — reads spread/days-to-close/status from tracked deals rather than price history alone.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — SPACs: Overview' },
-      { type: 'bullets', items: [
-        'New Overview page — the first item in the SPACs group, acting as a launching pad across the other 5 components (mirrors Merger Arb\'s Overview).',
-        'Tracked SPACs table (sorted by soonest redemption deadline): click a row to jump into the Deal Analyzer with that SPAC preloaded; click "Tracker" to jump to the Tracker, scrolled to and briefly highlighting that row.',
-        'Upcoming — Newly Filed, Not Yet Tracked table surfaces the most recent untracked filings from the Discovery feed, with quick-add and a link to the full Discovery page.',
-        'Cross-tab drill-in via a lifted spacFocusId + goToSpac() helper in App.jsx, reusing the same pattern as Merger Arb; Tracker and Deal Analyzer now both accept a focusDealId prop.',
-        'No new backend endpoints — composes the existing /api/spac/deals and /api/spac/discovery responses client-side.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — SPACs: Risk Matrix' },
-      { type: 'bullets', items: [
-        'New Risk Matrix page completes the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio, Alerts, Risk Matrix) at parity with Merger Arb\'s shape.',
-        'Scatter plot of annualized yield vs. days-to-deadline across tracked SPACs; bubble size = discount/premium magnitude, color = deal stage.',
-        'No synthetic risk score (unlike Merger Arb\'s regulatory/deal-type model) — SPACs don\'t have an analogous risk framework, so the matrix maps entry attractiveness against catalyst timing instead.',
-        'Deal Stage × Deadline Urgency grid (Urgent/Moderate/Distant buckets) plus Nearest Deadlines and Best Annualized Yield panels.',
-        'Pure frontend — composes the existing /api/spac/deals response, no new backend endpoints.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — SPACs: Alerts' },
-      { type: 'bullets', items: [
-        'New Alerts page rounds out the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio, Alerts).',
-        'Three SPAC-specific alert types: Deadline Approaching (days-to-redemption threshold, including overdue), Discount/Premium Threshold (directional, vs. live trust value), and Deal Announced (status moves off "Searching for Target").',
-        'Separate rule/scan system from the general Smart Alerts (Watchlist → Smart Alerts) since these read trust value, deadline, and status from the SPAC Tracker rather than price history alone — same on-demand scan pattern (no background polling, no dedup).',
-      ]},
-      { type: 'h3', text: '2026-08-06 — SPACs: Portfolio' },
-      { type: 'bullets', items: [
-        'New Portfolio page completes the SPACs module (Tracker, Discovery, Deal Analyzer, Portfolio).',
-        'Position sizing for both common stock and warrants against tracked SPACs, with independent live pricing for each.',
-        '"Trust-Protected" summary and floor-value panel show how much of the book is recoverable via redemption regardless of deal outcome — warrant positions carry no floor and are excluded from that figure.',
-        'Common vs. warrant exposure concentration breakdown.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — New SPACs module: Tracker, Discovery, Deal Analyzer' },
-      { type: 'bullets', items: [
-        'New top-level SPACs sidebar group with 3 components — a separate strategy from Merger Arb since SPAC economics center on a redemption floor at trust value rather than deal-completion risk to a fixed offer price.',
-        'Tracker: SPACs against trust value, redemption deadline, and warrant pricing, with live discount/premium-to-trust and annualized capture-yield-to-deadline.',
-        'Discovery: EDGAR scan for new SPAC IPO filings (S-1 + "blank check") and de-SPAC merger announcements (425/DEFM14A/S-4 + "trust account"); auto-parses common and warrant tickers from EDGAR\'s combined ticker listing.',
-        'Deal Analyzer: capture-yield floor case, warrant intrinsic/time value/breakeven, and a redeem-vs-hold scenario table spanning weak-aftermarket through +200%-to-trust outcomes for both common and warrant.',
-        'Fixed a real bug shared by all three EDGAR full-text-search scanners (SPAC Discovery, Opportunity Scanner, and the original Deal Dashboard EDGAR panel): omitting `enddt` caused the API to silently ignore the `startdt` cutoff entirely and return all-time, relevance-sorted results instead of the claimed recent window. All three now pass an explicit `enddt=today`.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — Merger Arb: Overview' },
-      { type: 'bullets', items: [
-        'New Overview page — the first item in the Merger Arb group, acting as a launching pad across the other 5 components.',
-        'Active Deals In Progress table (sorted by soonest expected close): click a row to jump into the Deal Analyzer with that deal preloaded, or click "Dashboard" to jump to the Deal Dashboard scrolled to and briefly highlighting that row.',
-        'Upcoming — Newly Filed, Not Yet Tracked table surfaces the most recent untracked filings from the Opportunity Scanner feed, with quick-add and a link to the full Scanner.',
-        'No new backend endpoints — composes the existing /api/merger/deals and /api/merger/opportunities responses client-side.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Market Sentiment Dashboard' },
-      { type: 'bullets', items: [
-        'New Market Sentiment Dashboard under Markets → Sentiment.',
-        'Composite 0–100 score (Extreme Fear → Extreme Greed) from 6 market signals: VIX, Put/Call Ratio, Market Momentum, Market Breadth, Junk Bond Demand, Safe Haven Demand.',
-        'Animated semicircle gauge with color-coded needle and zone labels.',
-        'VIX card includes 90-day sparkline chart, 50-day MA comparison, and VIX3M term structure (contango/backwardation).',
-        'Put/Call ratio computed live from SPY options chain (nearest expiry).',
-        'Breadth: % of 30 major S&P 500 stocks above their 50-day MA, fetched in parallel.',
-        'Credit: HYG vs LQD 1-month return spread. Safe Haven: SPY vs TLT 1-month spread + gold.',
-        'Auto-refreshes every 5 minutes. Server-side 30-minute cache.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — Merger Arb: Opportunity Scanner, Deal Analyzer, Arb Portfolio, Risk Matrix' },
-      { type: 'bullets', items: [
-        'Merger Arb sidebar group now complete — all 5 components live.',
-        'Opportunity Scanner: broader EDGAR discovery feed (SC TO-T, SC 13E-3, DEFM14A, PREM14A, S-4, 425 — 60-day window) with live price context per filing and one-click add of untracked opportunities to the Deal Dashboard.',
-        'Deal Analyzer: risk factor breakdown, walk-away price estimation, market-implied probability of close, and an expected-value scenario table — works on tracked deals or ad-hoc inputs.',
-        'Arb Portfolio: new position sizing tracker (shares, entry price/date per deal) with live cost basis, unrealized P&L, value-at-close, and concentration-by-deal-type / concentration-by-regulator breakdowns.',
-        'Risk Matrix: risk-vs-reward bubble scatter (days to close × annualized return, sized by deal value, colored by risk) plus a regulator × deal-type exposure grid.',
-        'Fixed a bug where the Deal Dashboard could silently return an empty deal list — a SQLAlchemy session-expiry issue affecting any endpoint that read committed records after closing the DB session.',
-      ]},
-      { type: 'h3', text: '2026-08-06 — Merger Arb: Deal Dashboard' },
-      { type: 'bullets', items: [
-        'New Merger Arb section in the sidebar with 5 planned components (Deal Dashboard live now).',
-        'Deal Dashboard: tracks active M&A deals with live spread, annualised return, risk score, and days to close.',
-        'EDGAR Tender Offer Scanner: auto-scans SEC EDGAR for recent SC TO-T and SC 13E-3 filings and lets you one-click pre-populate a deal record from a filing.',
-        '90-day spread history chart for each deal — visualise how the arb spread has moved since announcement.',
-        'Risk scoring: 0–10 model based on deal type (cash/stock/mixed), regulatory body (DOJ/FTC/EU/CFIUS), spread size, deal size, and days to close.',
-        'Full CRUD: add, edit, delete deals manually; filter by risk level; toggle closed/terminated deals on/off.',
-        '4-hour server-side cache on EDGAR scans; live price enrichment via yfinance at read time.',
-      ]},
-      { type: 'h3', text: '2026-08-02 — Fund Holdings Explorer' },
-      { type: 'bullets', items: [
-        'New Fund Holdings Explorer under Research → Fund Holdings.',
-        'Pulls live N-PORT filings directly from SEC EDGAR — official monthly holdings disclosures for all registered ETFs and mutual funds.',
-        'Popular fund quick-picks: SPY, QQQ, IVV, VTI, VOO, ARKK, XLK, XLF, IWM.',
-        'Full-text EDGAR company search — find any N-PORT filer by name or ticker.',
-        'Holdings table shows weight %, fair value, asset category (Equity/Debt/Derivative/ABS/MBS), country, and CUSIP.',
-        'Live market enrichment for top equity holdings: current price, 52-week range bar, % from 52W high, and 1M/3M/6M/1Y performance.',
-        'Sort any column, filter by asset category, search within holdings by name/ticker/CUSIP.',
-        'Configurable enrichment depth (25/50/100/200 holdings) to trade off speed vs. data coverage.',
-        '6-hour cache on all EDGAR and market data fetches.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Analyst Rating Tracker' },
-      { type: 'bullets', items: [
-        'New Analyst Rating Tracker under Research → Analyst Ratings.',
-        'Activity Feed: chronological log of all upgrades, downgrades, and initiations across your watchlist (last 90 days) with firm, rating change, price at time of action, +5d return, and cumulative return since rating.',
-        'By Stock view: per-symbol consensus rating badge, analyst count, price target range bar, upside %, and 90-day upgrade/downgrade activity bar.',
-        'Deep Dive panel: click any row for a full detail view with consensus metrics, target range, and the complete rating history table.',
-        'Filter by Action (All/Upgrades/Downgrades/Initiations) and Sentiment (All/Positive/Negative).',
-        'Sort By Stock view by Most Recent, Most Upgrades, Net Sentiment, or Upside %.',
-        'Summary chips at top: total actions, upgrades, downgrades, net sentiment across all watchlist symbols.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Earnings Strategy Analyzer' },
-      { type: 'bullets', items: [
-        'New Earnings Strategy Analyzer under Research → Earnings Strategy.',
-        'Scanner mode: scan entire watchlist for earnings opportunities, sorted by days to earnings, with beat rate, avg move, pre-run tendency, best strategy, and signal badge.',
-        'Deep Dive mode: 4 strategy cards (Pre-Earnings Run, Buy the Beat, Buy the Dip, Hold Through) with win rate, avg return, best/worst trade, and expected value.',
-        'Drift Chart: visual bar chart of all historical earnings events showing pre-10D/5D, earnings reaction, and post-1D/5D/10D for the last 8 quarters.',
-        'Trade History table: full per-quarter breakdown with EPS data, surprise %, and all drift metrics.',
-        'Signal system: STRONG BUY / BUY / NEUTRAL / WEAK / AVOID based on win rate and avg return thresholds.',
-        'Backend: /api/market/earnings-strategy (single stock full analysis) and /api/market/earnings-strategy-scan (multi-stock scanner). 6-hour cache.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — 5 New Analysis Features' },
-      { type: 'bullets', items: [
-        'Correlation Matrix (Watchlist → Correlation): color-coded Pearson correlation grid for any set of stocks over 1M–2Y lookbacks. Identifies hidden concentration risk and best diversifiers.',
-        'Seasonal Patterns (Research → Seasonal Patterns): month-by-month avg return + win rate for any stock over up to 20 years. Bar chart and detailed table with box plot distributions.',
-        'ETF Overlap Analyzer (Research → ETF Overlap): finds shared holdings between 2–4 ETFs, showing weight in each fund and combined exposure. Reveals when multiple ETFs are less diversified than they appear.',
-        'Relative Strength Ranker (Research → Relative Strength): ranks stocks by RS ratio vs SPY over 1W/1M/3M/6M/1Y. Composite score, filter leaders/laggards, sortable table.',
-        'Portfolio Attribution (Portfolio → Attribution): shows each position\'s contribution to total return as both a $ amount and % of invested capital. Three views: By Position, Waterfall, By Sector.',
-        'Backend: added /api/market/correlation, /api/market/seasonal, /api/market/etf-overlap, /api/market/relative-strength endpoints.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Portfolio Stress Test' },
-      { type: 'bullets', items: [
-        'New Portfolio Stress Test under Portfolio → Stress Test: estimates portfolio performance across four historical crisis scenarios (2008 GFC, 2020 COVID, 2022 Rate Shock, 2000 Dot-com) plus a custom drawdown.',
-        'All calculations are frontend-only — reuses existing /api/portfolio and /api/quotes endpoints, no new backend endpoint.',
-        'Per-stock drawdown formula: beta × market decline + sector-specific adjustment, clamped to [-82%, -2%].',
-        'Sector mods derived from actual sector performance during each crisis (e.g., Financials -28% in 2008, Energy +24% in 2022).',
-        'Three result views: By Position (sortable table), By Sector (sector aggregation), Vulnerability Chart (horizontal bar chart).',
-        'Summary cards: Current Value, Stressed Value, Estimated Loss ($), Portfolio Drawdown (%), plus Recovery time badge.',
-        'Three insight panels: Most Vulnerable (worst % drop), Most Resilient (smallest % drop), Biggest Dollar Risk (largest $ loss).',
-        'Custom scenario: slider from -5% to -80% market drawdown; sector adjustments not applied in custom mode.',
-        'Severity badges per position: LOW / MEDIUM / HIGH / CRITICAL based on estimated drawdown thresholds.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Earnings Surprise Tracker' },
-      { type: 'bullets', items: [
-        'New Earnings Surprise Tracker under Research → Earnings Surprise: last 8 quarters of EPS beat/miss history, average surprise %, post-earnings drift, and beat streaks.',
-        'Backend: GET /api/market/earnings-surprise?symbols=... — yfinance earnings_history for EPS data; 2-year daily price history for drift calculation; 12-hour SQLite cache per symbol.',
-        'Surprise % calculated directly from epsActual and epsEstimate to avoid yfinance surprisePercent field ambiguity.',
-        'Post-earnings drift: finds first trading day on or after the earnings date, computes 1-day and 5-day returns from that close.',
-        'Beat streak: count of consecutive recent quarters with EPS actual ≥ estimate, working backward from the most recent quarter.',
-        'Per-symbol card: beat rate ring (SVG, green ≥75% / amber ≥50% / red <50%), beat streak badge, avg EPS surprise, avg +1D and +5D drift, last quarter result.',
-        'Expandable detail table per card: date, EPS estimate, EPS actual, surprise %, beat status, +1D and +5D drift per quarter.',
-        'SVG sparkbar chart: 8-quarter EPS surprise history, green bars = beat, red = miss, oldest left newest right.',
-        'Summary row: total analyzed, avg beat rate, consistent beaters (≥75%), active streak count.',
-        'Import from watchlist button; supports comma/space-separated bulk ticker entry.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Watchlist Heatmap' },
-      { type: 'bullets', items: [
-        'New Watchlist Heatmap under Watchlist → Heatmap: treemap of personal watchlist symbols sized by market cap and coloured by return.',
-        '1D view is instant and live — uses the existing real-time WebSocket quote data with no extra fetch.',
-        'Extended periods (5D/1M/3M) fetched on demand from a new backend endpoint /api/market/watchlist-heatmap using yfinance 3-month history; 5-min SQLite cache per symbol.',
-        'Tile sizing: proportional to market cap (default) or equal weight toggle for easier comparison of small positions.',
-        'Rich hover tooltip per tile: full name, price, market cap, sector, and all available period returns.',
-        'Summary bar: advancing/declining counts, top gainer and biggest loser for the selected period.',
-        'Table view with sortable columns (Symbol, Price, 1D, 5D, 1M, 3M, Mkt Cap, Sector); coloured sidebar stripe per row matches heatmap colour.',
-        'Colour scale: dark red ≤−5% through grey at 0% to dark green ≥+5%.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Dividend Tracker' },
-      { type: 'bullets', items: [
-        'New Dividend Tracker under Portfolio → Dividend Tracker: track dividend income, yield on cost, ex-dividend dates, and DRIP projections for income portfolios.',
-        'Add positions manually (ticker + shares + avg cost) or import with one click from the main Portfolio tracker.',
-        'Backend fetches dividend data per symbol via yfinance: annual rate, current yield, ex-dividend date (from Unix timestamp), payout frequency (detected from dividend history spacing), and last 8 payments. Cached 6 hours per symbol.',
-        'Summary cards: Total Annual Income, Monthly Income, Avg Yield on Cost (income-weighted across all positions), Current Yield.',
-        'Holdings table: annual div/share, current yield, yield on cost (colour-coded), annual income, % of total income with progress bar, ex-div date with urgency colour (orange ≤7 days), payout frequency badge. Sorted by annual income descending.',
-        'Ex-Dividend Calendar tab: all ex-dates in next 90 days sorted chronologically with estimated payment per event.',
-        'DRIP Projection tab: 1/3/5/10/20-year income and portfolio value projections assuming constant yield and full dividend reinvestment. Optional monthly contribution input.',
-        'Positions persisted in browser localStorage (separate from main Portfolio).',
-      ]},
-      { type: 'h3', text: '2026-07-30 — AI Stock Analyzer' },
-      { type: 'bullets', items: [
-        'New AI Stock Analyzer under AI Tools → Stock Analyzer: enter any ticker for a 7-section research report powered by Claude.',
-        'Backend fetches comprehensive data from Yahoo Finance: price, 52-week range, YTD/1M/3M returns, beta, RSI, 50/200-day MAs, market cap, revenue, margins, ROE, free cash flow, debt/equity, valuation multiples (P/E, Fwd P/E, P/S, P/B, EV/EBITDA), analyst consensus, price targets.',
-        'Snapshot panel appears immediately with all metrics; Claude analysis streams in parallel.',
-        'Seven report sections: Business Overview, Competitive Moat, Financial Snapshot, Valuation, Bull Case, Bear Case & Risks, Verdict.',
-        'Claude writes with actual numbers and takes a clear Bullish/Neutral/Bearish stance with conviction level.',
-        'Recent tickers stored in browser for one-click re-analysis. Copy report button for markdown export.',
-        'Snapshot data cached 15 minutes; AI analysis always runs fresh.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Economic Indicators Dashboard' },
-      { type: 'bullets', items: [
-        'New Economic Indicators Dashboard under Markets → Economic Indicators.',
-        'Always-on market layer: US Treasury yield curve (3M/5Y/10Y/30Y) with inversion warning, Dollar Index (DXY), VIX, Gold, WTI Oil, Copper, and Natural Gas.',
-        '10Y–3M yield curve spread with inverted curve detection and historical context.',
-        'FRED economic data layer (requires free FRED API key): CPI, Core CPI, Core PCE, Unemployment Rate, Nonfarm Payrolls, Initial Claims, Real GDP, Consumer Sentiment, Housing Starts, Retail Sales, Industrial Production.',
-        'Each FRED card shows current value, prior-period change, traffic-light color (green = favorable direction), and a 12-point sparkline of historical trend.',
-        'Hero cards for the four most-watched indicators: Fed Funds Rate, CPI YoY, Unemployment Rate, and Real GDP Growth.',
-        'Clear in-app setup guide for adding a FRED API key (free, no rate limits for personal use).',
-        'All data cached 30 minutes; click ↻ Refresh to reload.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Crypto Dashboard & AI Portfolio Review' },
-      { type: 'bullets', items: [
-        'New Crypto Dashboard under Markets → Crypto: live prices, market caps, 24h/7d performance for top 20 cryptocurrencies sorted by market cap.',
-        'BTC and ETH hero cards with price, change badges, market cap, and volume. Market Overview card shows total market cap with BTC/ETH dominance bars.',
-        'Fear & Greed Index gauge (0–100) from alternative.me. All data cached 5 minutes and refreshed on demand.',
-        'Sortable full coin table: click any column header to sort ascending/descending.',
-        'New AI Portfolio Review under AI Tools → Portfolio Review: Claude streams a 6-section analysis of your holdings.',
-        'Backend enriches each position with live quotes, sector, P/E, beta, and YTD via Yahoo Finance before sending to Claude.',
-        'Sections: Portfolio Overview, Concentration & Risk, Sector & Style, Performance & Valuation, Rebalancing Recommendations, Action Checklist.',
-        'Holdings preview table shows all positions with estimated portfolio weights; works with portfolios of any size.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Insider Trading Feed' },
-      { type: 'bullets', items: [
-        'New Insider Trading Feed under Markets: SEC Form 4 scanner covering ~150 large and mid-cap companies.',
-        'Classifies open-market purchases vs sales from the yfinance Text field; excludes grants, option exercises, gifts, and automatic 10b5-1 plan transactions.',
-        'Cluster buy detection: counts how many insiders bought the same stock in the selected window — cluster count ×N badge shown on each transaction.',
-        'C-Suite badge [C] for CEO, CFO, COO, President, CTO, and Chairman transactions.',
-        'Time windows: 7d / 14d / 30d / 60d, each cached separately for 4 hours.',
-        'Filter tabs: All / Buys Only / C-Suite / $500k+ / Cluster Buys, each with live counts.',
-        'Summary cards: buy count, sale count, total buy value, cluster buy stock count; largest-buy callout card.',
-        'Sortable table with search by ticker, insider name, or company name.',
-      ]},
-      { type: 'h3', text: '2026-07-30 — Wheel Tracker, Tax Lot Manager, Medicare Estimator, Estate & RMD Projector' },
-      { type: 'bullets', items: [
-        'Wheel Strategy Tracker (Trading group): track cash-secured puts and covered calls through the options wheel cycle. Calculates annualised yield per position, shows expiry countdown badges (green/yellow/red), premium totals, and a 3-step wheel explainer. localStorage-persisted.',
-        'Tax Lot Manager (Portfolio group): track cost basis by individual purchase lot. Sell Optimizer simulates which specific lots to sell to minimise federal tax using 5 methods (Min Tax, FIFO, LIFO, High Cost, Low Cost). Shows long-term vs short-term classification, holding period, and after-tax proceeds. Uses 2025 MFJ brackets and LTCG rates.',
-        'Medicare Cost Estimator (Retirement group): estimates monthly premiums including IRMAA income surcharges for Part B, Part D, Medigap, and dental. Highlights your IRMAA bracket. 20-year cost projection with 2% inflation assumption. 2025 CMS figures.',
-        'Estate & RMD Projector (Retirement group): projects Traditional/Roth/Taxable balances to a target age, computes annual RMDs using the IRS Uniform Lifetime Table, estimates federal tax on each RMD, and shows heritable estate. Optional 40% federal estate tax above the 2025 $13.61M exemption. Line chart and scrollable year-by-year table.',
-      ]},
-      { type: 'h3', text: '2026-07-26 — AI Morning Briefing' },
-      { type: 'bullets', items: [
-        'New Morning Briefing screen under AI Tools: daily personalised market briefing powered by Claude.',
-        'Auto-loads live snapshot cards for S&P 500, Nasdaq, Dow, Russell 2000, VIX, and 10-year Treasury yield on page open.',
-        'Editable watchlist (up to 15 symbols) stored in localStorage — pre-filled with common tickers, persists across sessions.',
-        'Backend collects 6 major index prices, 11 sector ETF returns (ranked best-to-worst), watchlist stock prices, and news headlines in parallel before streaming to Claude.',
-        'Claude generates a 6-section structured briefing: Market Pulse, Index & Sector Breakdown, Watchlist Spotlight, Key News & Implications, Risk Radar, Today\'s Action Checklist.',
-        'Briefing cached in localStorage by date — revisiting the page shows cached result instantly; Refresh button regenerates with fresh data.',
-      ]},
-      { type: 'h3', text: '2026-07-25 — Trading & Market Intelligence' },
-      { type: 'bullets', items: [
-        'Short Squeeze Scanner: scans ~120 high-short-interest stocks, scores 0–100 (short % float 40%, days to cover 30%, momentum 20%, MoM SI change 10%). EXTREME/HIGH/MEDIUM/LOW badges, sortable table, add custom symbols. 30-min cache.',
-        'IPO & Lockup Calendar: tracks recent IPOs with live price vs IPO price performance and lockup expiry countdown. Color-coded progress bars (red ≤14 days). Active/Expired tabs. Explains lockup mechanics.',
-        'Fed Watch: FOMC meeting calendar with cut/hold/hike probability gauges derived from 30-day Fed Funds futures (ZQ contracts). Current target range fetched live from 13-week T-bill. Rate history chart. Rate move reference table.',
-      ]},
-      { type: 'h3', text: '2026-07-25 — AI Tax Advisor (MFJ)' },
-      { type: 'bullets', items: [
-        'New Tax Advisor under AI Tools: AI-powered tax optimisation for Married Filing Jointly households.',
-        'Inputs: state (all 50 + DC with live top-marginal rates), income (7 types), retirement contributions (401k/IRA/HSA/FSA with 2025 limits), deductions (mortgage, SALT, charitable, student loan, childcare), filing flags.',
-        'Backend pre-computes estimated AGI, federal tax (2025 brackets), LTCG rate, NIIT exposure, and state tax estimate before sending to Claude.',
-        'Claude streams an 8-section analysis: Tax Snapshot, Priority Actions (ranked by $), Retirement Optimisation, Deduction Strategy, Investment Tax Efficiency, State Tax Tips, Watch-Outs, Year-End Checklist.',
-      ]},
-      { type: 'h3', text: '2026-07-25 — Customized News Feed' },
-      { type: 'bullets', items: [
-        'New News nav group with "My News Feed" screen.',
-        '17 preset topic chips: S&P 500, Nasdaq, Dow, Technology, Financials, Healthcare, Energy, Consumer, Industrials, Real Estate, Utilities, Communications, Materials, Rates/Fed, Gold, Oil, Crypto.',
-        'Custom ticker input: add any stock symbol to pull its news feed alongside preset topics.',
-        'Per-topic filter bar with article counts. Newest-first sort, deduplication, up to 60 articles.',
-        'Topic selections persisted in localStorage — remembered across sessions.',
-        'Backend: /api/news-feed endpoint maps topic keys to yfinance symbols, fetches in parallel with ThreadPoolExecutor.',
-      ]},
-      { type: 'h3', text: '2026-07-25 — Early Retirement Health & Roth Conversion Planner' },
-      { type: 'bullets', items: [
-        'Early Retirement Health (ACA Estimator): estimates monthly premiums and Premium Tax Credits for a family of 2 in the 55–65 Medicare gap. Uses 2025 CMS age-rating curve (3:1 age band), ARP/IRA extended subsidy rules (0–8.5% of MAGI sliding scale), and FPL-based subsidy cliffs. Year-by-year table and SVG premium chart through Medicare eligibility.',
-        'Roth Conversion Planner: models the optimal annual Roth conversion during the 55–65 low-income window. Supports MFJ and Single filing, 2025 tax brackets, target bracket selection (12%/22%/24%). Shows conversion room, year-by-year schedule, projected RMD reduction at 73, estimated lifetime tax savings, and dual-scenario balance chart to age 75.',
-        'Both tools added to Retirement nav group.',
-      ]},
-      { type: 'h3', text: '2026-07-25 — Navigation Redesign' },
-      { type: 'bullets', items: [
-        'Navigation expanded to 8 groups: Markets, Research, Watchlist, News, Trading, Portfolio, AI Tools, Retirement.',
-        'Group order rearranged to follow a logical investor workflow: understand market → research stocks → track watchlist → read news → trade → manage portfolio → get AI help → plan retirement.',
-        'Items within each group reordered by natural decision sequence (e.g. Screener → Fundamentals → DCF → Chart Compare within Research).',
-        'All sidebar groups now start collapsed by default. Only the group containing the active view auto-expands on load.',
-        'Sidebar visual refresh: group labels lifted to text-slate-300, icons to text-slate-400, active group gets white text + left emerald border, active nav items are bold white. Width increased from w-48 to w-52.',
-      ]},
-      { type: 'h3', text: '2026-07-25 — Retirement Planning Module' },
-      { type: 'bullets', items: [
-        'New Retirement nav group with 4 tools: FIRE Calculator, Monte Carlo Simulator, Coast FIRE & Roth Conversion Ladder, Social Security Optimizer.',
-        'FIRE Calculator: FIRE number, years-to-FIRE, portfolio projection chart, retirement-age comparison table. Presets for age 55/60/65.',
-        'Monte Carlo: 1,000 simulations with normal random returns, fan chart (10th–90th percentile), survival rate, and scenario table.',
-        'Coast FIRE: coast number by retirement age, coasted status indicator. Roth Ladder: annual conversion schedule, tax bracket impact, 5-year access table.',
-        'Social Security Optimizer: claiming ages 62–70, breakeven analysis, cumulative lifetime benefit chart, combined portfolio+SS income column.',
-      ]},
-      { type: 'h3', text: '2026-07-25 — Navigation Restructure (6 groups)' },
-      { type: 'bullets', items: [
-        'Markets group expanded: absorbed Sector Rotation + Sector Momentum — now the single hub for all market-wide views.',
-        'Sectors group eliminated.',
-        'Smart Alerts moved from Trading → Watchlist.',
-        'Trading trimmed to 3 items: Day Trader, Trade Ideas, Position Sizer.',
-        'Recommendations renamed to Analyst Picks; Sentiment renamed to News Sentiment.',
-        'Help group replaced by a ? User Guide button pinned to the sidebar bottom.',
-      ]},
-      { type: 'h3', text: '2026-07-25 — Index / ETF Heatmap v2' },
-      { type: 'bullets', items: [
-        'Dynamic ETF/index search: type any ticker or name in the search box to load any ETF\'s constituent heatmap (not just the four predefined indices).',
-        'Live market-cap weights: tile sizes now reflect real-time market-cap weights fetched in parallel at load time instead of hardcoded approximations.',
-        'Weighted index return: summary bar now shows the market-cap-weighted 1D return for the whole index, plus top contributor and top drag.',
-        'Flat layout: sector groupings removed in favour of a single grid sorted by weight — largest positions appear top-left.',
-        'Weight % shown on every tile.',
-        'Backend: two new endpoints — /api/search-etf (Yahoo Finance search) and /api/etf-holdings (yfinance funds_data).',
-      ]},
-      { type: 'h3', text: '2026-07-25 — Index / ETF Heatmap v1' },
-      { type: 'bullets', items: [
-        'New Market sidebar item: Index Heatmap.',
-        'Four predefined indices: Dow Jones 30 (DIA), Nasdaq 100 (QQQ), S&P Top 100 (SPY), ARK Innovation (ARKK).',
-        'Heatmap view: tiles coloured by 1D return, grouped by GICS sector.',
-        'Sortable table view with 7 time periods: 1D, 5D, 1M, 3M, 6M, 1Y, YTD.',
-        'Chart modal integration: click any tile or row to open the full chart.',
-        'Backend: /api/index-constituents endpoint with 15-minute SQLite cache.',
-      ]},
-      { type: 'h3', text: '2026-05-28 — Phase 13 + Polish' },
-      { type: 'bullets', items: [
-        'Market Breadth Dashboard: A/D line (60d), VIX sparkline, above-50MA / above-200MA gauges, H/L ratio, put/call ratio.',
-        'Fundamental Comparison: side-by-side 21-metric comparison table for up to 5 stocks with best/worst-in-class colour coding.',
-        'Price Targets: set personal targets with deadlines, notes, and progress bars.',
-        'SMA overlays (20/50/200) and Bollinger Bands added to the chart modal.',
-        'DCF Valuation calculator with intrinsic value, margin of safety, and 10-year projection.',
-        'Yield Curve & Rates: live Treasury curve, 10Y−13W inversion signal, DXY tracking.',
-        'Mobile-responsive nav: hamburger drawer for small screens.',
-        'CSV export for Portfolio and Trade Journal.',
-        'Drawing tools in chart modal: horizontal S/R lines and trend lines (persisted in localStorage).',
-        'Unusual Options Activity scanner across watchlist symbols.',
-        'Earnings Call Summarizer: fetches latest 8-K from SEC EDGAR, summarises with Claude.',
-        'Grouped collapsible sidebar replacing the flat 24-tab navigation.',
-        'In-app User Guide (this document).',
-      ]},
-      { type: 'h3', text: '2026-05-28 — Phases 9–12' },
-      { type: 'bullets', items: [
-        'Phase 9: Options Strategy Builder with AI-generated strategies and payoff charts; multi-timeframe Technical Signals dashboard; AI Trade Ideas generator.',
-        'Phase 10: Portfolio Risk Dashboard (beta, Herfindahl, VaR, Sharpe); Smart Alerts 2.0 with seven alert types; Position Sizer with three sizing methods.',
-        'Phase 11: Portfolio Optimizer (efficient frontier, min-vol, max-Sharpe); rich Earnings Calendar with expected move and beat-rate history; News Sentiment with Claude scoring.',
-        'Phase 12: Options P&L Tracker with live Greeks; Portfolio X-Ray (sector/cap/country donut charts); Sector Momentum Ranker with composite scores and acceleration signals.',
-      ]},
-      { type: 'h3', text: '2026-05-28 — Phases 3–8' },
-      { type: 'bullets', items: [
-        'Phase 3: Options chain viewer; Trade Journal with P&L matching; Dividends view; Correlation heatmap; Macro Calendar.',
-        'Phase 4: Technical Indicators overlay; Insider Transactions (Form 4); Analyst Ratings and price targets; Portfolio Rebalancer; Short Interest.',
-        'Phase 5: Earnings Calendar; Institutional Ownership; Sector Rotation table/heatmap; Smart Alerts (initial).',
-        'Phase 6: Chart Compare (normalised returns); Strategy Backtester; Multi-Watchlist support; AI News Sentiment; CSV import/export.',
-        'Phase 7: WebSocket live price feed; browser push notifications; SEC Filings viewer; NLP custom screener; Unusual Options Activity.',
-        'Phase 8: Portfolio equity curve vs cost basis; Earnings Play Calculator (expected move + straddle sizing); Claude NLP screener.',
-      ]},
-      { type: 'h3', text: '2026-05-27 — Phase 1 Portfolio Intelligence' },
-      { type: 'bullets', items: [
-        'Portfolio tracker with positions table, market value, unrealised P&L, day P&L.',
-        'Portfolio heatmap (treemap by market value, coloured by day change).',
-        'Portfolio Exposure donut charts (sector, cap size, geography).',
-        'Equity curve with snapshot-based history.',
-        'Performance tracking vs SPY/QQQ benchmarks.',
-      ]},
-      { type: 'h3', text: '2026-05-18 — Day Trader + AI Tools' },
-      { type: 'bullets', items: [
-        'Day Trader tab: trading plan calculator, strategy playbooks, live scanner, trade alerts sidebar, pre-market movers.',
-        'AI Advisor (AI Chat): streaming Claude chat for market questions.',
-        'Financial Advisor: AI-generated portfolio strategy based on financial profile (goal, horizon, risk tolerance, account type).',
-        'SQLite database for position persistence.',
-      ]},
-      { type: 'h3', text: '2026-05-15 — Market Intelligence' },
-      { type: 'bullets', items: [
-        'Market Overview: index, sector ETF, and Mag 7 performance tables.',
-        'AI Growth Watch List: 41 stocks across 9 AI stack layers (Chips, Memory, Cloud, Models, Applications, Robotics, Quantum…).',
-        'Market Recommendations: analyst upgrades/downgrades with firm/rating/target detail modal.',
-        'Top-20 global news headlines sidebar (US, EU, Asia, Commodities).',
-        'Screener: technical scans, fundamental presets.',
-        'Sortable tables and search/filter bars across all views.',
-      ]},
-      { type: 'h3', text: '2026-05-08 — Initial Launch' },
-      { type: 'bullets', items: [
-        'FastAPI + React/Vite/Tailwind full-stack scaffold.',
-        'Live watchlist with real-time price updates and flash animations.',
-        'Candlestick chart modal (1D–5Y) with per-symbol news feed.',
-        'Price alerts: above/below, percent change, 52-week break, volume spike.',
-        'Multi-period performance data via yfinance.',
-      ]},
-    ],
+    blocks: CHANGELOG_BLOCKS,
   },
   {
     id: 'tips',
@@ -1972,13 +1487,25 @@ const GUIDE = [
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 
-function Block({ block }) {
+function Block({ block, onNavigate }) {
   switch (block.type) {
     case 'p':
       return <p className="text-gray-400 text-sm leading-relaxed">{block.text}</p>
 
     case 'h3':
-      return <h3 className="text-white font-semibold text-sm mt-5 mb-2">{block.text}</h3>
+      return (
+        <h3 className="text-white font-semibold text-sm mt-5 mb-2 flex items-center gap-2.5">
+          {block.text}
+          {block.tabId && onNavigate && (
+            <button
+              onClick={() => onNavigate(block.tabId)}
+              className="text-[10px] font-medium text-emerald-500 hover:text-emerald-400 border border-emerald-700/40 hover:border-emerald-600 rounded px-1.5 py-0.5 transition-colors normal-case tracking-normal"
+            >
+              Open feature →
+            </button>
+          )}
+        </h3>
+      )
 
     case 'tip':
       return (
@@ -2061,7 +1588,7 @@ function Section({ section, query }) {
         <h2 className="text-white font-bold text-base">{section.title}</h2>
       </div>
       <div className="space-y-3">
-        {section.blocks.map((block, i) => <Block key={i} block={block} />)}
+        {section.blocks.map((block, i) => <Block key={i} block={block} onNavigate={onNavigate} />)}
       </div>
     </section>
   )
@@ -2069,7 +1596,7 @@ function Section({ section, query }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function UserGuide() {
+export default function UserGuide({ onNavigate, initialSection } = {}) {
   const [query, setQuery] = useState('')
   const contentRef = useRef(null)
   const q = query.toLowerCase().trim()
@@ -2078,6 +1605,12 @@ export default function UserGuide() {
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  // Jump straight to a section (e.g. Changelog) when opened from elsewhere in
+  // the app, such as the Home dashboard's "What's New" widget.
+  useEffect(() => {
+    if (initialSection) scrollTo(initialSection)
+  }, [initialSection])
 
   const visibleIds = useMemo(() => {
     if (!q) return GUIDE.map(s => s.id)

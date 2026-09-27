@@ -4,6 +4,37 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-27 — What's New Widget & Changelog Jump Links
+
+The Changelog tab (User Guide) already held the full feature history, but nothing surfaced recent additions proactively, and there was no way to jump from a changelog entry to the feature it described.
+
+### New
+- New "What's New" card on Home: the 3 most recent changelog entries with a one-line summary each, a "Try it →" button per entry (jumps straight to that feature's tab), and a "Full changelog →" link that opens the User Guide scrolled directly to the Changelog section.
+- Changelog `h3` entries can now carry an optional `tabId`; when present, `UserGuide.jsx` renders an "Open feature →" button next to the heading. Applied to the ~30 most recent/unambiguous entries (one entry = one current tab); older or multi-feature bundle entries (nav redesigns, early "Phase N" bundles) intentionally left without one rather than guessing which of several tabs they mean.
+- `UserGuide` now accepts `onNavigate` and `initialSection` props (mirroring the existing `InvestorEducation` pattern) — `initialSection='changelog'` scrolls straight there on open, via a new `guideSection` + `goToGuideSection()` pair in `App.jsx` (same lifted-state pattern as the existing merger/SPAC deal-focus helpers).
+
+### Changed
+- `frontend/src/data/changelog.js` — the changelog's full block list (~50 entries, previously inline in `UserGuide.jsx`) is now the single source of truth for both the Changelog tab and the Home widget, plus a `getLatestChangelogEntries(n)` helper that groups blocks into `{date, title, tabId, summary}` entries. `HomeDashboard.jsx` loads it via a dynamic `import()` inside a `useEffect` (not a static import) specifically so the ~50-entry history doesn't get bundled into Home's own eager landing-page chunk — confirmed via `vite build` output: static import grew the main bundle from 450.00 kB to 501.03 kB; the dynamic-import version keeps it at 451.14 kB, with `changelog.js` as its own 50.20 kB on-demand chunk shared by both consumers.
+
+### Verified
+- `vite build` clean; confirmed the main bundle's size before/after the dynamic-import fix as described above.
+
+## 2026-09-27 — Dividend Yield Scaling Fix (yfinance 1.2.0)
+
+Found while building Price Projection (see below), not fixed there: as of yfinance 1.2.0 (this app's pinned version), `info['dividendYield']` is already percent-scaled (e.g. `0.32` meaning 0.32%) rather than the decimal fraction (`0.0032`) this codebase has always assumed when multiplying by 100 for display — confirmed via `trailingAnnualDividendYield` (still a true decimal fraction) showing AAPL's real yield as ~0.31% while raw `dividendYield` read `0.32`. Every router reading that field was displaying dividend yields ~100x too large.
+
+### Fixed
+- `edgar_utils.py` — new shared `_dividend_yield_fraction(info)` helper: prefers `trailingAnnualDividendYield` (still a genuine decimal fraction), falling back to `dividendYield / 100` when that's missing. Returns `None` (not `0`) when neither field is present, so callers can distinguish "no dividend" from "no data".
+- `main.py`'s `_fetch_fundamentals` (the shared fundamentals fetcher behind `screener.py`'s `dividend_income` preset and display, `custom_screener.py`'s filter/threshold math, and `nlp_screener.py`'s Claude-driven filters) now stores a true decimal fraction — fixing all three call sites with one change, no code changes needed in any of them.
+- `dividends.py`, `dividend_tracker.py` — both had their own direct `.info` fetch; switched to the shared helper.
+- `fundamental_comparison.py` — special-cased just the Dividend Yield metric in its generic percent-metric table (every other metric there, e.g. margins/ROE/short interest, was unaffected — only `dividendYield` itself changed scale in yfinance 1.2.0).
+- `price_projection.py` — its own local copy of this same workaround (written before the scope of the bug was known) replaced with a call to the new shared helper.
+- Cleared 278 stale `fund:*` cache rows left over from before the fix so no old 100x-inflated values linger in the SQLite cache.
+
+### Verified
+- 154 backend tests pass; ruff clean; live-checked AAPL's dividend yield reads ~0.31% (not 31%) via `main._fetch_fundamentals` after clearing its stale cache entry.
+- Note: the long-running dev server (started before this session, no `--reload`) is still serving the pre-fix code for every backend change made today, including this one and Price Projection — needs a restart to pick any of it up live.
+
 ## 2026-09-27 — Price Projection
 
 New Research → Price Projection: given a stock or ETF ticker, projects a probabilistic 1-year-forward price range from market-implied inputs, combining options, rates, VIX, and credit signals into one lognormal percentile cone rather than a single point forecast.

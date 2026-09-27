@@ -38,7 +38,7 @@ from fastapi import APIRouter
 import yfinance as yf
 
 from database import cache_get, cache_set
-from edgar_utils import _session, _safe_float
+from edgar_utils import _session, _safe_float, _dividend_yield_fraction
 from routers.treasury import treasury_current
 from routers.corporate_bonds import bonds_search
 
@@ -83,18 +83,8 @@ def _get_price(t) -> float | None:
 
 
 def _get_dividend_yield(t) -> float:
-    """True decimal fraction (0.004 = 0.4%). As of yfinance 1.2.0, info['dividendYield']
-    itself is already percent-scaled (0.32 meaning 0.32%, not 32%) rather than the decimal
-    fraction older code in this app assumes elsewhere — trailingAnnualDividendYield is used
-    here instead since it's still a genuine decimal fraction, with dividendYield/100 as the
-    fallback for symbols where it's missing."""
     try:
-        info = t.info or {}
-        trailing = _safe_float(info.get("trailingAnnualDividendYield"))
-        if trailing is not None:
-            return trailing
-        pct = _safe_float(info.get("dividendYield"))
-        return (pct / 100.0) if pct else 0.0
+        return _dividend_yield_fraction(t.info or {}) or 0.0
     except Exception:
         return 0.0
 

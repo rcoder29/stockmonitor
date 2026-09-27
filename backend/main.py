@@ -18,7 +18,7 @@ from database import (
 # Shared SEC EDGAR helpers, split out so both main.py and routers/ can import
 # them without a circular dependency — see edgar_utils.py's module docstring.
 from edgar_utils import (
-    _session, _safe_float,
+    _session, _safe_float, _dividend_yield_fraction,
 )
 from routers import (
     corporate_bonds, convertible_bonds, treasury as treasury_router,
@@ -193,7 +193,7 @@ def _fetch_fundamentals(sym: str) -> dict:
             "peRatio":       _safe_float(info.get("trailingPE")),
             "forwardPE":     _safe_float(info.get("forwardPE")),
             "eps":           _safe_float(info.get("trailingEps")),
-            "dividendYield": _safe_float(info.get("dividendYield")),
+            "dividendYield": _dividend_yield_fraction(info),
             "beta":          _safe_float(info.get("beta")),
             "revenue":       _safe_float(info.get("totalRevenue")),
             "profitMargin":  _safe_float(info.get("profitMargins")),

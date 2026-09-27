@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react'
+// Dynamically imported (not a static import) so the ~50-entry changelog data
+// isn't bundled into Home's own eager chunk — it loads as a separate small
+// chunk right after first paint instead of growing the landing page's bundle.
 
 const fmtMoney = v => v == null ? '—' : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtPct   = v => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
@@ -34,7 +37,7 @@ function Empty({ children }) {
   return <div className="text-center text-gray-600 text-sm py-6">{children}</div>
 }
 
-export default function HomeDashboard({ watchlist, quotes, alerts, earnings, portfolioSymbols, navIndex, recentTabs, onNavigate }) {
+export default function HomeDashboard({ watchlist, quotes, alerts, earnings, portfolioSymbols, navIndex, recentTabs, onNavigate, onOpenChangelog }) {
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -64,6 +67,15 @@ export default function HomeDashboard({ watchlist, quotes, alerts, earnings, por
     .sort((a, b) => a.daysUntil - b.daysUntil)
 
   const activeAlerts = (alerts || []).filter(a => a.status === 'active')
+
+  const [whatsNew, setWhatsNew] = useState([])
+  useEffect(() => {
+    let cancelled = false
+    import('../data/changelog').then(m => {
+      if (!cancelled) setWhatsNew(m.getLatestChangelogEntries(3))
+    })
+    return () => { cancelled = true }
+  }, [])
 
   const recentItems = (recentTabs || [])
     .map(id => navIndex[id])
@@ -104,6 +116,31 @@ export default function HomeDashboard({ watchlist, quotes, alerts, earnings, por
           color={m?.vix?.label === 'High' ? 'text-red-400' : m?.vix?.label === 'Elevated' ? 'text-amber-400' : 'text-emerald-400'}
           sub={m?.vix?.label ? `${m.vix.label} · ${fmtPct(m.vix['1d'])} today` : null} />
       </div>
+
+      {/* What's New */}
+      {whatsNew.length > 0 && (
+        <SectionCard title="What's New" linkLabel="Full changelog" onLink={onOpenChangelog}>
+          <div className="-m-4 divide-y divide-gray-800/60">
+            {whatsNew.map(f => (
+              <div key={f.title + f.date} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-gray-100 text-sm font-medium">{f.title}</span>
+                  <span className="text-gray-600 text-[11px] shrink-0">{f.date}</span>
+                </div>
+                {f.summary && <p className="text-gray-500 text-xs mt-1 leading-relaxed">{f.summary}</p>}
+                {f.tabId && (
+                  <button
+                    onClick={() => onNavigate(f.tabId)}
+                    className="text-[11px] text-emerald-500 hover:text-emerald-400 mt-1.5 transition-colors"
+                  >
+                    Try it →
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SectionCard title="Portfolio Movers" linkLabel="Portfolio" onLink={() => onNavigate('portfolio')}>

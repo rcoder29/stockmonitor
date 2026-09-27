@@ -614,6 +614,8 @@ export default function App() {
   const goToMerger = (tabId, dealId = null) => { setMergerFocusDealId(dealId); setActiveTab(tabId) }
   const [spacFocusId, setSpacFocusId] = useState(null)
   const goToSpac = (tabId, spacId = null) => { setSpacFocusId(spacId); setActiveTab(tabId) }
+  const [guideSection, setGuideSection] = useState(null)
+  const goToGuideSection = (sectionId) => { setGuideSection(sectionId); setActiveTab('guide') }
 
   // ── Navigation (command palette + recently-visited tracking) ─────────────
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
@@ -1026,6 +1028,7 @@ export default function App() {
               navIndex={NAV_INDEX}
               recentTabs={recentTabs}
               onNavigate={navigate}
+              onOpenChangelog={() => goToGuideSection('changelog')}
             />
           )}
           {activeTab === 'market'          && <MarketSummary />}
@@ -1057,7 +1060,7 @@ export default function App() {
           {activeTab === 'pricetargets'    && <PriceTargets />}
           {activeTab === 'dcf'             && <DcfCalculator />}
           {activeTab === 'uoa'             && <UnusualOptions symbols={watchlist} />}
-          {activeTab === 'guide'           && <UserGuide />}
+          {activeTab === 'guide'           && <UserGuide onNavigate={navigate} initialSection={guideSection} />}
           {activeTab === 'learn'           && <InvestorEducation onNavigate={navigate} />}
           {activeTab === 'fire'           && <FireCalculator />}
           {activeTab === 'montecarlo'     && <MonteCarlo />}

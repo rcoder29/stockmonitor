@@ -11,7 +11,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from database import cache_get, cache_set
-from edgar_utils import _session, _safe_float
+from edgar_utils import _session, _safe_float, _dividend_yield_fraction
 
 router = APIRouter()
 
@@ -49,7 +49,7 @@ def get_dividends(body: DividendRequest):
             return {
                 "symbol":        sym,
                 "dividendRate":  _safe_float(info.get("dividendRate")),
-                "dividendYield": round(float(info.get("dividendYield") or 0) * 100, 2),
+                "dividendYield": round((_dividend_yield_fraction(info) or 0) * 100, 2),
                 "exDividendDate": ex_date,
                 "payoutRatio":   _safe_float(info.get("payoutRatio")),
                 "lastDividend":  round(float(divs.iloc[-1]), 4) if len(divs) > 0 else None,

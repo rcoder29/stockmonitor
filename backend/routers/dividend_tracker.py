@@ -11,7 +11,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from database import cache_get, cache_set
-from edgar_utils import _session, _safe_float
+from edgar_utils import _session, _safe_float, _dividend_yield_fraction
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -37,7 +37,7 @@ def _fetch_div_info(sym: str) -> dict | None:
 
         price     = _safe_float(info.get("currentPrice") or info.get("regularMarketPrice"))
         div_rate  = _safe_float(info.get("dividendRate"))
-        div_yield = _safe_float(info.get("dividendYield"))
+        div_yield = _dividend_yield_fraction(info)
 
         # exDividendDate is a Unix timestamp in yfinance info
         ex_ts  = info.get("exDividendDate")

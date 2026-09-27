@@ -75,6 +75,22 @@ def _safe_float(val) -> float | None:
         return None
 
 
+def _dividend_yield_fraction(info: dict) -> float | None:
+    """True dividend yield as a decimal fraction (0.004 = 0.4%), from a yfinance
+    `Ticker.info` dict. As of yfinance 1.2.0, info['dividendYield'] is itself
+    already percent-scaled (0.32 meaning 0.32%, not the 0.0032 decimal fraction
+    older code across this app assumes when it multiplies by 100 for display) —
+    trailingAnnualDividendYield is still a genuine decimal fraction and is used
+    here instead, with dividendYield/100 as the fallback for symbols where it's
+    missing. Returns None (not 0) when neither field is present, so callers can
+    distinguish "no dividend" from "no data"."""
+    trailing = _safe_float(info.get("trailingAnnualDividendYield"))
+    if trailing is not None:
+        return trailing
+    pct = _safe_float(info.get("dividendYield"))
+    return (pct / 100.0) if pct is not None else None
+
+
 def _calc_rsi(prices, period=14):
     """RSI (Wilder-style, simple rolling mean). Shared by Screener,
     Multi-timeframe Technical Signals, and Smart Alerts 2.0."""
