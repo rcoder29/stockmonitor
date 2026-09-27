@@ -4,6 +4,16 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
+## 2026-09-27 — Sidebar Pinning
+
+The left sidebar (91 views across 11 groups) grew heavy to browse for daily-use views buried inside a collapsed group. Rather than restructuring the nav, added lightweight pinning: any item can be starred to appear in a dedicated "Pinned" section above the group accordion, reachable with one click regardless of which group is expanded.
+
+### New
+- `frontend/src/App.jsx` — `Sidebar` gains a ☆/★ pin toggle on every item (hover to reveal when unpinned, always visible when pinned) and a "Pinned" section rendered between the Home button and the group accordion, resolving pinned ids via the existing `NAV_INDEX`. `App` tracks `pinnedTabs` in state, persisted to `localStorage` (`sm-pinned-tabs`) via a `togglePin` handler passed to both the desktop and mobile `Sidebar` instances — same persistence pattern as the existing `recentTabs`/Cmd+K recents, but a separate, independently-managed list. Starts empty; no default pins.
+
+### Verified
+- `vite build` clean.
+
 ## 2026-09-23 — Range Screener: 1-year inline chart, click to open full chart
 
 Two refinements to the inline chart added earlier today (below): it now shows a full year of history instead of just the selected scan window, "to show multiple swings and resets" — and it's clickable, opening the same `ChartModal` used everywhere else in the app so the user can switch periods/indicators for a proper look.

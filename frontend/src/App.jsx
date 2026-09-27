@@ -415,7 +415,7 @@ function WatchlistBar({ lists, active, onSelect, onCreate, onDelete }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
-function Sidebar({ activeTab, onSelect, className }) {
+function Sidebar({ activeTab, onSelect, pinnedTabs, onTogglePin, className }) {
   const [expanded, setExpanded] = useState(() => {
     const init = {}
     NAV_GROUPS.forEach(g => { init[g.id] = false })
@@ -446,6 +446,40 @@ function Sidebar({ activeTab, onSelect, className }) {
             Home
           </button>
         </div>
+
+        {/* Pinned items */}
+        {pinnedTabs.length > 0 && (
+          <div className="px-2 pb-1 space-y-0.5">
+            <div className="px-3 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Pinned
+            </div>
+            {pinnedTabs.map(id => {
+              const item = NAV_INDEX[id]
+              if (!item) return null
+              return (
+                <div key={id} className="flex items-center">
+                  <button
+                    onClick={() => onSelect(id)}
+                    className={`flex-1 text-left px-3 py-1.5 rounded-md text-[12.5px] truncate transition-colors ${
+                      activeTab === id
+                        ? 'text-white font-semibold bg-emerald-900/25'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                  <button
+                    onClick={() => onTogglePin(id)}
+                    title="Unpin"
+                    className="px-2 py-1.5 text-amber-400 hover:text-amber-300 transition-colors"
+                  >
+                    ★
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Nav groups */}
         <div className="flex-1 py-1">
@@ -483,22 +517,37 @@ function Sidebar({ activeTab, onSelect, className }) {
 
                 {isOpen && (
                   <div className="bg-slate-950/40 pb-1">
-                    {group.items.map(item => (
-                      <button
-                        key={item.id}
-                        onClick={() => onSelect(item.id)}
-                        className={`w-full text-left text-[12.5px] pl-10 pr-3 py-2 transition-colors relative ${
-                          activeTab === item.id
-                            ? 'text-white font-semibold bg-emerald-900/25'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                        }`}
-                      >
-                        {activeTab === item.id && (
-                          <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-emerald-400 rounded-r" />
-                        )}
-                        {item.label}
-                      </button>
-                    ))}
+                    {group.items.map(item => {
+                      const isPinned = pinnedTabs.includes(item.id)
+                      return (
+                        <div key={item.id} className="flex items-center group/item">
+                          <button
+                            onClick={() => onSelect(item.id)}
+                            className={`flex-1 text-left text-[12.5px] pl-10 pr-1 py-2 transition-colors relative ${
+                              activeTab === item.id
+                                ? 'text-white font-semibold bg-emerald-900/25'
+                                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                            }`}
+                          >
+                            {activeTab === item.id && (
+                              <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-emerald-400 rounded-r" />
+                            )}
+                            {item.label}
+                          </button>
+                          <button
+                            onClick={() => onTogglePin(item.id)}
+                            title={isPinned ? 'Unpin' : 'Pin'}
+                            className={`px-2 py-2 transition-colors ${
+                              isPinned
+                                ? 'text-amber-400 hover:text-amber-300'
+                                : 'text-slate-600 hover:text-slate-300 opacity-0 group-hover/item:opacity-100'
+                            }`}
+                          >
+                            {isPinned ? '★' : '☆'}
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -578,6 +627,17 @@ export default function App() {
         return next
       })
     }
+  }, [])
+
+  const [pinnedTabs, setPinnedTabs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sm-pinned-tabs') || '[]') } catch { return [] }
+  })
+  const togglePin = useCallback((id) => {
+    setPinnedTabs(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      localStorage.setItem('sm-pinned-tabs', JSON.stringify(next))
+      return next
+    })
   }, [])
 
   useEffect(() => {
@@ -912,6 +972,8 @@ export default function App() {
         <Sidebar
           activeTab={activeTab}
           onSelect={navigate}
+          pinnedTabs={pinnedTabs}
+          onTogglePin={togglePin}
           className="no-print hidden md:flex md:flex-col w-48 shrink-0 bg-gray-900 border-r border-gray-800 overflow-y-auto"
         />
 
@@ -920,6 +982,8 @@ export default function App() {
           <Sidebar
             activeTab={activeTab}
             onSelect={(id) => { navigate(id); setSidebarOpen(false) }}
+            pinnedTabs={pinnedTabs}
+            onTogglePin={togglePin}
             className="no-print fixed inset-y-0 left-0 z-40 w-64 bg-gray-900 border-r border-gray-800 overflow-y-auto flex flex-col"
           />
         )}

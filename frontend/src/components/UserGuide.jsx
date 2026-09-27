@@ -18,6 +18,7 @@ const GUIDE = [
       ]},
       { type: 'h3', text: 'Navigation' },
       { type: 'p', text: 'The left sidebar organises all features into 9 groups. All groups start collapsed — click a group header to expand it. Only the group containing your current view opens automatically. Click any item to load that view. Home is pinned above the groups and the User Guide button is pinned below them. On mobile, tap ☰ to open the sidebar drawer.' },
+      { type: 'p', text: 'Hover any item inside a group to reveal a ☆ button on its right — click it to pin that item. Pinned items collect in a "Pinned" section above the groups (with a filled ★ to unpin), so your most-used views are always one click away without expanding anything. Pins are saved locally and start empty.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
         ['Markets', 'Overview, Sentiment, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
         ['Research', 'Screener, Range Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Convertible Bonds, Treasury Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
@@ -1416,6 +1417,11 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-27 — Sidebar Pinning' },
+      { type: 'bullets', items: [
+        'Hover any item inside a sidebar group to reveal a ☆ pin toggle; pinned items collect in a new "Pinned" section above the groups, so your most-used views are one click away without expanding any group.',
+        'Click the ★ next to a pinned item to unpin it. Pins are stored in localStorage (separate from the existing Recently Visited tracking), starting empty until you pin something.',
+      ]},
       { type: 'h3', text: '2026-09-23 — Range Screener: 1-year inline chart, click to open full chart' },
       { type: 'bullets', items: [
         'The inline chart now shows a full year of closing prices instead of just the selected 30/60/90-day window, so prior swings and range resets are visible alongside the currently detected band — the selected window\'s low/high are drawn as dashed reference lines at their real level within that wider year, not stretched to fill the box.',
