@@ -1,7 +1,7 @@
 # StockMonitor — Product Enhancement Roadmap
 
 > Audience: retail investor who day-trades, invests long-term, monitors markets, and tracks portfolio risk/P&L.
-> Last reviewed: 2026-09-23
+> Last reviewed: 2026-09-27
 
 ---
 
@@ -29,7 +29,7 @@ Chart modal (used across Watchlist/Portfolio/Research) includes SMA 20/50/200, B
 
 ## Remaining gaps
 
-Everything below was in the original roadmap (or a natural extension of it) and is still genuinely unbuilt, based on a code audit last updated 2026-09-23.
+Everything below was in the original roadmap (or a natural extension of it) and is still genuinely unbuilt, based on a code audit last updated 2026-09-27 (re-confirmed accurate; no gaps closed since the 09-23 review — the Range Screener work in between was a refinement of an already-listed feature, not a new one).
 
 ### P1
 - **Backend-evaluated price/condition alerts** — alerts (price, % change, 52-week break, volume spike, Smart Alert rules) persist to SQLite but are only ever *checked* by the browser (`PATCH /api/alerts/{id}/trigger` is called from the frontend), so nothing fires unless a tab is open. The daily/weekly Digest (shipped 2026-09-19) works around this once a day by checking alerts server-side when it builds, but a real-time backend scheduler that evaluates rules continuously and pushes through the same Telegram channel is still unbuilt. Explicitly proposed and deferred by the user on 2026-09-22 ("skip alerts for now") — worth revisiting.
