@@ -21,7 +21,7 @@ const GUIDE = [
       { type: 'p', text: 'Hover any item inside a group to reveal a ☆ button on its right — click it to pin that item. Pinned items collect in a "Pinned" section above the groups (with a filled ★ to unpin), so your most-used views are always one click away without expanding anything. Pins are saved locally and start empty.' },
       { type: 'table', headers: ['Group', 'What\'s Inside'], rows: [
         ['Markets', 'Overview, Sentiment, Index Heatmap, Breadth, Sector Rotation, Sector Momentum, Yield Curve, Fed Watch, Macro Calendar, Analyst Picks, Short Squeeze, IPO & Lockups, Insider Trading, Crypto, Economic Indicators'],
-        ['Research', 'Screener, Range Screener, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Convertible Bonds, Treasury Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
+        ['Research', 'Screener, Range Screener, Price Projection, Fundamentals, DCF Valuation, Chart Compare, Backtester, Earnings Surprise, Earnings Strategy, Analyst Ratings, Fund Holdings, Corporate Bonds, Convertible Bonds, Treasury Bonds, Activist Tracker, Relative Strength, Seasonal Patterns, ETF Overlap, Signals, Unusual Options'],
         ['Watchlist', 'Watchlist, Heatmap, Correlation, Price Targets, Earnings+, News Sentiment, Smart Alerts'],
         ['News', 'My News Feed'],
         ['Trading', 'Trade Ideas, Position Sizer, Wheel Tracker, Day Trader'],
@@ -597,6 +597,15 @@ const GUIDE = [
       ]},
       { type: 'tip', text: 'Tip: the score is far more discriminating for symbols that actually trend than for ones that don\'t — most stocks score fairly high over any given 60-day window just from normal daily noise. Width % and Touches are usually the more useful filters for narrowing down to genuinely tradeable ranges.' },
       { type: 'tip', text: 'Disclaimer: this is a mechanical pattern screen, not investment advice. A range can break down in either direction at any time — confirm with your own analysis and size positions accordingly.' },
+      { type: 'h3', text: 'Price Projection' },
+      { type: 'p', text: 'Enter any stock or ETF ticker to see a 1-year-forward price cone (10th/25th/50th/75th/90th percentile bands) built entirely from market-implied inputs, not a forecast of Claude\'s own. Found under Research → Price Projection.' },
+      { type: 'table', headers: ['Input', 'What it does'], rows: [
+        ['Options-implied volatility', 'ATM implied vol pulled from every available expiration out to ~13 months, interpolated at each monthly horizon — the market\'s own forward-looking volatility, rather than one flat number stretched out with the square-root-of-time rule. Falls back to trailing 1-year realized volatility for symbols with no listed options.'],
+        ['Risk-free rate', 'The current 1-year Treasury yield (Research → Treasury Bonds), net of the security\'s own dividend yield, sets the median path\'s drift — the standard risk-neutral assumption used across options pricing.'],
+        ['VIX regime', 'Current VIX vs. its trailing 1-year median scales the volatility input up or down — an elevated-VIX market widens the cone beyond what the single name\'s own options currently price in.'],
+        ['Credit spread (CDS proxy)', 'True single-name CDS data is proprietary (Markit/Bloomberg/ICE) and not available from any free source, so this reuses the issuer\'s own corporate-bond credit spread over Treasuries (Research → Corporate Bonds\' YTM-vs-Treasury calc). A wide spread only pulls the lower percentiles (p10/p25) down further, since credit spreads price default/distress risk — an asymmetric, downside-only effect. Shows "Not available" for issuers with no fund-held bonds (most companies, and all ETFs).'],
+      ]},
+      { type: 'tip', text: 'Disclaimer: this is a probabilistic model of what the options, rates, and credit markets currently imply — not a price target, forecast, or investment advice. It assumes those markets are pricing efficiently and that returns are lognormal, both simplifications. The full methodology is restated at the bottom of the page alongside every raw input used.' },
       { type: 'h3', text: 'Technical Signals' },
       { type: 'p', text: 'Multi-timeframe technical summary for every symbol in your watchlist and portfolio. Found under Research → Signals.' },
       { type: 'p', text: 'Each cell shows three indicators stacked:' },
@@ -1417,6 +1426,12 @@ const GUIDE = [
     icon: '◉',
     blocks: [
       { type: 'p', text: 'A chronological log of features added to Stock Monitor, from initial build through ongoing development.' },
+      { type: 'h3', text: '2026-09-27 — Price Projection' },
+      { type: 'bullets', items: [
+        'New Research → Price Projection: given any stock or ETF ticker, projects a 1-year-forward price cone (p10/p25/median/p75/p90) from market-implied inputs — options-implied volatility term structure, the 1yr Treasury risk-free rate net of dividend yield, a VIX-regime vol multiplier, and the issuer\'s own corporate-bond credit spread as a proxy for single-name CDS (true CDS data is proprietary and not available from any free source).',
+        'Vol input is interpolated across every available options expiry out to ~13 months (not one flat IV stretched by sqrt-of-time), falling back to trailing realized volatility for non-optionable symbols. Credit spread only pulls the lower percentiles down, since spreads price default/distress risk asymmetrically — it never widens the upside.',
+        'Every raw input (risk-free rate, dividend yield, full IV curve, VIX current/median/regime, credit spread bps) is shown alongside the chart, plus a restated methodology note — nothing about how the cone was built is hidden.',
+      ]},
       { type: 'h3', text: '2026-09-27 — Sidebar Pinning' },
       { type: 'bullets', items: [
         'Hover any item inside a sidebar group to reveal a ☆ pin toggle; pinned items collect in a new "Pinned" section above the groups, so your most-used views are one click away without expanding any group.',

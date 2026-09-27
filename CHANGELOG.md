@@ -4,7 +4,23 @@ A running log of features built and changes made, in reverse-chronological order
 
 ---
 
-## 2026-09-27 — Sidebar Pinning
+## 2026-09-27 — Price Projection
+
+New Research → Price Projection: given a stock or ETF ticker, projects a probabilistic 1-year-forward price range from market-implied inputs, combining options, rates, VIX, and credit signals into one lognormal percentile cone rather than a single point forecast.
+
+There is no free source for single-name CDS data anywhere (it's proprietary Markit/Bloomberg/ICE data) — the user confirmed proxying single-name credit risk via this app's existing corporate-bond credit-spread work (`corporate_bonds.py`'s YTM-vs-Treasury calc for the issuer's own bonds) instead. Because credit spreads price default/distress risk, which is asymmetric, the spread only pulls the lower percentiles (p10/p25) down further and never widens the upside.
+
+### New
+- `routers/price_projection.py` — `GET /api/price-projection/{symbol}` (2hr TTL cache). `_compute_price_projection` combines: (1) an options-implied volatility term structure built from ATM IV at every available expiry out to ~13 months (subsampled to at most 10 option-chain fetches to bound runtime on weeklies-heavy names), linearly interpolated at each of 12 monthly horizons — falling back to trailing 1-year realized volatility for symbols with no listed options; (2) the 1yr Treasury yield (`treasury.py`'s `treasury_current()`) net of dividend yield as the risk-neutral drift; (3) current VIX vs. its trailing 1-year median as a `[0.7, 1.5]`-clamped volatility multiplier, plus VIX3M for a contango/backwardation badge; (4) the median corporate-bond spread over Treasury for the issuer (`corporate_bonds.py`'s `bonds_search`, reused directly) mapped to a `[0, 0.3]` downside-only stress factor applied to p10/p25, scaled by how far out in time the horizon is.
+- `frontend/src/components/PriceProjection.jsx` — ticker input, a 12-month probability-cone fan chart (same hand-rolled SVG band/median-line approach as `MonteCarlo.jsx`'s retirement projector, adapted from a multi-decade/portfolio-balance axis to a 0-12mo/price-dollar axis), headline 3/6/12-month horizon cards, a full month-by-month percentile table, the raw implied-vol term structure, and a restated methodology note — every input that fed the model is shown, not just the output.
+- `backend/tests/test_price_projection.py` — 20 tests covering the pure math (`_interp_sigma` interpolation/clamping, `_credit_stress_factor` scaling/saturation, `_project_percentiles` monotonicity/drift/credit-tail-only-hits-downside/never-negative) and the `_risk_free_rate`/`_credit_spread_proxy` helpers against mocked `treasury_current`/`bonds_search`.
+
+### Fixed
+- Found while building this (not yet fixed elsewhere): as of yfinance 1.2.0 (this app's pinned version), `info['dividendYield']` is already percent-scaled (e.g. `0.32` meaning 0.32%) rather than the decimal fraction (`0.0032`) the rest of this codebase assumes when it multiplies by 100 for display — confirmed via `trailingAnnualDividendYield` (still a true decimal fraction) showing AAPL's real yield as ~0.31% while raw `dividendYield` read `0.32`. This new router uses `trailingAnnualDividendYield` directly (falling back to `dividendYield / 100`), sidestepping the bug for its own drift calc — but `dividends.py`, `dividend_tracker.py`, `screener.py`, `custom_screener.py`, `fundamental_comparison.py`, and `nlp_screener.py` all still do the old `* 100` and are likely now displaying dividend yields ~100x too large somewhere in the app. Flagged to the user; not fixed here since it's a separate pre-existing bug outside this feature's scope.
+
+### Verified
+- 154 backend tests (134 + 20 new); `vite build` clean; live-invoked `_compute_price_projection` directly (not through the running dev server, to avoid restarting the user's already-running instance) for AAPL and SPY — sane risk-free rate, dividend yield, vol curve, VIX regime, and a correctly-`None` credit spread for the ETF (no bonds).
+
 
 The left sidebar (91 views across 11 groups) grew heavy to browse for daily-use views buried inside a collapsed group. Rather than restructuring the nav, added lightweight pinning: any item can be starred to appear in a dedicated "Pinned" section above the group accordion, reachable with one click regardless of which group is expanded.
 
